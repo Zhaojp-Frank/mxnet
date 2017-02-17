@@ -5,7 +5,7 @@ import mxnet as mx
 import numpy as np
 import time
 
-TENSOR_ID=12345
+TENSOR_ID=6234561
 TENSOR_SHAPE=(100, 100)
 
 
@@ -16,7 +16,8 @@ def Worker1():
                             tensor_id=TENSOR_ID, address='127.0.0.1:5001')
     arg_shapes, out_shapes, aux_shapes = net.infer_shape(init_control=(2,), 
                                                          data=TENSOR_SHAPE)
-    arg_types, out_types, aux_types = net.infer_type(data=mx.base.mx_real_t)
+    arg_types, out_types, aux_types = net.infer_type(
+                                            init_control=mx.base.mx_real_t)
     arg_arrays = [mx.nd.zeros(shape, mx.cpu(0), dtype=dtype)
                   for shape, dtype in zip(arg_shapes, arg_types)]
     executor = net.bind(ctx=mx.cpu(0), args=arg_arrays)
@@ -63,10 +64,11 @@ def Worker1():
 def Worker2():
     net = mx.symbol.NetInit(mx.symbol.Variable('init_control'),
                             address='127.0.0.1:5001')
-    net = mx.symbol.NetRecv(control=net, shape=(100, 100), tensor_id=12345, 
-                            address='127.0.0.1:5000')
+    net = mx.symbol.NetRecv(control=net, shape=(100, 100), tensor_id=TENSOR_ID, 
+                            address='127.0.0.1:5000', dtype=np.float32)
     arg_shapes, out_shapes, aux_shapes = net.infer_shape(init_control=(2,));
-    arg_types, out_types, aux_types = net.infer_type(data=mx.base.mx_real_t)
+    arg_types, out_types, aux_types = net.infer_type(
+                                        init_control=mx.base.mx_real_t)
     arg_arrays = [mx.nd.zeros(shape, mx.cpu(0), dtype=dtype)
                   for shape, dtype in zip(arg_shapes, arg_types)]
     executor = net.bind(ctx=mx.cpu(0), args=arg_arrays)
