@@ -91,7 +91,10 @@ class Operator {
      *  In current implementation, copy operator is specially handled by executor.
      *  This flag is used for special case treatment and future extension of different copy ops.
      */
-    kCrossDeviceCopy
+    kCrossDeviceCopy,
+    kNetInit,
+    kNetSend,
+    kNetRecv,
   };
   /*! \brief destructor */
   virtual ~Operator() {}
