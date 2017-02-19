@@ -1,6 +1,6 @@
 /*!
  * Copyright (c) 2017 by Contributors
- * \file net_send.cc
+ * \file p2pnet_send.cc
  * \brief
  * \author Chien-Chin Huang
 */
@@ -8,14 +8,14 @@
 #include <dmlc/parameter.h>
 #include <mxnet/operator.h>
 #include <zmq.h>
-#include "./net_send-inl.h"
-#include "./net_common.h"
+#include "./p2pnet_send-inl.h"
+#include "./p2pnet_common.h"
 #include "./operator_common.h"
 
 namespace mxnet {
 namespace op {
 
-class NetSendProperty : public OperatorProperty {
+class P2PNetSendProperty : public OperatorProperty {
  public:
   void Init(const std::vector<std::pair<std::string, std::string> >& kwargs) override {
     param_.Init(kwargs);
@@ -37,7 +37,7 @@ class NetSendProperty : public OperatorProperty {
   }
 
   OperatorProperty* Copy() const override {
-    auto ptr = new NetSendProperty();
+    auto ptr = new P2PNetSendProperty();
     ptr->param_ = param_;
     return ptr;
   }
@@ -47,7 +47,7 @@ class NetSendProperty : public OperatorProperty {
   }
 
   std::string TypeString() const override {
-    return "NetSend";
+    return "P2PNetSend";
   }
 
   Operator* CreateOperator(Context ctx) const override {
@@ -59,21 +59,21 @@ class NetSendProperty : public OperatorProperty {
                              std::vector<int> *in_type) const override {
       Operator *op = NULL;
       MSHADOW_TYPE_SWITCH(in_type->at(0), DType, {
-        op = new NetSendOp<DType>(param_);
+        op = new P2PNetSendOp<DType>(param_);
       });
       return op;
   }
 
  private:
-  NetSendParam param_;
-};  // class NetSendProperty
+  P2PNetSendParam param_;
+};  // class P2PNetSendProperty
 
-DMLC_REGISTER_PARAMETER(NetSendParam);
+DMLC_REGISTER_PARAMETER(P2PNetSendParam);
 
-MXNET_REGISTER_OP_PROPERTY(NetSend, NetSendProperty)
-.add_argument("data", "Symbol", "Input matrix to the NetSendOp.")
-.add_argument("control", "Symbol", "Control matrix to the NetSendOp.")
-.add_arguments(NetSendParam::__FIELDS__())
+MXNET_REGISTER_OP_PROPERTY(P2PNetSend, P2PNetSendProperty)
+.add_argument("data", "Symbol", "Input matrix to the P2PNetSendOp.")
+.add_argument("control", "Symbol", "Control matrix to the P2PNetSendOp.")
+.add_arguments(P2PNetSendParam::__FIELDS__())
 .describe("Special op to send a matrix.");
 
 }  // namespace op

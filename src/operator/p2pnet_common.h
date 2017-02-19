@@ -1,6 +1,6 @@
 /*!
  * Copyright (c) 2017 by Contributors
- * \file net_common.h
+ * \file p2pnet_common.h
  * \brief
  * \author Chien-Chin Huang
 */

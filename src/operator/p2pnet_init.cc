@@ -1,6 +1,6 @@
 /*!
  * Copyright (c) 2017 by Contributors
- * \file net_init.cc
+ * \file p2pnet_init.cc
  * \brief
  * \author Chien-Chin Huang
 */
@@ -9,15 +9,15 @@
 #include <dmlc/parameter.h>
 #include <mxnet/operator.h>
 #include "./operator_common.h"
-#include "./net_init-inl.h"
-#include "./net_common.h"
+#include "./p2pnet_init-inl.h"
+#include "./p2pnet_common.h"
 
 namespace mxnet {
 namespace op {
 
-class NetInitOp : public Operator {
+class P2PNetInitOp : public Operator {
  public:
-  explicit NetInitOp(NetInitParam param) : address_(param.address) {
+  explicit P2PNetInitOp(P2PNetInitParam param) : address_(param.address) {
     auto pos = address_.find(':');
     if (pos == std::string::npos) {
       LOG(FATAL) << "The address should be in the form ''ip:port''.";
@@ -31,16 +31,16 @@ class NetInitOp : public Operator {
                const std::vector<OpReqType> &req,
                const std::vector<TBlob> &out_data,
                const std::vector<TBlob> &aux_args) override {
-    // NetInit is specially handled by graph executor.
+    // P2PNetInit is specially handled by graph executor.
     //LOG(FATAL) << "Not Reached";
-    std::cout << "NetInit::Forward in" << std::endl;
+    std::cout << "P2PNetInit::Forward in" << std::endl;
     P2PNet::Get().Bind(ip_, port_);
     P2PNet::Get().Start();
-    std::cout << "NetInit::Forward out" << std::endl;
+    std::cout << "P2PNetInit::Forward out" << std::endl;
   }
 
   ExecType exec_type() const override {
-    return kNetInit;
+    return kP2PNetInit;
   }
 
  private:
@@ -49,7 +49,7 @@ class NetInitOp : public Operator {
   int port_;
 };
 
-class NetInitProperty : public OperatorProperty {
+class P2PNetInitProperty : public OperatorProperty {
  public:
   void Init(const std::vector<std::pair<std::string, std::string> >& kwargs) override {
     param_.Init(kwargs);
@@ -71,13 +71,13 @@ class NetInitProperty : public OperatorProperty {
   }
 
   OperatorProperty* Copy() const override {
-    auto ptr = new NetInitProperty();
+    auto ptr = new P2PNetInitProperty();
     ptr->param_ = param_;
     return ptr;
   }
 
   std::string TypeString() const override {
-    return "NetInit";
+    return "P2PNetInit";
   }
 
   Operator* CreateOperator(Context ctx) const override {
@@ -89,19 +89,19 @@ class NetInitProperty : public OperatorProperty {
                              std::vector<int> *in_type) const override {
       Operator *op = NULL;
       MSHADOW_TYPE_SWITCH(in_type->at(0), DType, {
-        op = new NetInitOp(param_);
+        op = new P2PNetInitOp(param_);
       });
       return op;
   }
 
  private:
-  NetInitParam param_;
+  P2PNetInitParam param_;
 };
 
-DMLC_REGISTER_PARAMETER(NetInitParam);
-MXNET_REGISTER_OP_PROPERTY(NetInit, NetInitProperty)
-.add_argument("control", "Symbol", "Control matrix to the NetInitOp.")
-.add_arguments(NetInitParam::__FIELDS__())
+DMLC_REGISTER_PARAMETER(P2PNetInitParam);
+MXNET_REGISTER_OP_PROPERTY(P2PNetInit, P2PNetInitProperty)
+.add_argument("control", "Symbol", "Control matrix to the P2PNetInitOp.")
+.add_arguments(P2PNetInitParam::__FIELDS__())
 .describe("Special op to initialize network.");
 }  // namespace op
 }  // namespace mxnet

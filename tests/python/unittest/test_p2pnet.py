@@ -10,9 +10,9 @@ TENSOR_SHAPE=(100, 100)
 
 
 def Worker1():
-    net = mx.symbol.NetInit(mx.symbol.Variable('init_control'),
+    net = mx.symbol.P2PNetInit(mx.symbol.Variable('init_control'),
                             address='127.0.0.1:5000')
-    net = mx.symbol.NetSend(data=mx.symbol.Variable('data'), control=net,
+    net = mx.symbol.P2PNetSend(data=mx.symbol.Variable('data'), control=net,
                             tensor_id=TENSOR_ID, address='127.0.0.1:5001')
     arg_shapes, out_shapes, aux_shapes = net.infer_shape(init_control=(2,), 
                                                          data=TENSOR_SHAPE)
@@ -62,9 +62,9 @@ def Worker1():
 
 
 def Worker2():
-    net = mx.symbol.NetInit(mx.symbol.Variable('init_control'),
+    net = mx.symbol.P2PNetInit(mx.symbol.Variable('init_control'),
                             address='127.0.0.1:5001')
-    net = mx.symbol.NetRecv(control=net, shape=(100, 100), tensor_id=TENSOR_ID, 
+    net = mx.symbol.P2PNetRecv(control=net, shape=(100, 100), tensor_id=TENSOR_ID, 
                             address='127.0.0.1:5000', dtype=np.float32)
     arg_shapes, out_shapes, aux_shapes = net.infer_shape(init_control=(2,));
     arg_types, out_types, aux_types = net.infer_type(

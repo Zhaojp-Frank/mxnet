@@ -92,9 +92,9 @@ class Operator {
      *  This flag is used for special case treatment and future extension of different copy ops.
      */
     kCrossDeviceCopy,
-    kNetInit,
-    kNetSend,
-    kNetRecv,
+    kP2PNetInit,
+    kP2PNetSend,
+    kP2PNetRecv,
   };
   /*! \brief destructor */
   virtual ~Operator() {}

@@ -1,6 +1,6 @@
 /*!
  * Copyright (c) 2017 by Contributors
- * \file net_recv.cc
+ * \file p2pnet_recv.cc
  * \brief
  * \author Chien-Chin Huang
 */
@@ -8,14 +8,14 @@
 #include <dmlc/parameter.h>
 #include <mxnet/operator.h>
 #include <zmq.h>
-#include "./net_recv-inl.h"
-#include "./net_common.h"
+#include "./p2pnet_recv-inl.h"
+#include "./p2pnet_common.h"
 #include "./operator_common.h"
 
 namespace mxnet {
 namespace op {
 
-class NetRecvProperty : public OperatorProperty {
+class P2PNetRecvProperty : public OperatorProperty {
  public:
   void Init(const std::vector<std::pair<std::string, std::string> >& kwargs) override {
     param_.Init(kwargs);
@@ -35,13 +35,13 @@ class NetRecvProperty : public OperatorProperty {
   }
 
   OperatorProperty* Copy() const override {
-    auto ptr = new NetRecvProperty();
+    auto ptr = new P2PNetRecvProperty();
     ptr->param_ = param_;
     return ptr;
   }
 
   std::string TypeString() const override {
-    return "NetRecv";
+    return "P2PNetRecv";
   }
 
   std::vector<std::string> ListArguments() const override {
@@ -57,19 +57,19 @@ class NetRecvProperty : public OperatorProperty {
                              std::vector<int> *in_type) const override {
       Operator *op = NULL;
       MSHADOW_TYPE_SWITCH(param_.dtype, DType, {
-        op = new NetRecvOp<DType>(param_);
+        op = new P2PNetRecvOp<DType>(param_);
       });
       return op;
   }
 
  private:
-  NetRecvParam param_;
-};  // class NetRecvProperty
+  P2PNetRecvParam param_;
+};  // class P2PNetRecvProperty
 
-DMLC_REGISTER_PARAMETER(NetRecvParam);
-MXNET_REGISTER_OP_PROPERTY(NetRecv, NetRecvProperty)
-.add_argument("control", "Symbol", "Control matrix to the NetRecvOp.")
-.add_arguments(NetRecvParam::__FIELDS__())
+DMLC_REGISTER_PARAMETER(P2PNetRecvParam);
+MXNET_REGISTER_OP_PROPERTY(P2PNetRecv, P2PNetRecvProperty)
+.add_argument("control", "Symbol", "Control matrix to the P2PNetRecvOp.")
+.add_arguments(P2PNetRecvParam::__FIELDS__())
 .describe("Special op to receive a matrix.");
 }  // namespace op
 }  // namespace mxnet

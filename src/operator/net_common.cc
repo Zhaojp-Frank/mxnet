@@ -1,6 +1,6 @@
 /*!
  * Copyright (c) 2017 by Contributors
- * \file net_common.cc
+ * \file p2pnet_common.cc
  * \brief
  * \author Chien-Chin Huang
 */
@@ -8,7 +8,7 @@
 #include <string>
 #include <thread>
 #include <iterator>
-#include "./net_common.h"
+#include "./p2pnet_common.h"
 
 namespace mxnet {
 namespace op {
