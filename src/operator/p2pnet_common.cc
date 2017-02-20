@@ -42,6 +42,8 @@ bool P2PNet::Init(const std::string& address) {
     std::ostringstream address_with_proto;  
     address_with_proto << "tcp://" << address;
     int ret = zmq_bind(server_, address_with_proto.str().c_str());
+    // TODO: Use LOG instead of std::cout and have better log output information
+    // for net_common.cc.
     std::cout << "zmq_bind " << address_with_proto.str() << " ret = " << ret 
               << std::endl;
     if (ret == 0) {
@@ -65,7 +67,7 @@ static int SendWithIdentity(void* socket, const std::string& identity,
 
 static int RecvWithIdentity(void* socket, std::string* identity,
                             void* buffer, int len) {
-  // TODO: Use constant instead of magic number 8.
+  // TODO: Use constant instead of the magic number 8.
   char identity_buffer[8];
   zmq_recv(socket, identity_buffer, 8, 0);
   *identity = std::string(identity_buffer, 8);
