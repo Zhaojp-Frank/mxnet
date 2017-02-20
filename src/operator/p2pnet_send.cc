@@ -28,6 +28,8 @@ class P2PNetSendProperty : public OperatorProperty {
   bool InferShape(std::vector<TShape> *in_shape,
                   std::vector<TShape> *out_shape,
                   std::vector<TShape> *aux_shape) const override {
+    // Avoid unused variable warnings.
+    (void)aux_shape;
     CHECK_EQ(in_shape->size(), 2) << "Input:[data]";
     TShape outshape(1);
     outshape[0] = 1;
@@ -51,17 +53,21 @@ class P2PNetSendProperty : public OperatorProperty {
   }
 
   Operator* CreateOperator(Context ctx) const override {
+    // Avoid unused variable warnings.
+    (void)ctx;
     LOG(FATAL) << "Not implemented";
     return NULL;
   }
 
   Operator* CreateOperatorEx(Context ctx, std::vector<TShape> *in_shape,
                              std::vector<int> *in_type) const override {
-      Operator *op = NULL;
-      MSHADOW_TYPE_SWITCH(in_type->at(0), DType, {
-        op = new P2PNetSendOp<DType>(param_);
-      });
-      return op;
+    // Avoid unused variable warnings.
+    (void)ctx;(void)in_shape;
+    Operator *op = NULL;
+    MSHADOW_TYPE_SWITCH(in_type->at(0), DType, {
+      op = new P2PNetSendOp<DType>(param_);
+    });
+    return op;
   }
 
  private:

@@ -28,7 +28,9 @@ class P2PNetRecvProperty : public OperatorProperty {
   bool InferShape(std::vector<TShape> *in_shape,
                   std::vector<TShape> *out_shape,
                   std::vector<TShape> *aux_shape) const override {
-    CHECK_EQ(in_shape->size(), 1) << "Input:[data]";
+    // Avoid unused variable warnings.
+    (void)aux_shape;
+    CHECK_EQ(in_shape->size(), 2) << "Input:[data]";
     out_shape->clear();
     out_shape->push_back(param_.shape);
     return true;
@@ -45,21 +47,25 @@ class P2PNetRecvProperty : public OperatorProperty {
   }
 
   std::vector<std::string> ListArguments() const override {
-    return {"control"};
+    return {"data", "control"};
   }
 
   Operator* CreateOperator(Context ctx) const override {
+    // Avoid unused variable warnings.
+    (void)ctx;
     LOG(FATAL) << "Not implemented";
     return NULL;
   }
 
   Operator* CreateOperatorEx(Context ctx, std::vector<TShape> *in_shape,
                              std::vector<int> *in_type) const override {
-      Operator *op = NULL;
-      MSHADOW_TYPE_SWITCH(param_.dtype, DType, {
-        op = new P2PNetRecvOp<DType>(param_);
-      });
-      return op;
+    // Avoid unused variable warnings.
+    (void)ctx;(void)in_shape;(void)in_type;
+    Operator *op = NULL;
+    MSHADOW_TYPE_SWITCH(param_.dtype, DType, {
+      op = new P2PNetRecvOp<DType>(param_);
+    });
+    return op;
   }
 
  private:
@@ -68,6 +74,7 @@ class P2PNetRecvProperty : public OperatorProperty {
 
 DMLC_REGISTER_PARAMETER(P2PNetRecvParam);
 MXNET_REGISTER_OP_PROPERTY(P2PNetRecv, P2PNetRecvProperty)
+.add_argument("data", "Symbol", "Control matrix to the P2PNetRecvOp.")
 .add_argument("control", "Symbol", "Control matrix to the P2PNetRecvOp.")
 .add_arguments(P2PNetRecvParam::__FIELDS__())
 .describe("Special op to receive a matrix.");
