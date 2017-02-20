@@ -33,7 +33,7 @@ class P2PNet {
   void operator=(P2PNet const&) = delete;
   ~P2PNet();
  
-  bool Bind(const std::string& ip, const int port);
+  bool Init(const std::string& address_);
 
   void Start();
 
@@ -85,7 +85,7 @@ class P2PNet {
   std::map<unsigned, size_t> recv_request_queue_;
   std::map<unsigned, void*> recv_request_sockets_;
   std::map<size_t, unsigned> recv_request_poll_indices;
-  // TODO: We should remove this thread. If we can use serializaion and
+  // TODO: We should remove this queue. If we can use serializaion and
   // and send only one message to Main() thread when a send/recv operator
   // needs to add a request, then this mapping is not needed.
   std::map<std::string, size_t> request_index_mapping_;

@@ -22,8 +22,6 @@ class P2PNetInitOp : public Operator {
     if (pos == std::string::npos) {
       LOG(FATAL) << "The address should be in the form ''ip:port''.";
     }
-    ip_ = address_.substr(0, pos);
-    port_ = atoi(address_.substr(pos + 1, address_.length()).c_str());
   }
 
   void Forward(const OpContext &ctx,
@@ -34,7 +32,7 @@ class P2PNetInitOp : public Operator {
     // P2PNetInit is specially handled by graph executor.
     //LOG(FATAL) << "Not Reached";
     std::cout << "P2PNetInit::Forward in" << std::endl;
-    P2PNet::Get().Bind(ip_, port_);
+    P2PNet::Get().Init(address_);
     P2PNet::Get().Start();
     std::cout << "P2PNetInit::Forward out" << std::endl;
   }
@@ -45,8 +43,6 @@ class P2PNetInitOp : public Operator {
 
  private:
   std::string address_;
-  std::string ip_;
-  int port_;
 };
 
 class P2PNetInitProperty : public OperatorProperty {
