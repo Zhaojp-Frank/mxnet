@@ -17,6 +17,7 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include <mutex>
 #include <zmq.h>
 #include "./operator_common.h"
 
@@ -62,6 +63,8 @@ class P2PNet {
   void FreeRequest(struct Request* request);
   void DoSend(std::string& receiver_identity, struct Request* request); 
 
+  std::mutex mtx; // mutex lock for request_queue_
+
   void* zmq_context_;
   // Every worker contains a server socket to allow other workers to connect to .
   void* server_; 
@@ -88,7 +91,8 @@ class P2PNet {
   // TODO: We should remove this queue. If we can use serializaion and
   // and send only one message to Main() thread when a send/recv operator
   // needs to add a request, then this mapping is not needed.
-  std::map<std::string, size_t> request_index_mapping_;
+  // std::map<std::string, size_t> request_index_mapping_;
+  // Current Solution: Use mutex lock
 };
 
 }  // namespace op
