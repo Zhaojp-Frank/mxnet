@@ -33,7 +33,7 @@ bool P2PNet::Init(const std::string& address) {
   send_request_queue_.clear();
   recv_request_queue_.clear();
   recv_request_poll_indices.clear();
-  request_index_mapping_.clear();
+  // request_index_mapping_.clear();
   // {recv_request_sockets_.clear();}
   // Note that we should not reinit recv_request_sockets_ because we don't want
   // to do connect every time.
@@ -60,9 +60,14 @@ bool P2PNet::Init(const std::string& address) {
 
 static int SendWithIdentity(void* socket, const std::string& identity, 
                             const void* buffer, int len) {
-  zmq_send(socket, identity.c_str(), identity.size(), ZMQ_SNDMORE);
-  zmq_send(socket, buffer, 0, ZMQ_SNDMORE);
-  return zmq_send(socket, buffer, len, 0);
+  // Use zero-copy to send message
+  zmq_msg_t msg;
+  zmq_msg_init_data(&msg, (void *)identity.c_str(), identity.size(), NULL, NULL);
+  zmq_msg_send(&msg, socket, ZMQ_SNDMORE);
+  zmq_msg_init_data(&msg, (void *)buffer, 0, NULL, NULL);
+  zmq_msg_send(&msg, socket, ZMQ_SNDMORE);
+  zmq_msg_init_data(&msg, (void *)buffer, len, NULL, NULL);
+  return zmq_msg_send(&msg, socket, 0);
 }
 
 static int RecvWithIdentity(void* socket, std::string* identity,
@@ -101,7 +106,9 @@ void P2PNet::DoSend(std::string& receiver_identity,
 }
 
 void P2PNet::DoInternalRequest(size_t index) {
+  mtx.lock();
   struct Request* request = request_queue_[index];
+  mtx.unlock();
   if (request->type == SendRequest) {
     std::cout << "DoInternalRequest SendRequest " << request->tensor_id << std::endl;
     auto it = remote_request_queue_.find(request->tensor_id);
@@ -158,7 +165,9 @@ void P2PNet::DoExternalRequest() {
   if (it == send_request_queue_.end()) {
     remote_request_queue_[tensor_id] = identity;
   } else {
+    mtx.lock();
     struct Request* request = request_queue_[it->second];
+    mtx.unlock();
     std::cout << "Before DoSend" << std::endl;
     DoSend(identity, request);
   }
@@ -173,18 +182,9 @@ void P2PNet::Main() {
     zmq_poll(poll_items_, poll_items_count_, -1);
     if (poll_items_[0].revents & ZMQ_POLLIN) { // internal request
       std::string identity;
-      RequestType type;
-      size_t index = 0;
-      RecvWithIdentity(internal_server_, &identity, &type, sizeof(type));
-      if (type == NewIndexRequest) {
-        index = request_queue_.size();
-        request_queue_.resize(index + 1);
-        request_index_mapping_[identity] = index;
-        SendWithIdentity(internal_server_, identity, &index, sizeof(index));
-      } else if (type == AddRequest) {
-        index = request_index_mapping_[identity];
-        DoInternalRequest(index);
-      }
+      size_t index;
+      RecvWithIdentity(internal_server_, &identity, &index, sizeof(index));
+      DoInternalRequest(index);
     }
     if (poll_items_[1].revents & ZMQ_POLLIN) {
       DoExternalRequest();
@@ -192,8 +192,10 @@ void P2PNet::Main() {
     for (unsigned i = 2; i < poll_items_count_; i++) {
       if (poll_items_[i].revents & ZMQ_POLLIN) {
         unsigned tensor_id = recv_request_poll_indices[i];
+        mtx.lock();
         struct Request* request = 
             request_queue_[recv_request_queue_[tensor_id]];
+        mtx.unlock();
         zmq_recv(poll_items_[i].socket, request->buffer, 0, 0);
         zmq_recv(poll_items_[i].socket, request->buffer, request->buffer_size,
                  0);
@@ -217,17 +219,18 @@ void P2PNet::DoRequest(struct Request* request) {
   // 2. The server returns the position that this request can be put to.
   // 3. Put the request to the request queue.
   // 4. Send a message to ask the server to process the new request.
+  // Current: Use mutex lock instead
   void* request_socket = zmq_socket(zmq_context_, ZMQ_REQ);
   std::string identity = CreateIdentity();
   zmq_setsockopt(request_socket, ZMQ_IDENTITY, identity.c_str(), 8);
   zmq_connect(request_socket, "inproc://mxnet_local_request");
-  RequestType type = NewIndexRequest;
-  zmq_send(request_socket, &type, sizeof(type), 0);
   size_t index;
-  zmq_recv(request_socket, &index, sizeof(size_t), 0);
-  type = AddRequest;
+  mtx.lock();
+  index = request_queue_.size();
+  request_queue_.resize(index + 1);
   request_queue_[index] = request;
-  zmq_send(request_socket, &type, sizeof(type), 0);
+  mtx.unlock();
+  zmq_send(request_socket, &index, sizeof(index), 0);
   zmq_close(request_socket);
 }
 
