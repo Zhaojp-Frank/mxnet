@@ -124,8 +124,12 @@ struct Context {
   DeviceType dev_type;
   /*! \brief device id we are going to run it on */
   int32_t dev_id;
+  /*! \brief device address we are going to run it on */
+  std::string dev_address;
+
+  static constexpr const char* DEFAULT_ADDRESS = "localhost:9000";
   /*! \brief default constructor */
-  Context() : dev_type(kCPU), dev_id(0) {}
+  Context() : dev_type(kCPU), dev_id(0), dev_address(DEFAULT_ADDRESS) {}
   /*!
    * \brief Get corresponding device mask
    * \return cpu::kDevMask or gpu::kDevMask
@@ -146,7 +150,8 @@ struct Context {
    * \return whether dev mask and id are same
    */
   inline bool operator==(const Context &b) const {
-    return dev_type == b.dev_type && dev_id == b.dev_id;
+    return dev_type == b.dev_type && dev_id == b.dev_id &&
+           dev_address == b.dev_address;
   }
   /*!
    * \brief check if current context not equals another one
@@ -183,21 +188,25 @@ struct Context {
    * \param dev_type device type.
    * \param dev_id device id. -1 for current device.
    */
-  inline static Context Create(DeviceType dev_type, int32_t dev_id = -1);
+  inline static Context Create(DeviceType dev_type, int32_t dev_id = -1,
+                               const std::string& dev_address = DEFAULT_ADDRESS);
   /*! \return CPU Context */
-  inline static Context CPU(int32_t dev_id = 0);
+  inline static Context CPU(int32_t dev_id = 0,
+                            const std::string& dev_address = DEFAULT_ADDRESS);
   /*!
    * Create a GPU context.
    * \param dev_id the device id.
    * \return GPU Context. -1 for current GPU.
    */
-  inline static Context GPU(int32_t dev_id = -1);
+  inline static Context GPU(int32_t dev_id = -1,
+                            const std::string& dev_address = DEFAULT_ADDRESS);
   /*!
    * Create a pinned CPU context.
    * \param dev_id the device id for corresponding GPU.
    * \return Pinned CPU context. -1 for current GPU.
    */
-  inline static Context CPUPinned(int32_t dev_id = -1);
+  inline static Context CPUPinned(int32_t dev_id = -1,
+                                  const std::string& dev_address = DEFAULT_ADDRESS);
   /*!
    * Create a context from string of the format [cpu|gpu|cpu_pinned](n)
    * \param str the string pattern
@@ -231,14 +240,20 @@ struct RunContext {
 namespace mxnet {
 // implementing Context
 inline bool Context::operator<(const Context &b) const {
-  if (dev_type == b.dev_type) {
-    return dev_id < b.dev_id;
+  if (dev_address == b.dev_address) {
+    if (dev_type == b.dev_type) {
+      return dev_id < b.dev_id;
+    } else {
+      return dev_type < b.dev_type;
+    }
   } else {
-    return dev_type < b.dev_type;
+    return dev_address < b.dev_address;
   }
 }
-inline Context Context::Create(DeviceType dev_type, int32_t dev_id) {
+inline Context Context::Create(DeviceType dev_type, int32_t dev_id,
+                               const std::string& dev_address) {
   Context ctx;
+  ctx.dev_address = dev_address;
   ctx.dev_type = dev_type;
   if (dev_id < 0) {
     ctx.dev_id = 0;
@@ -254,15 +269,16 @@ inline Context Context::Create(DeviceType dev_type, int32_t dev_id) {
   }
   return ctx;
 }
-inline Context Context::CPU(int32_t dev_id) {
+inline Context Context::CPU(int32_t dev_id, const std::string& dev_address) {
   return Create(kCPU, dev_id);
 }
 
-inline Context Context::CPUPinned(int32_t dev_id) {
+inline Context Context::CPUPinned(int32_t dev_id,
+                                  const std::string& dev_address) {
   return Create(kCPUPinned, dev_id);
 }
 
-inline Context Context::GPU(int32_t dev_id) {
+inline Context Context::GPU(int32_t dev_id, const std::string& dev_address) {
   return Create(kGPU, dev_id);
 }
 

@@ -121,12 +121,14 @@ int MXNDArrayCreate(const mx_uint *shape,
                     mx_uint ndim,
                     int dev_type,
                     int dev_id,
+                    const char* dev_address,
                     int delay_alloc,
                     NDArrayHandle *out) {
   API_BEGIN();
   *out = new NDArray(
       TShape(shape, shape + ndim),
-      Context::Create(static_cast<Context::DeviceType>(dev_type), dev_id),
+      Context::Create(static_cast<Context::DeviceType>(dev_type), dev_id,
+                      std::string(dev_address)),
       delay_alloc != 0);
   API_END();
 }
@@ -135,13 +137,15 @@ int MXNDArrayCreateEx(const mx_uint *shape,
                     mx_uint ndim,
                     int dev_type,
                     int dev_id,
+                    const char* dev_address,
                     int delay_alloc,
                     int dtype,
                     NDArrayHandle *out) {
   API_BEGIN();
   *out = new NDArray(
       TShape(shape, shape + ndim),
-      Context::Create(static_cast<Context::DeviceType>(dev_type), dev_id),
+      Context::Create(static_cast<Context::DeviceType>(dev_type), dev_id,
+                      std::string(dev_address)),
       delay_alloc != 0,
       dtype);
   API_END();
@@ -347,16 +351,19 @@ int MXNDArrayGetDType(NDArrayHandle handle,
 
 int MXNDArrayGetContext(NDArrayHandle handle,
                         int *out_dev_type,
-                        int *out_dev_id) {
+                        int *out_dev_id,
+                        const char** out_dev_address) {
   API_BEGIN();
   NDArray *arr = static_cast<NDArray*>(handle);
   if (!arr->is_none()) {
     const Context &ctx = arr->ctx();
     *out_dev_type = ctx.dev_type;
     *out_dev_id = ctx.dev_id;
+    *out_dev_address = ctx.dev_address.c_str();
   } else {
     *out_dev_type = 0;
     *out_dev_id = 0;
+    *out_dev_address = Context::DEFAULT_ADDRESS;
   }
   API_END();
 }

@@ -67,6 +67,7 @@ int MXExecutorOutputs(ExecutorHandle handle,
 int MXExecutorBind(SymbolHandle symbol_handle,
                    int dev_type,
                    int dev_id,
+                   const char* dev_address,
                    mx_uint len,
                    NDArrayHandle *in_args,
                    NDArrayHandle *arg_grad_store,
@@ -75,8 +76,8 @@ int MXExecutorBind(SymbolHandle symbol_handle,
                    NDArrayHandle *aux_states,
                    ExecutorHandle *out) {
   return MXExecutorBindX(symbol_handle,
-                         dev_type, dev_id,
-                         0, nullptr, nullptr, nullptr,
+                         dev_type, dev_id, dev_address,
+                         0, nullptr, nullptr, nullptr, nullptr,
                          len, in_args, arg_grad_store, grad_req_type,
                          aux_states_len, aux_states, out);
 }
@@ -84,10 +85,12 @@ int MXExecutorBind(SymbolHandle symbol_handle,
 int MXExecutorBindX(SymbolHandle symbol_handle,
                     int dev_type,
                     int dev_id,
+                    const char* dev_address,
                     mx_uint num_map_keys,
                     const char** map_keys,
                     const int* map_dev_types,
                     const int* map_dev_ids,
+                    const char** map_dev_addresses,
                     mx_uint len,
                     NDArrayHandle *in_args,
                     NDArrayHandle *arg_grad_store,
@@ -96,20 +99,21 @@ int MXExecutorBindX(SymbolHandle symbol_handle,
                     NDArrayHandle *aux_states,
                     ExecutorHandle *out) {
   return MXExecutorBindEX(symbol_handle,
-                          dev_type, dev_id,
+                          dev_type, dev_id, dev_address,
                           num_map_keys, map_keys, map_dev_types, map_dev_ids,
-                          len, in_args, arg_grad_store, grad_req_type,
-                          aux_states_len, aux_states,
-                          NULL, out);
+                          map_dev_addresses, len, in_args, arg_grad_store,
+                          grad_req_type, aux_states_len, aux_states, NULL, out);
 }
 
 int MXExecutorBindEX(SymbolHandle symbol_handle,
                      int dev_type,
                      int dev_id,
+                     const char* dev_address,
                      mx_uint num_map_keys,
                      const char** map_keys,
                      const int* map_dev_types,
                      const int* map_dev_ids,
+                     const char** map_dev_addresses,
                      mx_uint len,
                      NDArrayHandle *in_args,
                      NDArrayHandle *arg_grad_store,
@@ -122,11 +126,13 @@ int MXExecutorBindEX(SymbolHandle symbol_handle,
 
   API_BEGIN();
   nnvm::Symbol *symb = static_cast<nnvm::Symbol*>(symbol_handle);
-  Context ctx = Context::Create(static_cast<Context::DeviceType>(dev_type), dev_id);
+  Context ctx = Context::Create(static_cast<Context::DeviceType>(dev_type), dev_id,
+                                std::string(dev_address));
   std::map<std::string, Context> ctx_map;
   for (mx_uint i = 0; i < num_map_keys; ++i) {
     ctx_map[std::string(map_keys[i])] = Context::Create(
-        static_cast<Context::DeviceType>(map_dev_types[i]), map_dev_ids[i]);
+        static_cast<Context::DeviceType>(map_dev_types[i]), map_dev_ids[i],
+        std::string(map_dev_addresses[i]));
   }
   NDArray **in_args_ptr = reinterpret_cast<NDArray**>(in_args);
   NDArray **arg_grad_ptr = reinterpret_cast<NDArray**>(arg_grad_store);

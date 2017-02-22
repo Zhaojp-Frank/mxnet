@@ -81,6 +81,7 @@ def _new_alloc_handle(shape, ctx, delay_alloc, dtype=mx_real_t):
         mx_uint(len(shape)),
         ctypes.c_int(ctx.device_typeid),
         ctypes.c_int(ctx.device_id),
+        ctypes.c_char_p(ctx.device_address),
         ctypes.c_int(int(delay_alloc)),
         ctypes.c_int(int(_DTYPE_NP_TO_MX[np.dtype(dtype).type])),
         ctypes.byref(hdl)))
@@ -459,9 +460,12 @@ class NDArray(NDArrayBase):
         """
         dev_typeid = ctypes.c_int()
         dev_id = ctypes.c_int()
+        dev_address = ctypes.c_char_p()
         check_call(_LIB.MXNDArrayGetContext(
-            self.handle, ctypes.byref(dev_typeid), ctypes.byref(dev_id)))
-        return Context(Context.devtype2str[dev_typeid.value], dev_id.value)
+            self.handle, ctypes.byref(dev_typeid), ctypes.byref(dev_id)),
+            ctypes.byref(dev_address))
+        return Context(Context.devtype2str[dev_typeid.value], dev_id.value,
+                       dev_address.value)
 
     @property
     def dtype(self):

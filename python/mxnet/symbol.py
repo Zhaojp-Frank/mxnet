@@ -909,22 +909,26 @@ class Symbol(SymbolBase):
         ctx_map_keys = []
         ctx_map_dev_types = []
         ctx_map_dev_ids = []
+        ctx_map_dev_addresses = []
 
         if group2ctx:
             for key, val in group2ctx.items():
                 ctx_map_keys.append(c_str(key))
                 ctx_map_dev_types.append(ctypes.c_int(val.device_typeid))
                 ctx_map_dev_ids.append(ctypes.c_int(val.device_id))
+                ctx_map_dev_addresses.append(c_str(val.device_address))
 
         handle = ExecutorHandle()
         shared_handle = shared_exec.handle if shared_exec is not None else ExecutorHandle()
         check_call(_LIB.MXExecutorBindEX(self.handle,
                                          ctypes.c_int(ctx.device_typeid),
                                          ctypes.c_int(ctx.device_id),
+                                         c_str(ctx.device_address),
                                          mx_uint(len(ctx_map_keys)),
                                          c_array(ctypes.c_char_p, ctx_map_keys),
                                          c_array(ctypes.c_int, ctx_map_dev_types),
                                          c_array(ctypes.c_int, ctx_map_dev_ids),
+                                         c_array(ctypes.c_char_p, ctx_map_dev_addresses),
                                          mx_uint(len(args)),
                                          args_handle,
                                          args_grad_handle,

@@ -31,13 +31,17 @@ class Context(object):
     default_ctx = None
     devtype2str = {1: 'cpu', 2: 'gpu', 3: 'cpu_pinned'}
     devstr2type = {'cpu': 1, 'gpu': 2, 'cpu_pinned': 3}
-    def __init__(self, device_type, device_id=0):
+    DEFAULT_ADDRESS = "localhost:9000"
+    def __init__(self, device_type, device_id=0,
+                 device_address=DEFAULT_ADDRESS):
         if isinstance(device_type, Context):
             self.device_typeid = device_type.device_typeid
             self.device_id = device_type.device_id
+            self.device_address = device_type.device_address
         else:
             self.device_typeid = Context.devstr2type[device_type]
             self.device_id = device_id
+            self.device_address = device_address
         self._old_ctx = None
 
     @property
@@ -79,7 +83,7 @@ class Context(object):
 Context.default_ctx = Context('cpu', 0)
 
 
-def cpu(device_id=0):
+def cpu(device_id=0, device_address=Context.DEFAULT_ADDRESS):
     """Return a CPU context.
 
     This function is a short cut for Context('cpu', device_id)
@@ -95,10 +99,10 @@ def cpu(device_id=0):
     context : Context
         The corresponding CPU context.
     """
-    return Context('cpu', device_id)
+    return Context('cpu', device_id, device_address)
 
 
-def gpu(device_id=0):
+def gpu(device_id=0, device_address=Context.DEFAULT_ADDRESS):
     """Return a GPU context.
 
     This function is a short cut for Context('gpu', device_id)
@@ -113,7 +117,7 @@ def gpu(device_id=0):
     context : Context
         The corresponding GPU context.
     """
-    return Context('gpu', device_id)
+    return Context('gpu', device_id, device_address)
 
 
 def current_context():
