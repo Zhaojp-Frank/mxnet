@@ -61,15 +61,13 @@ bool P2PNet::Init(const std::string& address) {
 static int SendWithIdentity(void* socket, const std::string& identity, 
                             const void* buffer, int len) {
   // Use zero-copy to send message
-  zmq_msg_t msg1;
-  zmq_msg_init_data(&msg1, (void *)identity.c_str(), identity.size(), NULL, NULL);
-  zmq_msg_send(&msg1, socket, ZMQ_SNDMORE);
-  zmq_msg_t msg2;
-  zmq_msg_init_data(&msg2, (void *)buffer, 0, NULL, NULL);
-  zmq_msg_send(&msg2, socket, ZMQ_SNDMORE);
-  zmq_msg_t msg3;
-  zmq_msg_init_data(&msg3, (void *)buffer, len, NULL, NULL);
-  return zmq_msg_send(&msg3, socket, 0);
+  zmq_msg_t msg;
+  zmq_msg_init_data(&msg, (void *)identity.c_str(), identity.size(), NULL, NULL);
+  zmq_msg_send(&msg, socket, ZMQ_SNDMORE);
+  zmq_msg_init_data(&msg, (void *)buffer, 0, NULL, NULL);
+  zmq_msg_send(&msg, socket, ZMQ_SNDMORE);
+  zmq_msg_init_data(&msg, (void *)buffer, len, NULL, NULL);
+  return zmq_msg_send(&msg, socket, 0);
 }
 
 static int RecvWithIdentity(void* socket, std::string* identity,
