@@ -125,6 +125,7 @@ void P2PNet::DoInternalRequest(size_t index) {
       request_socket = zmq_socket(zmq_context_, ZMQ_DEALER);
       std::ostringstream address;  
       address << "tcp://" << request->address;
+      std::cout << "Recv address = " << address.str() << std::endl;
       std::string identity = CreateIdentity();
       zmq_setsockopt(request_socket, ZMQ_IDENTITY, identity.c_str(), 
                      identity.size());
@@ -199,7 +200,7 @@ void P2PNet::Main() {
         zmq_recv(poll_items_[i].socket, request->buffer, 0, 0);
         zmq_recv(poll_items_[i].socket, request->buffer, request->buffer_size,
                  0);
-        std::cout << "Recv on_complete" << std::endl;
+        std::cout << "Recv on_complete " << std::endl;
         request->on_complete();
       }
     }

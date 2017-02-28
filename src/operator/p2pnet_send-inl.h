@@ -12,9 +12,14 @@
 #include <map>
 #include <mxnet/ndarray.h>
 #include <mxnet/operator.h>
+#include <mxnet/op_attr_types.h>
+#include <nnvm/op.h>
+#include <nnvm/node.h>
+#include <nnvm/op_attr_types.h>
 #include <string>
 #include <utility>
 #include <vector>
+#include <zmq.h>
 #include "./p2pnet_common.h"
 #include "./operator_common.h"
 namespace mxnet {
@@ -52,6 +57,7 @@ class P2PNetSendOp : public Operator {
       read_vars.push_back(nd->var());
       ndptrs.push_back(nd);
     }
+    std::cout << "P2PNetSend::Forward " << address_ << std::endl;
     P2PNet::Request* request = new P2PNet::Request{
       P2PNet::SendRequest, address_, tensor_id_, in_data[0].dptr_,
       in_data[0].shape_.Size() * sizeof(DType), ndptrs};
@@ -60,8 +66,8 @@ class P2PNetSendOp : public Operator {
         request->on_complete = on_complete;
         P2PNet::Get().DoRequest(request);
       }, ndctx, read_vars, {}, FnProperty::kNormal, 0,
-      PROFILER_MESSAGE("NetSend"));
-    std::cout << "NetSend::Forward out" << std::endl;
+      PROFILER_MESSAGE("P2PNetSend"));
+    std::cout << "P2PNetSend::Forward out" << std::endl;
   }
 
   ExecType exec_type() const override {
@@ -72,6 +78,35 @@ class P2PNetSendOp : public Operator {
   std::string address_;
   unsigned tensor_id_;
 };  // class P2PNetSendOp
+
+void P2PNetSendCompute(const nnvm::NodeAttrs& attrs,
+                       const OpContext& ctx,
+                       const std::vector<TBlob>& inputs,
+                       const std::vector<OpReqType>& req,
+                       const std::vector<TBlob>& outputs) {
+  const P2PNetSendParam& param = nnvm::get<P2PNetSendParam>(attrs.parsed);
+  std::cout << "P2PNetSendCompute in" << std::endl;
+  Context ndctx = Context::CPU();
+  std::vector<NDArray*> ndptrs;
+  std::vector<engine::VarHandle> read_vars;
+  for (const auto input : inputs) {
+    NDArray* nd = new NDArray(input, ndctx.dev_id);
+    read_vars.push_back(nd->var());
+    ndptrs.push_back(nd);
+  }
+  std::cout << "P2PNetSendCompute " << param.address << std::endl;
+  P2PNet::Request* request = new P2PNet::Request{
+    P2PNet::SendRequest, param.address, param.tensor_id, inputs[0].dptr_,
+    inputs[0].shape_.Size() * mshadow::mshadow_sizeof(inputs[0].type_flag_), 
+    ndptrs};
+  Engine::Get()->PushAsync(
+    [request](RunContext rctx, Engine::CallbackOnComplete on_complete) {
+      request->on_complete = on_complete;
+      P2PNet::Get().DoRequest(request);
+    }, ndctx, read_vars, {}, FnProperty::kNormal, 0,
+    PROFILER_MESSAGE("P2PNetSendCompute"));
+  std::cout << "P2PNetSendCompute out" << std::endl;
+}
 
 }  // namespace op
 }  // namespace mxnet

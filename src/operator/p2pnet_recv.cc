@@ -4,10 +4,6 @@
  * \brief
  * \author Chien-Chin Huang
 */
-#include <dmlc/logging.h>
-#include <dmlc/parameter.h>
-#include <mxnet/operator.h>
-#include <zmq.h>
 #include "./p2pnet_recv-inl.h"
 #include "./p2pnet_common.h"
 #include "./operator_common.h"
@@ -73,10 +69,70 @@ class P2PNetRecvProperty : public OperatorProperty {
 };  // class P2PNetRecvProperty
 
 DMLC_REGISTER_PARAMETER(P2PNetRecvParam);
-MXNET_REGISTER_OP_PROPERTY(P2PNetRecv, P2PNetRecvProperty)
-.add_argument("data", "Symbol", "Control matrix to the P2PNetRecvOp.")
-.add_argument("control", "Symbol", "Control matrix to the P2PNetRecvOp.")
-.add_arguments(P2PNetRecvParam::__FIELDS__())
-.describe("Special op to receive a matrix.");
+
+//MXNET_REGISTER_OP_PROPERTY(P2PNetRecv, P2PNetRecvProperty)
+//.add_argument("data", "Symbol", "Control matrix to the P2PNetRecvOp.")
+//.add_argument("control", "Symbol", "Control matrix to the P2PNetRecvOp.")
+//.add_arguments(P2PNetRecvParam::__FIELDS__())
+//.describe("Special op to receive a matrix.");
+
+inline void P2PNetRecvAttrParser(NodeAttrs* attrs) {
+  P2PNetRecvParam param;
+  std::vector<std::pair<std::string, std::string> > kwargs(
+    attrs->dict.begin(), attrs->dict.end());
+  try {
+    param.Init(kwargs);
+  } catch (const dmlc::ParamError& e) {
+    std::ostringstream os;
+    os << e.what();
+    os << ", in operator " << attrs->op->name << "("
+       << "name=\"" << attrs->name << "\"";
+    for (const auto& k : attrs->dict) {
+      os << ", " << k.first << "=\"" << k.second << "\"";
+    }
+    os << ")";
+    throw dmlc::ParamError(os.str());
+  }
+  attrs->parsed = std::move(param);
+}
+
+inline bool P2PNetRecvInferShape(const nnvm::NodeAttrs& attrs,
+                                 std::vector<TShape> *in_shapes,
+                                 std::vector<TShape> *out_shapes) {
+  CHECK_EQ(in_shapes->size(), 2);
+  CHECK_EQ(out_shapes->size(), 1);
+  const P2PNetRecvParam& param = nnvm::get<P2PNetRecvParam>(attrs.parsed);
+  SHAPE_ASSIGN_CHECK(*out_shapes, 0, param.shape);
+  return true;
+}
+
+inline bool P2PNetRecvInferType(const nnvm::NodeAttrs& attrs,
+                                std::vector<int> *in_types,
+                                std::vector<int> *out_types) {
+  CHECK_EQ(in_types->size(), 2);
+  CHECK_EQ(out_types->size(), 1);
+  const P2PNetRecvParam& param = nnvm::get<P2PNetRecvParam>(attrs.parsed);
+  out_types->clear();
+  out_types->push_back(param.dtype);
+  return true;
+}
+
+NNVM_REGISTER_OP(P2PNetRecv)
+  .set_num_inputs(2)
+  .set_num_outputs(1)
+  .set_attr_parser(P2PNetRecvAttrParser)
+  .set_attr<FCompute>("FCompute<cpu>", P2PNetRecvCompute)
+  .set_attr<nnvm::FInferShape>("FInferShape", P2PNetRecvInferShape)
+  .set_attr<nnvm::FInferType>("FInferType", P2PNetRecvInferType)
+  .set_attr<nnvm::FListInputNames>("FListInputNames",
+      [](const NodeAttrs& attrs) {
+        (void) attrs;
+        return std::vector<std::string>{"data", "control"};
+      })
+  .add_argument("data", "NDArray", "Input matrix to the P2PNetRecvOp.")
+  .add_argument("control", "NDArray", "Control matrix to the P2PNetRecvOp.")
+  .add_arguments(P2PNetRecvParam::__FIELDS__())
+  .describe("Special op to receive a matrix.");
+
 }  // namespace op
 }  // namespace mxnet

@@ -7,6 +7,9 @@
 #include <dmlc/logging.h>
 #include <dmlc/parameter.h>
 #include <mxnet/operator.h>
+#include <nnvm/op.h>
+#include <nnvm/node.h>
+#include <nnvm/op_attr_types.h>
 #include <zmq.h>
 #include "./p2pnet_send-inl.h"
 #include "./p2pnet_common.h"
@@ -70,17 +73,67 @@ class P2PNetSendProperty : public OperatorProperty {
     return op;
   }
 
- private:
+ //private:
   P2PNetSendParam param_;
 };  // class P2PNetSendProperty
 
 DMLC_REGISTER_PARAMETER(P2PNetSendParam);
 
-MXNET_REGISTER_OP_PROPERTY(P2PNetSend, P2PNetSendProperty)
-.add_argument("data", "Symbol", "Input matrix to the P2PNetSendOp.")
-.add_argument("control", "Symbol", "Control matrix to the P2PNetSendOp.")
-.add_arguments(P2PNetSendParam::__FIELDS__())
-.describe("Special op to send a matrix.");
+//MXNET_REGISTER_OP_PROPERTY(P2PNetSend, P2PNetSendProperty)
+//.add_argument("data", "Symbol", "Input matrix to the P2PNetSendOp.")
+//.add_argument("control", "Symbol", "Control matrix to the P2PNetSendOp.")
+//.add_arguments(P2PNetSendParam::__FIELDS__())
+//.describe("Special op to send a matrix.");
+
+inline void P2PNetSendAttrParser(NodeAttrs* attrs) {
+  P2PNetSendParam param;
+  std::vector<std::pair<std::string, std::string> > kwargs(
+    attrs->dict.begin(), attrs->dict.end());
+  try {
+    param.Init(kwargs);
+  } catch (const dmlc::ParamError& e) {
+    std::ostringstream os;
+    os << e.what();
+    os << ", in operator " << attrs->op->name << "("
+       << "name=\"" << attrs->name << "\"";
+    for (const auto& k : attrs->dict) {
+      os << ", " << k.first << "=\"" << k.second << "\"";
+    }
+    os << ")";
+    throw dmlc::ParamError(os.str());
+  }
+  attrs->parsed = std::move(param);
+}
+
+inline bool P2PNetSendInferShape(const nnvm::NodeAttrs& attrs,
+                                 std::vector<TShape> *in_shapes,
+                                 std::vector<TShape> *out_shapes) {
+  // Avoid unused variable warnings.
+  (void)attrs;
+  CHECK_EQ(in_shapes->size(), 2);
+  CHECK_EQ(out_shapes->size(), 1);
+  TShape outshape(1);
+  outshape[0] = 1;
+  SHAPE_ASSIGN_CHECK(*out_shapes, 0, outshape);
+  return true;
+}
+
+NNVM_REGISTER_OP(P2PNetSend)
+  .set_num_inputs(2)
+  .set_num_outputs(1)
+  .set_attr_parser(P2PNetSendAttrParser)
+  .set_attr<FCompute>("FCompute<cpu>", P2PNetSendCompute)
+  .set_attr<nnvm::FInferShape>("FInferShape", P2PNetSendInferShape)
+  //.set_attr<nnvm::FInferType>("FInferType", P2PNetSendInferType)
+  .set_attr<nnvm::FListInputNames>("FListInputNames",
+      [](const NodeAttrs& attrs) {
+        (void) attrs;
+        return std::vector<std::string>{"data", "control"};
+      })
+  .add_argument("data", "NDArray", "Input matrix to the P2PNetSendOp.")
+  .add_argument("control", "NDArray", "Control matrix to the P2PNetSendOp.")
+  .add_arguments(P2PNetSendParam::__FIELDS__())
+  .describe("Special op to send a matrix.");
 
 }  // namespace op
 }  // namespace mxnet

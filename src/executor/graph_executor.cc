@@ -404,6 +404,11 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   g = nnvm::pass::InferShape(g, arg_shapes, "__shape__");
   g = nnvm::pass::InferType(g, arg_types, "__dtype__");
 
+  // We wait until the last momoent, right before allocating memory, to split
+  // the graph.
+  // TODO (chienchin): Split the graph to different subgraphs for different
+  // machines.
+  // g = nnvm::pass::SplitDistributedGraph(g, "__ctx_group__", device_map, "_CrossDeviceCopy");
   {
     // memory allocator
     const int kBadStorageID = -1;
@@ -651,6 +656,16 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
   static const auto& flist_outputs =
       nnvm::Op::GetAttr<nnvm::FListOutputNames>("FListOutputNames");
   const auto& idx = graph_.indexed_graph();
+  std::cout << "RunOps num_nodes " << idx.num_nodes() << std::endl;
+  std::cout << "RunOps num_node_entries " << idx.num_node_entries() << std::endl;
+  const auto& vshape = graph_.GetAttr<nnvm::ShapeVector>("shape");
+  const auto& vdtype = graph_.GetAttr<nnvm::DTypeVector>("dtype");
+  for (size_t nid = topo_start; nid < topo_end; ++nid) {
+    std::cout << "RunOps entry_id = " << idx.entry_id(nid, 0) << std::endl;
+    std::cout << "Shape " << vshape[idx.entry_id(nid, 0)] << std::endl;
+    std::cout << "DType " << vdtype[idx.entry_id(nid, 0)] << std::endl;
+    std::cout << "Name " << idx[nid].source->attrs.name << std::endl;
+  }
   for (size_t nid = topo_start; nid < topo_end; ++nid) {
     const auto& inode = idx[nid];
     if (inode.source->is_variable()) continue;

@@ -12,9 +12,14 @@
 #include <map>
 #include <mxnet/ndarray.h>
 #include <mxnet/operator.h>
+#include <mxnet/op_attr_types.h>
+#include <nnvm/op.h>
+#include <nnvm/node.h>
+#include <nnvm/op_attr_types.h>
 #include <string>
 #include <utility>
 #include <vector>
+#include <zmq.h>
 #include "./p2pnet_common.h"
 #include "./operator_common.h"
 namespace mxnet {
@@ -42,6 +47,7 @@ struct P2PNetRecvParam: public dmlc::Parameter<P2PNetRecvParam> {
     .describe("Receive matrix data type.");
   }
 };  // struct P2PNetRecvParam
+
 template<typename DType>
 class P2PNetRecvOp : public Operator {
  public:
@@ -69,6 +75,7 @@ class P2PNetRecvOp : public Operator {
       write_vars.push_back(nd->var());
       ndptrs.push_back(nd);
     }
+    std::cout << "P2PNetRecv::Forward " << address_ << std::endl;
     P2PNet::Request* request = new P2PNet::Request{
       P2PNet::RecvRequest, address_, tensor_id_, out_data[0].dptr_,
       out_data[0].shape_.Size() * sizeof(DType), ndptrs};
@@ -93,7 +100,44 @@ class P2PNetRecvOp : public Operator {
   unsigned tensor_id_;
   TShape tensor_shape_;
   int dtype_;
-};
+}; // class P2PNetRecvOp
+
+void P2PNetRecvCompute(const nnvm::NodeAttrs& attrs,
+                       const OpContext& ctx,
+                       const std::vector<TBlob>& inputs,
+                       const std::vector<OpReqType>& req,
+                       const std::vector<TBlob>& outputs) {
+  const P2PNetRecvParam& param = nnvm::get<P2PNetRecvParam>(attrs.parsed);
+  std::cout << "P2PNetRecvCompute in" << std::endl;
+  Context ndctx = Context::CPU();
+  std::vector<NDArray*> ndptrs;
+  std::vector<engine::VarHandle> read_vars;
+  for (const auto input : inputs) {
+    NDArray* nd = new NDArray(input, ndctx.dev_id);
+    read_vars.push_back(nd->var());
+    ndptrs.push_back(nd);
+  }
+  std::vector<engine::VarHandle> write_vars;
+  for (const auto output : outputs) {
+    NDArray* nd = new NDArray(output, ndctx.dev_id);
+    write_vars.push_back(nd->var());
+    ndptrs.push_back(nd);
+  }
+  std::cout << "P2PNetRecv::Forward " << param.address << std::endl;
+  P2PNet::Request* request = new P2PNet::Request{
+    P2PNet::RecvRequest, param.address, param.tensor_id, outputs[0].dptr_,
+    outputs[0].shape_.Size() * mshadow::mshadow_sizeof(param.dtype), ndptrs};
+  // TODO: Make sure this call (and the PushAsync in net_send-int.h) is 
+  // correct. For example, currently, we don't use ctx(OpContext). Is 
+  // this correct?
+  Engine::Get()->PushAsync(
+    [request](RunContext rctx, Engine::CallbackOnComplete on_complete) {
+      request->on_complete = on_complete;
+      P2PNet::Get().DoRequest(request);
+    }, ndctx, read_vars, write_vars, FnProperty::kNormal, 0,
+    PROFILER_MESSAGE("P2PNetRecv"));
+  std::cout << "P2PNetRecvCompute out" << std::endl;
+}
 
 }  // namespace op
 }  // namespace mxnet

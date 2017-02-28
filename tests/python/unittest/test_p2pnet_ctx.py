@@ -13,9 +13,9 @@ TENSOR_SHAPE=(100, 100)
 def Worker(addresses, worker_index):
     group2ctx = {'machine0': mx.cpu(0, addresses[0]),
                  'machine1': mx.cpu(0, addresses[1])}
-    net_init = mx.symbol.P2PNetInit(mx.symbol.Variable('init_control'),
-                                    address=addresses[worker_index])
     with mx.AttrScope(ctx_group='machine0'):
+        net_init = mx.symbol.P2PNetInit(mx.symbol.Variable('init_control'),
+                                        address=addresses[worker_index])
         net = mx.symbol.P2PNetSend(data=mx.symbol.Variable('data'), 
                                    control=net_init, tensor_id=TENSOR_ID,
                                    address=addresses[1])
