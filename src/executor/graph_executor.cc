@@ -406,11 +406,30 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
 
   // We wait until the last momoent, right before allocating memory, to split
   // the graph.
-  // TODO (chienchin): Split the graph to different subgraphs for different
-  // machines.
-  // g = nnvm::pass::SplitDistributedGraph(g, "__ctx_group__", device_map, "_CrossDeviceCopy");
+  nnvm::AddressVector address_vec;
+  const ContextVector& context_vec = g.GetAttr<ContextVector>("context");
+  for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
+    address_vec.push_back(context_vec[nid].dev_address);
+  }
+  g = nnvm::pass::SplitDistributedGraph(g, address_vec,
+                                        g.GetAttr<nnvm::ShapeVector>("shape"),
+                                        g.GetAttr<nnvm::DTypeVector>("dtype"),
+                                        "_CrossDeviceCopy", "P2PNetInit",
+                                        "P2PNetSend", "P2PNetRecv");
+  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
+  ContextVector new_context_vec;
+  const auto& new_idx = g.indexed_graph();
+  for (uint32_t nid = 0; nid < new_idx.num_nodes(); ++nid) {
+    const uint32_t old_nid = idx.node_id(new_idx[nid].source);
+    new_context_vec.push_back(context_vec[old_nid]);
+  }
+  g.attrs["context"] = std::make_shared<dmlc::any>(std::move(new_context_vec));
+
+  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   {
     // memory allocator
+    // Can't reuse the previous idx because of SplitDistributedGraph.
+    const auto& idx = g.indexed_graph();
     const int kBadStorageID = -1;
     const int kExternalStorageID = -2;
     nnvm::StorageVector arg_storage_id(idx.num_node_entries(), kBadStorageID);
@@ -420,6 +439,7 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
     g.attrs["storage"] = std::make_shared<dmlc::any>(std::move(arg_storage_id));
     g = nnvm::ApplyPass(g, "PlanMemory");
   }
+  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   g = DetectInplaceAddTo(g);
   return g;
 }
@@ -432,10 +452,15 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
   // get the graph
   const auto& idx = graph_.indexed_graph();
   // get the storage
+  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   const auto& vdtype = graph_.GetAttr<DTypeVector>("dtype");
+  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   const auto& vshape = graph_.GetAttr<ShapeVector>("shape");
+  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   const auto& vstorage = graph_.GetAttr<StorageVector>("storage_id");
+  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   const auto& vctx = graph_.GetAttr<ContextVector>("context");
+  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   CHECK_EQ(idx.num_node_entries(), vshape.size());
   CHECK_EQ(idx.num_node_entries(), vdtype.size());
   CHECK_EQ(idx.num_node_entries(), vstorage.size());
