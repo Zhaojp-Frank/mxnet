@@ -164,6 +164,43 @@ inline ValueType get_node_attr(
   }
 }
 
+Graph GraphExecutor::SplitDistributedGraph(Graph& g)
+{
+  const auto& idx = g.indexed_graph();
+  nnvm::AddressVector address_vec;
+  const ContextVector& context_vec = g.GetAttr<ContextVector>("context");
+  for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
+    address_vec.push_back(context_vec[nid].dev_address);
+  }
+  g = nnvm::pass::SplitDistributedGraph(g, address_vec,
+                                        g.GetAttr<nnvm::ShapeVector>("shape"),
+                                        g.GetAttr<nnvm::DTypeVector>("dtype"),
+                                        "_CrossDeviceCopy", "P2PNetInit",
+                                        "P2PNetSend", "P2PNetRecv",
+                                        &num_forward_inputs_, &num_forward_outputs_);
+  // Renews context based on the splited graph.
+  ContextVector new_context_vec;
+  const nnvm::NodeIdMap& node_id_map =
+      g.GetAttr<nnvm::NodeIdMap>("node_id_map");
+  const auto& new_idx = g.indexed_graph();
+  for (uint32_t nid = 0; nid < new_idx.num_nodes(); ++nid) {
+    new_context_vec.push_back(context_vec[node_id_map[nid]]);
+  }
+  g.attrs["context"] = std::make_shared<dmlc::any>(std::move(new_context_vec));
+
+  // Renews num_forward_inputs_ and num_forward_outputs_
+  num_forward_nodes_ = 0;
+  for (size_t i = 0; i < num_forward_outputs_; ++i) {
+    num_forward_nodes_ = std::max(
+        num_forward_nodes_, static_cast<size_t>(new_idx.outputs()[i].node_id + 1));
+  }
+
+  // TODO: Renews head_grad_entry_
+  // TODO: Renews head_grad_map_
+  // TODO: grad_store_
+  return g;
+}
+
 nnvm::Graph GraphExecutor::InitFullGraph(
     nnvm::Symbol symbol,
     const std::vector<OpReqType>& grad_req_type,
@@ -366,14 +403,7 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
                     num_forward_inputs_,
                     num_forward_outputs_);
   const auto& idx = g.indexed_graph();
-  // get number of nodes used in forward pass
-  num_forward_nodes_ = 0;
-  for (size_t i = 0; i < num_forward_outputs_; ++i) {
-    num_forward_nodes_ = std::max(
-        num_forward_nodes_, static_cast<size_t>(idx.outputs()[i].node_id + 1));
-  }
-  // Setup data entry, shape and type.
-  data_entry_.resize(idx.num_node_entries());
+  // Setup shape and type.
   auto mutable_nodes = idx.mutable_input_nodes();
   nnvm::ShapeVector arg_shapes;
   nnvm::DTypeVector arg_types;
@@ -382,22 +412,17 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
     const uint32_t nid = idx.input_nodes().at(i);
     if (mutable_nodes.count(nid)) {
       CHECK_LT(aux_top, aux_states.size());
-      data_entry_[idx.entry_id(nid, 0)] = aux_states[aux_top];
       arg_shapes.push_back(aux_states[aux_top].shape());
       arg_types.push_back(aux_states[aux_top].dtype());
       ++aux_top;
     } else {
       CHECK_LT(arg_top, in_args.size());
-      data_entry_[idx.entry_id(nid, 0)] = in_args[arg_top];
       arg_shapes.push_back(in_args[arg_top].shape());
       arg_types.push_back(in_args[arg_top].dtype());
       ++arg_top;
     }
   }
-  for (size_t j = num_forward_outputs_; j < idx.outputs().size(); ++j) {
-    data_entry_[idx.entry_id(idx.outputs()[j])]
-        = grad_store_[j - num_forward_outputs_].second;
-  }
+
   arg_shapes.resize(idx.input_nodes().size(), TShape());
   arg_types.resize(idx.input_nodes().size(), -1);
   // other initializations
@@ -406,26 +431,31 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
 
   // We wait until the last momoent, right before allocating memory, to split
   // the graph.
-  nnvm::AddressVector address_vec;
-  const ContextVector& context_vec = g.GetAttr<ContextVector>("context");
-  for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
-    address_vec.push_back(context_vec[nid].dev_address);
-  }
-  g = nnvm::pass::SplitDistributedGraph(g, address_vec,
-                                        g.GetAttr<nnvm::ShapeVector>("shape"),
-                                        g.GetAttr<nnvm::DTypeVector>("dtype"),
-                                        "_CrossDeviceCopy", "P2PNetInit",
-                                        "P2PNetSend", "P2PNetRecv");
-  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
-  ContextVector new_context_vec;
-  const auto& new_idx = g.indexed_graph();
-  for (uint32_t nid = 0; nid < new_idx.num_nodes(); ++nid) {
-    const uint32_t old_nid = idx.node_id(new_idx[nid].source);
-    new_context_vec.push_back(context_vec[old_nid]);
-  }
-  g.attrs["context"] = std::make_shared<dmlc::any>(std::move(new_context_vec));
+  g = SplitDistributedGraph(g);
 
-  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
+  // Note that we can't initialize data_entry_ until the splitted graph is
+  // generated.
+  {
+    const auto& idx = g.indexed_graph();
+    data_entry_.resize(idx.num_node_entries());
+    aux_top = arg_top = 0;
+    for (size_t i = 0; i < num_forward_inputs_; ++i) {
+      const uint32_t nid = idx.input_nodes().at(i);
+      // FIXME
+      if (mutable_nodes.count(nid)) {
+        data_entry_[idx.entry_id(nid, 0)] = aux_states[aux_top];
+        ++aux_top;
+      } else {
+        data_entry_[idx.entry_id(nid, 0)] = in_args[arg_top];
+        ++arg_top;
+      }
+    }
+    for (size_t j = num_forward_outputs_; j < idx.outputs().size(); ++j) {
+      data_entry_[idx.entry_id(idx.outputs()[j])]
+          = grad_store_[j - num_forward_outputs_].second;
+    }
+  }
+
   {
     // memory allocator
     // Can't reuse the previous idx because of SplitDistributedGraph.
@@ -439,7 +469,6 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
     g.attrs["storage"] = std::make_shared<dmlc::any>(std::move(arg_storage_id));
     g = nnvm::ApplyPass(g, "PlanMemory");
   }
-  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   g = DetectInplaceAddTo(g);
   return g;
 }
@@ -452,15 +481,10 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
   // get the graph
   const auto& idx = graph_.indexed_graph();
   // get the storage
-  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   const auto& vdtype = graph_.GetAttr<DTypeVector>("dtype");
-  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   const auto& vshape = graph_.GetAttr<ShapeVector>("shape");
-  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   const auto& vstorage = graph_.GetAttr<StorageVector>("storage_id");
-  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   const auto& vctx = graph_.GetAttr<ContextVector>("context");
-  std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   CHECK_EQ(idx.num_node_entries(), vshape.size());
   CHECK_EQ(idx.num_node_entries(), vdtype.size());
   CHECK_EQ(idx.num_node_entries(), vstorage.size());
@@ -681,16 +705,8 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
   static const auto& flist_outputs =
       nnvm::Op::GetAttr<nnvm::FListOutputNames>("FListOutputNames");
   const auto& idx = graph_.indexed_graph();
-  std::cout << "RunOps num_nodes " << idx.num_nodes() << std::endl;
-  std::cout << "RunOps num_node_entries " << idx.num_node_entries() << std::endl;
   const auto& vshape = graph_.GetAttr<nnvm::ShapeVector>("shape");
   const auto& vdtype = graph_.GetAttr<nnvm::DTypeVector>("dtype");
-  for (size_t nid = topo_start; nid < topo_end; ++nid) {
-    std::cout << "RunOps entry_id = " << idx.entry_id(nid, 0) << std::endl;
-    std::cout << "Shape " << vshape[idx.entry_id(nid, 0)] << std::endl;
-    std::cout << "DType " << vdtype[idx.entry_id(nid, 0)] << std::endl;
-    std::cout << "Name " << idx[nid].source->attrs.name << std::endl;
-  }
   for (size_t nid = topo_start; nid < topo_end; ++nid) {
     const auto& inode = idx[nid];
     if (inode.source->is_variable()) continue;
