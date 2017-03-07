@@ -7,7 +7,9 @@
 #include <nnvm/graph.h>
 #include <nnvm/pass_functions.h>
 #include <vector>
+#include <queue>
 #include <algorithm>
+#include <iostream>
 
 #include "./exec_pass.h"
 #include "./graph_executor.h"
@@ -167,6 +169,7 @@ inline ValueType get_node_attr(
 Graph GraphExecutor::SplitDistributedGraph(Graph& g)
 {
   const auto& idx = g.indexed_graph();
+  const uint32_t old_num_outputs = g.outputs.size(); // Will need this later.
   nnvm::AddressVector address_vec;
   const ContextVector& context_vec = g.GetAttr<ContextVector>("context");
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
@@ -178,26 +181,59 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g)
                                         "_CrossDeviceCopy", "P2PNetInit",
                                         "P2PNetSend", "P2PNetRecv",
                                         &num_forward_inputs_, &num_forward_outputs_);
-  // Renews context based on the splited graph.
+  // Renews everything
   ContextVector new_context_vec;
   const nnvm::NodeIdMap& node_id_map =
       g.GetAttr<nnvm::NodeIdMap>("node_id_map");
   const auto& new_idx = g.indexed_graph();
   for (uint32_t nid = 0; nid < new_idx.num_nodes(); ++nid) {
-    new_context_vec.push_back(context_vec[node_id_map[nid]]);
+    new_context_vec.push_back(context_vec[node_id_map.at(nid)]);
   }
   g.attrs["context"] = std::make_shared<dmlc::any>(std::move(new_context_vec));
 
-  // Renews num_forward_inputs_ and num_forward_outputs_
   num_forward_nodes_ = 0;
   for (size_t i = 0; i < num_forward_outputs_; ++i) {
     num_forward_nodes_ = std::max(
         num_forward_nodes_, static_cast<size_t>(new_idx.outputs()[i].node_id + 1));
   }
 
-  // TODO: Renews head_grad_entry_
-  // TODO: Renews head_grad_map_
-  // TODO: grad_store_
+  const nnvm::EntryIdMap& entry_id_map =
+      g.GetAttr<nnvm::EntryIdMap>("entry_id_map");
+  std::queue<nnvm::IndexedGraph::NodeEntry>
+    entry_queue(std::deque<nnvm::IndexedGraph::NodeEntry>(
+          new_idx.outputs().begin(), new_idx.outputs().end()));
+  std::vector<NDArray> new_data_entry;
+  new_data_entry.resize(new_idx.num_node_entries());
+  while (entry_queue.size() != 0) {
+    const auto& entry = entry_queue.front();
+    entry_queue.pop();
+    for (const auto& e : new_idx[entry.node_id].inputs) {
+      entry_queue.push(e);
+    }
+    const uint32_t eid = new_idx.entry_id(entry);
+    const auto old_eid_it = entry_id_map.find(eid);
+    if (old_eid_it != entry_id_map.end()) {
+      new_data_entry[eid] = data_entry_[old_eid_it->second];
+    }
+  }
+  data_entry_ = new_data_entry;
+
+  const nnvm::OutputIdxMap& output_idx_reverse_map =
+      g.GetAttr<nnvm::OutputIdxMap>("output_idx_reverse_map");
+  for (auto kv: head_grad_map_) {
+    kv.second = output_idx_reverse_map.at(kv.second);
+  }
+
+  std::vector<std::pair<OpReqType, NDArray> > new_grad_store;
+  new_grad_store.resize(g.outputs.size());
+  grad_store_.resize(g.outputs.size());
+  for (uint32_t old_idx = 0; old_idx < old_num_outputs; old_idx++) {
+    const uint32_t new_idx = output_idx_reverse_map.at(old_idx);
+    new_grad_store[new_idx] = grad_store_[old_idx];
+  }
+  grad_store_ = new_grad_store;
+  // head_grad_entry_ will not be used anymore.
+  // head_grad_array will be initialized later.
   return g;
 }
 
@@ -403,7 +439,8 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
                     num_forward_inputs_,
                     num_forward_outputs_);
   const auto& idx = g.indexed_graph();
-  // Setup shape and type.
+  // Setup data entry, shape and type.
+  data_entry_.resize(idx.num_node_entries());
   auto mutable_nodes = idx.mutable_input_nodes();
   nnvm::ShapeVector arg_shapes;
   nnvm::DTypeVector arg_types;
@@ -412,15 +449,21 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
     const uint32_t nid = idx.input_nodes().at(i);
     if (mutable_nodes.count(nid)) {
       CHECK_LT(aux_top, aux_states.size());
+      data_entry_[idx.entry_id(nid, 0)] = aux_states[aux_top];
       arg_shapes.push_back(aux_states[aux_top].shape());
       arg_types.push_back(aux_states[aux_top].dtype());
       ++aux_top;
     } else {
       CHECK_LT(arg_top, in_args.size());
+      data_entry_[idx.entry_id(nid, 0)] = in_args[arg_top];
       arg_shapes.push_back(in_args[arg_top].shape());
       arg_types.push_back(in_args[arg_top].dtype());
       ++arg_top;
     }
+  }
+  for (size_t j = num_forward_outputs_; j < idx.outputs().size(); ++j) {
+    data_entry_[idx.entry_id(idx.outputs()[j])]
+        = grad_store_[j - num_forward_outputs_].second;
   }
 
   arg_shapes.resize(idx.input_nodes().size(), TShape());
@@ -432,29 +475,6 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   // We wait until the last momoent, right before allocating memory, to split
   // the graph.
   g = SplitDistributedGraph(g);
-
-  // Note that we can't initialize data_entry_ until the splitted graph is
-  // generated.
-  {
-    const auto& idx = g.indexed_graph();
-    data_entry_.resize(idx.num_node_entries());
-    aux_top = arg_top = 0;
-    for (size_t i = 0; i < num_forward_inputs_; ++i) {
-      const uint32_t nid = idx.input_nodes().at(i);
-      // FIXME
-      if (mutable_nodes.count(nid)) {
-        data_entry_[idx.entry_id(nid, 0)] = aux_states[aux_top];
-        ++aux_top;
-      } else {
-        data_entry_[idx.entry_id(nid, 0)] = in_args[arg_top];
-        ++arg_top;
-      }
-    }
-    for (size_t j = num_forward_outputs_; j < idx.outputs().size(); ++j) {
-      data_entry_[idx.entry_id(idx.outputs()[j])]
-          = grad_store_[j - num_forward_outputs_].second;
-    }
-  }
 
   {
     // memory allocator
@@ -705,8 +725,6 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
   static const auto& flist_outputs =
       nnvm::Op::GetAttr<nnvm::FListOutputNames>("FListOutputNames");
   const auto& idx = graph_.indexed_graph();
-  const auto& vshape = graph_.GetAttr<nnvm::ShapeVector>("shape");
-  const auto& vdtype = graph_.GetAttr<nnvm::DTypeVector>("dtype");
   for (size_t nid = topo_start; nid < topo_end; ++nid) {
     const auto& inode = idx[nid];
     if (inode.source->is_variable()) continue;
