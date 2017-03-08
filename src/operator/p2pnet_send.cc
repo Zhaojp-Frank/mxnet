@@ -118,13 +118,23 @@ inline bool P2PNetSendInferShape(const nnvm::NodeAttrs& attrs,
   return true;
 }
 
+inline bool P2PNetSendInferType(const nnvm::NodeAttrs& attrs,
+                                std::vector<int> *in_types,
+                                std::vector<int> *out_types) {
+  (void)attrs;
+  CHECK_EQ(in_types->size(), 2);
+  CHECK_EQ(out_types->size(), 1);
+  TYPE_ASSIGN_CHECK(*out_types, 0, (*in_types)[0]);
+  return true;
+}
+
 NNVM_REGISTER_OP(P2PNetSend)
   .set_num_inputs(2)
   .set_num_outputs(1)
   .set_attr_parser(P2PNetSendAttrParser)
   .set_attr<FCompute>("FCompute<cpu>", P2PNetSendCompute)
   .set_attr<nnvm::FInferShape>("FInferShape", P2PNetSendInferShape)
-  //.set_attr<nnvm::FInferType>("FInferType", P2PNetSendInferType)
+  .set_attr<nnvm::FInferType>("FInferType", P2PNetSendInferType)
   .set_attr<nnvm::FListInputNames>("FListInputNames",
       [](const NodeAttrs& attrs) {
         (void) attrs;
