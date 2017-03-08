@@ -18,18 +18,18 @@ def Worker(addresses, worker_index):
                                         address=addresses[worker_index])
         net = mx.symbol.P2PNetSend(data=mx.symbol.Variable('data'), 
                                    control=net_init, tensor_id=TENSOR_ID,
-                                   address=addresses[1])
+                                   address=addresses[0])
     with mx.AttrScope(ctx_group='machine1'):
         net = mx.symbol.P2PNetRecv(data=net, control=net_init, 
                                    shape=TENSOR_SHAPE, tensor_id=TENSOR_ID,
-                                   address=addresses[0], dtype=np.float32)
+                                   address=addresses[1], dtype=np.float32)
     arg_shapes, out_shapes, aux_shapes = net.infer_shape(init_control=(2,), 
                                                          data=TENSOR_SHAPE)
     arg_types, out_types, aux_types = net.infer_type(
                                             init_control=mx.base.mx_real_t)
-    arg_arrays = [mx.nd.zeros(shape, mx.cpu(0), dtype=dtype)
+    arg_arrays = [mx.nd.zeros(shape, mx.cpu(0, addresses[0]), dtype=dtype)
                   for shape, dtype in zip(arg_shapes, arg_types)]
-    executor = net.bind(ctx=mx.cpu(0, addresses[1]), args=arg_arrays,
+    executor = net.bind(ctx=mx.cpu(0, addresses[0]), args=arg_arrays,
                         group2ctx=group2ctx)
     executor.forward()
     # executor.backward()

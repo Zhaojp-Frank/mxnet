@@ -127,7 +127,7 @@ struct Context {
   /*! \brief device address we are going to run it on */
   std::string dev_address;
 
-  static constexpr const char* DEFAULT_ADDRESS = "localhost:9000";
+  static constexpr const char* DEFAULT_ADDRESS = "127.0.0.1:9000";
   /*! \brief default constructor */
   Context() : dev_type(kCPU), dev_id(0), dev_address(DEFAULT_ADDRESS) {}
   /*!

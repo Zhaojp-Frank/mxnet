@@ -166,7 +166,7 @@ inline ValueType get_node_attr(
   }
 }
 
-Graph GraphExecutor::SplitDistributedGraph(Graph& g)
+Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
 {
   const auto& idx = g.indexed_graph();
   const uint32_t old_num_outputs = g.outputs.size(); // Will need this later.
@@ -175,7 +175,7 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g)
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     address_vec.push_back(context_vec[nid].dev_address);
   }
-  g = nnvm::pass::SplitDistributedGraph(g, address_vec,
+  g = nnvm::pass::SplitDistributedGraph(g, address_vec, default_ctx.dev_address,
                                         g.GetAttr<nnvm::ShapeVector>("shape"),
                                         g.GetAttr<nnvm::DTypeVector>("dtype"),
                                         "_CrossDeviceCopy", "P2PNetInit",
@@ -214,18 +214,26 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g)
 
   const nnvm::OutputIdxMap& output_idx_reverse_map =
       g.GetAttr<nnvm::OutputIdxMap>("output_idx_reverse_map");
+  std::unordered_map<const nnvm::Node*, size_t> new_head_grad_map;
   for (auto kv: head_grad_map_) {
-    kv.second = output_idx_reverse_map.at(kv.second);
+    auto it = output_idx_reverse_map.find(kv.second);
+    if (it != output_idx_reverse_map.end()) {
+      new_head_grad_map[kv.first] = it->second;
+    }
   }
+  head_grad_map_ = new_head_grad_map;
 
   std::vector<std::pair<OpReqType, NDArray> > new_grad_store;
   new_grad_store.resize(g.outputs.size());
   grad_store_.resize(g.outputs.size());
   for (uint32_t old_idx = 0; old_idx < old_num_outputs; old_idx++) {
-    const uint32_t new_idx = output_idx_reverse_map.at(old_idx);
-    new_grad_store[new_idx] = grad_store_[old_idx];
+    const auto it = output_idx_reverse_map.find(old_idx);
+    if (it != output_idx_reverse_map.end()) {
+      new_grad_store[it->second] = grad_store_[old_idx];
+    }
   }
   grad_store_ = new_grad_store;
+  std::cout << "SplitDistributedGraph finished" << std::endl;
   // head_grad_entry_ will not be used anymore.
   // head_grad_array will be initialized later.
   return g;
@@ -468,7 +476,7 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
 
   // We wait until the last momoent, right before allocating memory, to split
   // the graph.
-  g = SplitDistributedGraph(g);
+  g = SplitDistributedGraph(g, default_ctx);
 
   {
     // Can't reuse the previous idx because of SplitDistributedGraph.
