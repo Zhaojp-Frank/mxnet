@@ -191,12 +191,6 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g)
   }
   g.attrs["context"] = std::make_shared<dmlc::any>(std::move(new_context_vec));
 
-  num_forward_nodes_ = 0;
-  for (size_t i = 0; i < num_forward_outputs_; ++i) {
-    num_forward_nodes_ = std::max(
-        num_forward_nodes_, static_cast<size_t>(new_idx.outputs()[i].node_id + 1));
-  }
-
   const nnvm::EntryIdMap& entry_id_map =
       g.GetAttr<nnvm::EntryIdMap>("entry_id_map");
   std::queue<nnvm::IndexedGraph::NodeEntry>
@@ -477,9 +471,16 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   g = SplitDistributedGraph(g);
 
   {
-    // memory allocator
     // Can't reuse the previous idx because of SplitDistributedGraph.
     const auto& idx = g.indexed_graph();
+    // get number of nodes used in forward pass
+    num_forward_nodes_ = 0;
+    for (size_t i = 0; i < num_forward_outputs_; ++i) {
+      num_forward_nodes_ = std::max(
+          num_forward_nodes_, static_cast<size_t>(idx.outputs()[i].node_id + 1));
+    }
+
+    // memory allocator
     const int kBadStorageID = -1;
     const int kExternalStorageID = -2;
     nnvm::StorageVector arg_storage_id(idx.num_node_entries(), kBadStorageID);
