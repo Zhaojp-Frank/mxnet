@@ -31,7 +31,7 @@ class Context(object):
     default_ctx = None
     devtype2str = {1: 'cpu', 2: 'gpu', 3: 'cpu_pinned'}
     devstr2type = {'cpu': 1, 'gpu': 2, 'cpu_pinned': 3}
-    DEFAULT_ADDRESS = "localhost:9000"
+    DEFAULT_ADDRESS = "127.0.0.1:9000"
     def __init__(self, device_type, device_id=0,
                  device_address=DEFAULT_ADDRESS):
         if isinstance(device_type, Context):

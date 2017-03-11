@@ -112,8 +112,7 @@ inline bool P2PNetRecvInferType(const nnvm::NodeAttrs& attrs,
   CHECK_EQ(in_types->size(), 2);
   CHECK_EQ(out_types->size(), 1);
   const P2PNetRecvParam& param = nnvm::get<P2PNetRecvParam>(attrs.parsed);
-  out_types->clear();
-  out_types->push_back(param.dtype);
+  TYPE_ASSIGN_CHECK(*out_types, 0, param.dtype);
   return true;
 }
 
