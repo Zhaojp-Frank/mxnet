@@ -187,7 +187,15 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
       g.GetAttr<nnvm::NodeIdMap>("node_id_map");
   const auto& new_idx = g.indexed_graph();
   for (uint32_t nid = 0; nid < new_idx.num_nodes(); ++nid) {
-    new_context_vec.push_back(context_vec[node_id_map.at(nid)]);
+    const auto it = node_id_map.find(nid);
+    if (it == node_id_map.end()) {
+      // TODO: If this is a new node, we simply assign the default context to
+      // it. A better way is to find out which node is using it as input and
+      // set the context to be the same as that node.
+      new_context_vec.push_back(default_ctx);
+    } else {
+      new_context_vec.push_back(context_vec[it->second]);
+    }
   }
   g.attrs["context"] = std::make_shared<dmlc::any>(std::move(new_context_vec));
 
@@ -197,7 +205,10 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
     entry_queue(std::deque<nnvm::IndexedGraph::NodeEntry>(
           new_idx.outputs().begin(), new_idx.outputs().end()));
   std::vector<NDArray> new_data_entry;
+  const auto& dtype_vec = g.GetAttr<nnvm::DTypeVector>("dtype");
+  const auto& shape_vec = g.GetAttr<nnvm::ShapeVector>("shape");
   new_data_entry.resize(new_idx.num_node_entries());
+  std::cout << __LINE__ << new_data_entry.size() << std::endl;
   while (entry_queue.size() != 0) {
     const auto& entry = entry_queue.front();
     entry_queue.pop();
@@ -208,6 +219,9 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
     const auto old_eid_it = entry_id_map.find(eid);
     if (old_eid_it != entry_id_map.end()) {
       new_data_entry[eid] = data_entry_[old_eid_it->second];
+    } else {
+      new_data_entry[eid] = NDArray(shape_vec[eid], default_ctx,
+                                    false, dtype_vec[eid]);
     }
   }
   data_entry_ = new_data_entry;
@@ -234,6 +248,17 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
   }
   grad_store_ = new_grad_store;
   std::cout << "SplitDistributedGraph finished" << std::endl;
+
+  //DFSVisit(g.outputs, [&g, &new_idx] (const nnvm::NodePtr& n) {
+    //std::cout << n->attrs.name << " : ";
+    //std::cout << " shape-> "
+              //<< g.GetAttr<nnvm::ShapeVector>("shape")[new_idx.node_id(n.get())]
+              //<< " ";
+    //for (const auto e : n->inputs) {
+      //std::cout << e.node->attrs.name << ", ";
+    //}
+    //std::cout << std::endl;
+  //});
   // head_grad_entry_ will not be used anymore.
   // head_grad_array will be initialized later.
   return g;
@@ -591,7 +616,10 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
     if (!data_entry_[i].is_none()) continue;
     // assign allocated array by storage id
     int storage_id = vstorage[i];
-    CHECK_GE(storage_id, 0) << "Do not support runtime shape op yet";
+    CHECK_GE(storage_id, 0)
+        << "Do not support runtime shape op yet. Node's name is "
+        << i << " " << data_entry_.size()
+        << idx[i].source->attrs.name;
     const NDArray& src = data_pool_.at(storage_id);
     data_entry_[i] = src.AsArray(vshape[i], vdtype[i]);
   }
