@@ -201,27 +201,20 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
 
   const nnvm::EntryIdMap& entry_id_map =
       g.GetAttr<nnvm::EntryIdMap>("entry_id_map");
-  std::queue<nnvm::IndexedGraph::NodeEntry>
-    entry_queue(std::deque<nnvm::IndexedGraph::NodeEntry>(
-          new_idx.outputs().begin(), new_idx.outputs().end()));
-  std::vector<NDArray> new_data_entry;
   const auto& dtype_vec = g.GetAttr<nnvm::DTypeVector>("dtype");
   const auto& shape_vec = g.GetAttr<nnvm::ShapeVector>("shape");
-  new_data_entry.resize(new_idx.num_node_entries());
-  std::cout << __LINE__ << new_data_entry.size() << std::endl;
-  while (entry_queue.size() != 0) {
-    const auto& entry = entry_queue.front();
-    entry_queue.pop();
-    for (const auto& e : new_idx[entry.node_id].inputs) {
-      entry_queue.push(e);
-    }
-    const uint32_t eid = new_idx.entry_id(entry);
-    const auto old_eid_it = entry_id_map.find(eid);
-    if (old_eid_it != entry_id_map.end()) {
-      new_data_entry[eid] = data_entry_[old_eid_it->second];
-    } else {
-      new_data_entry[eid] = NDArray(shape_vec[eid], default_ctx,
-                                    false, dtype_vec[eid]);
+  std::vector<NDArray> new_data_entry(new_idx.num_node_entries());
+  for (uint32_t nid = 0; nid < new_idx.num_nodes(); ++nid) {
+    const size_t num_outputs = new_idx[nid].source->num_outputs();
+    for (size_t output_idx = 0; output_idx < num_outputs; output_idx++) {
+      const uint32_t eid = new_idx.entry_id(nid, output_idx);
+      const auto old_eid_it = entry_id_map.find(eid);
+      if (old_eid_it != entry_id_map.end()) {
+        new_data_entry[eid] = data_entry_[old_eid_it->second];
+      } else {
+        new_data_entry[eid] = NDArray(shape_vec[eid], default_ctx,
+                                      false, dtype_vec[eid]);
+      }
     }
   }
   data_entry_ = new_data_entry;
@@ -237,16 +230,11 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
   }
   head_grad_map_ = new_head_grad_map;
 
-  std::vector<std::pair<OpReqType, NDArray> > new_grad_store;
-  new_grad_store.resize(g.outputs.size());
-  grad_store_.resize(g.outputs.size());
-  for (uint32_t old_idx = 0; old_idx < old_num_outputs; old_idx++) {
-    const auto it = output_idx_reverse_map.find(old_idx);
-    if (it != output_idx_reverse_map.end()) {
-      new_grad_store[it->second] = grad_store_[old_idx];
-    }
-  }
-  grad_store_ = new_grad_store;
+  const uint32_t grad_output_size =
+      new_idx.outputs().size() - num_forward_outputs_;
+  //std::vector<std::pair<OpReqType, NDArray> > new_grad_store(grad_output_size);
+  CHECK(grad_output_size == grad_store_.size());
+  //grad_store_ = new_grad_store;
   std::cout << "SplitDistributedGraph finished" << std::endl;
 
   //DFSVisit(g.outputs, [&g, &new_idx] (const nnvm::NodePtr& n) {
