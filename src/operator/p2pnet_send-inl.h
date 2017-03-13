@@ -61,17 +61,19 @@ class P2PNetSendOp : public Operator {
     P2PNet::Request* request = new P2PNet::Request{
       P2PNet::SendRequest, address_, tensor_id_, in_data[0].dptr_,
       in_data[0].shape_.Size() * sizeof(DType), ndptrs};
-    Engine::Get()->PushAsync(
-      [request](RunContext rctx, Engine::CallbackOnComplete on_complete) {
-        request->on_complete = on_complete;
-        P2PNet::Get().DoRequest(request);
-      }, ndctx, read_vars, {}, FnProperty::kNormal, 0,
-      PROFILER_MESSAGE("P2PNetSend"));
+    //Engine::Get()->PushAsync(
+      //[request](RunContext rctx, Engine::CallbackOnComplete on_complete) {
+        //request->on_complete = on_complete;
+        //P2PNet::Get().DoRequest(request);
+      //}, ndctx, read_vars, {}, FnProperty::kNormal, 0,
+      //PROFILER_MESSAGE("P2PNetSend"));
+    request->on_complete = ctx.async_on_complete;
+    P2PNet::Get().DoRequest(request);
     std::cout << "P2PNetSend::Forward out" << std::endl;
   }
 
   ExecType exec_type() const override {
-    return kP2PNetSend;
+    return kAsync;
   }
 
  private:

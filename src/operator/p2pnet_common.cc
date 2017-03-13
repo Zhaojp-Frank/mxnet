@@ -100,6 +100,7 @@ void P2PNet::DoSend(std::string& receiver_identity,
     // TODO: Change to zero-copy send.
     SendWithIdentity(server_, receiver_identity, request->buffer,
                      request->buffer_size);
+    std::cout << "Sent " << request->buffer_size << " bytes" << std::endl;
     std::cout << "Send on_complete " << receiver_identity << std::endl;
     request->on_complete();
     FreeRequest(request);
@@ -198,8 +199,9 @@ void P2PNet::Main() {
             request_queue_[recv_request_queue_[tensor_id]];
         mtx.unlock();
         zmq_recv(poll_items_[i].socket, request->buffer, 0, 0);
-        zmq_recv(poll_items_[i].socket, request->buffer, request->buffer_size,
+        int ret = zmq_recv(poll_items_[i].socket, request->buffer, request->buffer_size,
                  0);
+        std::cout << "Recv " << ret << " bytes" << std::endl;
         std::cout << "Recv on_complete " << std::endl;
         request->on_complete();
       }

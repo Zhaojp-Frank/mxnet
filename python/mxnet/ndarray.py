@@ -462,8 +462,8 @@ class NDArray(NDArrayBase):
         dev_id = ctypes.c_int()
         dev_address = ctypes.c_char_p()
         check_call(_LIB.MXNDArrayGetContext(
-            self.handle, ctypes.byref(dev_typeid), ctypes.byref(dev_id)),
-            ctypes.byref(dev_address))
+            self.handle, ctypes.byref(dev_typeid), ctypes.byref(dev_id),
+            ctypes.byref(dev_address)))
         return Context(Context.devtype2str[dev_typeid.value], dev_id.value,
                        dev_address.value)
 

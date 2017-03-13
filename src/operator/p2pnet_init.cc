@@ -36,7 +36,7 @@ class P2PNetInitOp : public Operator {
   }
 
   ExecType exec_type() const override {
-    return kP2PNetInit;
+    return kSync;
   }
 
  private:

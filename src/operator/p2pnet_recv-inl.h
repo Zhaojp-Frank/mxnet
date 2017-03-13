@@ -82,17 +82,19 @@ class P2PNetRecvOp : public Operator {
     // TODO: Make sure this call (and the PushAsync in net_send-int.h) is 
     // correct. For example, currently, we don't use ctx(OpContext). Is 
     // this correct?
-    Engine::Get()->PushAsync(
-      [request](RunContext rctx, Engine::CallbackOnComplete on_complete) {
-        request->on_complete = on_complete;
-        P2PNet::Get().DoRequest(request);
-      }, ndctx, read_vars, write_vars, FnProperty::kNormal, 0,
-      PROFILER_MESSAGE("P2PNetRecv"));
+    //Engine::Get()->PushAsync(
+      //[request](RunContext rctx, Engine::CallbackOnComplete on_complete) {
+        //request->on_complete = on_complete;
+        //P2PNet::Get().DoRequest(request);
+      //}, ndctx, read_vars, write_vars, FnProperty::kNormal, 0,
+      //PROFILER_MESSAGE("P2PNetRecv"));
+    request->on_complete = ctx.async_on_complete;
+    P2PNet::Get().DoRequest(request);
     std::cout << "P2PNetRecv::Forward out" << std::endl;
   }
 
   ExecType exec_type() const override {
-    return kP2PNetRecv;
+    return kAsync;
   }
 
  private:
@@ -136,6 +138,7 @@ void P2PNetRecvCompute(const nnvm::NodeAttrs& attrs,
       P2PNet::Get().DoRequest(request);
     }, ndctx, read_vars, write_vars, FnProperty::kNormal, 0,
     PROFILER_MESSAGE("P2PNetRecv"));
+
   std::cout << "P2PNetRecvCompute out" << std::endl;
 }
 

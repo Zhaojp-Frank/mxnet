@@ -79,11 +79,11 @@ class P2PNetSendProperty : public OperatorProperty {
 
 DMLC_REGISTER_PARAMETER(P2PNetSendParam);
 
-//MXNET_REGISTER_OP_PROPERTY(P2PNetSend, P2PNetSendProperty)
-//.add_argument("data", "Symbol", "Input matrix to the P2PNetSendOp.")
-//.add_argument("control", "Symbol", "Control matrix to the P2PNetSendOp.")
-//.add_arguments(P2PNetSendParam::__FIELDS__())
-//.describe("Special op to send a matrix.");
+MXNET_REGISTER_OP_PROPERTY(P2PNetSend, P2PNetSendProperty)
+.add_argument("data", "Symbol", "Input matrix to the P2PNetSendOp.")
+.add_argument("control", "Symbol", "Control matrix to the P2PNetSendOp.")
+.add_arguments(P2PNetSendParam::__FIELDS__())
+.describe("Special op to send a matrix.");
 
 inline void P2PNetSendAttrParser(NodeAttrs* attrs) {
   P2PNetSendParam param;
@@ -128,22 +128,22 @@ inline bool P2PNetSendInferType(const nnvm::NodeAttrs& attrs,
   return true;
 }
 
-NNVM_REGISTER_OP(P2PNetSend)
-  .set_num_inputs(2)
-  .set_num_outputs(1)
-  .set_attr_parser(P2PNetSendAttrParser)
-  .set_attr<FCompute>("FCompute<cpu>", P2PNetSendCompute)
-  .set_attr<nnvm::FInferShape>("FInferShape", P2PNetSendInferShape)
-  .set_attr<nnvm::FInferType>("FInferType", P2PNetSendInferType)
-  .set_attr<nnvm::FListInputNames>("FListInputNames",
-      [](const NodeAttrs& attrs) {
-        (void) attrs;
-        return std::vector<std::string>{"data", "control"};
-      })
-  .add_argument("data", "NDArray", "Input matrix to the P2PNetSendOp.")
-  .add_argument("control", "NDArray", "Control matrix to the P2PNetSendOp.")
-  .add_arguments(P2PNetSendParam::__FIELDS__())
-  .describe("Special op to send a matrix.");
+//NNVM_REGISTER_OP(P2PNetSend)
+  //.set_num_inputs(2)
+  //.set_num_outputs(1)
+  //.set_attr_parser(P2PNetSendAttrParser)
+  //.set_attr<FCompute>("FCompute<cpu>", P2PNetSendCompute)
+  //.set_attr<nnvm::FInferShape>("FInferShape", P2PNetSendInferShape)
+  //.set_attr<nnvm::FInferType>("FInferType", P2PNetSendInferType)
+  //.set_attr<nnvm::FListInputNames>("FListInputNames",
+      //[](const NodeAttrs& attrs) {
+        //(void) attrs;
+        //return std::vector<std::string>{"data", "control"};
+      //})
+  //.add_argument("data", "NDArray", "Input matrix to the P2PNetSendOp.")
+  //.add_argument("control", "NDArray", "Control matrix to the P2PNetSendOp.")
+  //.add_arguments(P2PNetSendParam::__FIELDS__())
+  //.describe("Special op to send a matrix.");
 
 }  // namespace op
 }  // namespace mxnet
