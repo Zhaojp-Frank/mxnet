@@ -50,7 +50,7 @@ class P2PNet {
     unsigned tensor_id;
     void* buffer;
     size_t buffer_size;
-    std::vector<NDArray*> ndptrs;
+    //std::vector<NDArray*> ndptrs;
     engine::CallbackOnComplete on_complete;
   };
   void DoRequest(struct Request* request);

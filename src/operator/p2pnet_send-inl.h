@@ -26,7 +26,7 @@ namespace mxnet {
 namespace op {
 
 struct P2PNetSendParam: public dmlc::Parameter<P2PNetSendParam> {
-  std::string address; 
+  std::string address;
   unsigned tensor_id;
   DMLC_DECLARE_PARAMETER(P2PNetSendParam) {
     DMLC_DECLARE_FIELD(address).set_default("127.0.0.1:11111")
@@ -40,7 +40,7 @@ struct P2PNetSendParam: public dmlc::Parameter<P2PNetSendParam> {
 template<typename DType>
 class P2PNetSendOp : public Operator {
  public:
-  explicit P2PNetSendOp(P2PNetSendParam param) 
+  explicit P2PNetSendOp(P2PNetSendParam param)
     : address_(param.address), tensor_id_(param.tensor_id) {}
 
   void Forward(const OpContext &ctx,
@@ -49,26 +49,28 @@ class P2PNetSendOp : public Operator {
                const std::vector<TBlob> &out_data,
                const std::vector<TBlob> &aux_args) override {
     std::cout << "P2PNetSend::Forward in" << std::endl;
-    Context ndctx = Context::CPU();
-    std::vector<NDArray*> ndptrs;
-    std::vector<engine::VarHandle> read_vars;
-    for (const auto input : in_data) {
-      NDArray* nd = new NDArray(input, ndctx.dev_id);
-      read_vars.push_back(nd->var());
-      ndptrs.push_back(nd);
-    }
+    //Context ndctx = Context::CPU();
+    //std::vector<NDArray*> ndptrs;
+    //std::vector<engine::VarHandle> read_vars;
+    //for (const auto input : in_data) {
+      //NDArray* nd = new NDArray(input, ndctx.dev_id);
+      //read_vars.push_back(nd->var());
+      //ndptrs.push_back(nd);
+    //}
     std::cout << "P2PNetSend::Forward " << address_ << std::endl;
     P2PNet::Request* request = new P2PNet::Request{
       P2PNet::SendRequest, address_, tensor_id_, in_data[0].dptr_,
-      in_data[0].shape_.Size() * sizeof(DType), ndptrs};
+      in_data[0].shape_.Size() * sizeof(DType), ctx.async_on_complete};
+      //in_data[0].shape_.Size() * sizeof(DType), ndptrs};
     //Engine::Get()->PushAsync(
       //[request](RunContext rctx, Engine::CallbackOnComplete on_complete) {
         //request->on_complete = on_complete;
         //P2PNet::Get().DoRequest(request);
       //}, ndctx, read_vars, {}, FnProperty::kNormal, 0,
       //PROFILER_MESSAGE("P2PNetSend"));
-    request->on_complete = ctx.async_on_complete;
+    //request->on_complete = ctx.async_on_complete;
     P2PNet::Get().DoRequest(request);
+    //ctx.async_on_complete();
     std::cout << "P2PNetSend::Forward out" << std::endl;
   }
 
@@ -88,25 +90,25 @@ void P2PNetSendCompute(const nnvm::NodeAttrs& attrs,
                        const std::vector<TBlob>& outputs) {
   const P2PNetSendParam& param = nnvm::get<P2PNetSendParam>(attrs.parsed);
   std::cout << "P2PNetSendCompute in" << std::endl;
-  Context ndctx = Context::CPU();
-  std::vector<NDArray*> ndptrs;
-  std::vector<engine::VarHandle> read_vars;
-  for (const auto input : inputs) {
-    NDArray* nd = new NDArray(input, ndctx.dev_id);
-    read_vars.push_back(nd->var());
-    ndptrs.push_back(nd);
-  }
-  std::cout << "P2PNetSendCompute " << param.address << std::endl;
-  P2PNet::Request* request = new P2PNet::Request{
-    P2PNet::SendRequest, param.address, param.tensor_id, inputs[0].dptr_,
-    inputs[0].shape_.Size() * mshadow::mshadow_sizeof(inputs[0].type_flag_), 
-    ndptrs};
-  Engine::Get()->PushAsync(
-    [request](RunContext rctx, Engine::CallbackOnComplete on_complete) {
-      request->on_complete = on_complete;
-      P2PNet::Get().DoRequest(request);
-    }, ndctx, read_vars, {}, FnProperty::kNormal, 0,
-    PROFILER_MESSAGE("P2PNetSendCompute"));
+  //Context ndctx = Context::CPU();
+  //std::vector<NDArray*> ndptrs;
+  //std::vector<engine::VarHandle> read_vars;
+  //for (const auto input : inputs) {
+    //NDArray* nd = new NDArray(input, ndctx.dev_id);
+    //read_vars.push_back(nd->var());
+    //ndptrs.push_back(nd);
+  //}
+  //std::cout << "P2PNetSendCompute " << param.address << std::endl;
+  //P2PNet::Request* request = new P2PNet::Request{
+    //P2PNet::SendRequest, param.address, param.tensor_id, inputs[0].dptr_,
+    //inputs[0].shape_.Size() * mshadow::mshadow_sizeof(inputs[0].type_flag_),
+    //ndptrs};
+  //Engine::Get()->PushAsync(
+    //[request](RunContext rctx, Engine::CallbackOnComplete on_complete) {
+      //request->on_complete = on_complete;
+      //P2PNet::Get().DoRequest(request);
+    //}, ndctx, read_vars, {}, FnProperty::kNormal, 0,
+    //PROFILER_MESSAGE("P2PNetSendCompute"));
   std::cout << "P2PNetSendCompute out" << std::endl;
 }
 

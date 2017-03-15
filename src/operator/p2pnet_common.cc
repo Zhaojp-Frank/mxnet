@@ -32,19 +32,18 @@ bool P2PNet::Init(const std::string& address) {
   remote_request_queue_.clear();
   send_request_queue_.clear();
   recv_request_queue_.clear();
-  recv_request_poll_indices.clear();
-  // request_index_mapping_.clear();
+  // {recv_request_poll_indices.clear();}
   // {recv_request_sockets_.clear();}
   // Note that we should not reinit recv_request_sockets_ because we don't want
   // to do connect every time.
   if (!is_bind_) {
     srand(time(nullptr));
-    std::ostringstream address_with_proto;  
+    std::ostringstream address_with_proto;
     address_with_proto << "tcp://" << address;
     int ret = zmq_bind(server_, address_with_proto.str().c_str());
     // TODO: Use LOG instead of std::cout and have better log output information
     // for net_common.cc.
-    std::cout << "zmq_bind " << address_with_proto.str() << " ret = " << ret 
+    std::cout << "zmq_bind " << address_with_proto.str() << " ret = " << ret
               << std::endl;
     if (ret == 0) {
       zmq_bind(internal_server_, "inproc://mxnet_local_request");
@@ -58,7 +57,7 @@ bool P2PNet::Init(const std::string& address) {
   return true;
 };
 
-static int SendWithIdentity(void* socket, const std::string& identity, 
+static int SendWithIdentity(void* socket, const std::string& identity,
                             const void* buffer, int len) {
   // Use zero-copy to send message
   zmq_msg_t msg;
@@ -89,21 +88,22 @@ static std::string CreateIdentity() {
 }
 
 void P2PNet::FreeRequest(struct Request* request) {
-  for (auto nd : request->ndptrs) {
-    delete nd;
-  }
+  //for (auto nd : request->ndptrs) {
+    //delete nd;
+  //}
   delete request;
 }
 
-void P2PNet::DoSend(std::string& receiver_identity, 
+void P2PNet::DoSend(std::string& receiver_identity,
                     struct Request* request) {
     // TODO: Change to zero-copy send.
     SendWithIdentity(server_, receiver_identity, request->buffer,
                      request->buffer_size);
     std::cout << "Sent " << request->buffer_size << " bytes" << std::endl;
-    std::cout << "Send on_complete " << receiver_identity << std::endl;
+    std::cout << "Send on_complete " << receiver_identity << " " << request << std::endl;
     request->on_complete();
     FreeRequest(request);
+    std::cout << "Send on_complete end" << std::endl;
 }
 
 void P2PNet::DoInternalRequest(size_t index) {
@@ -124,15 +124,16 @@ void P2PNet::DoInternalRequest(size_t index) {
     auto it = recv_request_sockets_.find(request->tensor_id);
     if (it == recv_request_sockets_.end()) {
       request_socket = zmq_socket(zmq_context_, ZMQ_DEALER);
-      std::ostringstream address;  
+      std::ostringstream address;
       address << "tcp://" << request->address;
       std::cout << "Recv address = " << address.str() << std::endl;
+      std::cout << "Recv tensor_id = " << request->tensor_id << std::endl;
       std::string identity = CreateIdentity();
-      zmq_setsockopt(request_socket, ZMQ_IDENTITY, identity.c_str(), 
+      zmq_setsockopt(request_socket, ZMQ_IDENTITY, identity.c_str(),
                      identity.size());
       zmq_connect(request_socket, address.str().c_str());
       recv_request_sockets_[request->tensor_id] = request_socket;
-      // TODO: We can use a more efficient way to avoid copying everytime. 
+      // TODO: We can use a more efficient way to avoid copying everytime.
       // But this may not be very critical.
       poll_items_count_++;
       zmq_pollitem_t* new_poll_items = new zmq_pollitem_t[poll_items_count_];
@@ -146,12 +147,12 @@ void P2PNet::DoInternalRequest(size_t index) {
       request_socket = it->second;
     }
     // TODO: Currently, we only have one and the only one request to the remote
-    // worker. Therefore, we assume that the request content is the tensor_id. 
+    // worker. Therefore, we assume that the request content is the tensor_id.
     // This may not rigorous enough when the communication becomes more
     // complicated.
     std::cout << "Before remote send." << std::endl;
     zmq_send(request_socket, "", 0, ZMQ_SNDMORE); // ZMQ delimiter message.
-    zmq_send(request_socket, &request->tensor_id, sizeof(request->tensor_id), 
+    zmq_send(request_socket, &request->tensor_id, sizeof(request->tensor_id),
              0);
     std::cout << "After remote send." << std::endl;
   }
@@ -161,12 +162,14 @@ void P2PNet::DoExternalRequest() {
   std::string identity;
   unsigned tensor_id = 0;
   int ret = RecvWithIdentity(server_, &identity, &tensor_id, sizeof(tensor_id));
-  std::cout << "DoExternalRequest " << identity << " " << tensor_id << " " 
+  std::cout << "DoExternalRequest " << identity << " " << tensor_id << " "
             << ret << std::endl;
   auto it = send_request_queue_.find(tensor_id);
   if (it == send_request_queue_.end()) {
+    std::cout << "Data is not ready yet" << std::endl;
     remote_request_queue_[tensor_id] = identity;
   } else {
+    std::cout << "Data is ready" << std::endl;
     mtx.lock();
     struct Request* request = request_queue_[it->second];
     mtx.unlock();
@@ -195,15 +198,16 @@ void P2PNet::Main() {
       if (poll_items_[i].revents & ZMQ_POLLIN) {
         unsigned tensor_id = recv_request_poll_indices[i];
         mtx.lock();
-        struct Request* request = 
-            request_queue_[recv_request_queue_[tensor_id]];
+        struct Request* request =
+            request_queue_[recv_request_queue_.at(tensor_id)];
         mtx.unlock();
         zmq_recv(poll_items_[i].socket, request->buffer, 0, 0);
         int ret = zmq_recv(poll_items_[i].socket, request->buffer, request->buffer_size,
                  0);
         std::cout << "Recv " << ret << " bytes" << std::endl;
-        std::cout << "Recv on_complete " << std::endl;
+        std::cout << "Recv on_complete " << request << std::endl;
         request->on_complete();
+        std::cout << "Recv on_complete end" << std::endl;
       }
     }
   }

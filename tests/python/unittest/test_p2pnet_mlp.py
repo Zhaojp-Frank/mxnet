@@ -54,6 +54,8 @@ def Worker(addresses, worker_index):
                                       data0, mx.symbol.Variable(
                                           var_name, shape=weight_shape,
                                           dtype=np.float32))
+            partial_activation0 = mx.symbol.SliceChannel(partial_activation0,
+                                                         axis=1, num_outputs=2)
             arg_arrays[var_name] = mx.nd.ones(weight_shape, dtype=np.float32)
 
         with mx.AttrScope(ctx_group='machine1'):
@@ -62,15 +64,19 @@ def Worker(addresses, worker_index):
                                       data1, mx.symbol.Variable(
                                           var_name, shape=weight_shape,
                                           dtype=np.float32))
+            partial_activation1 = mx.symbol.SliceChannel(partial_activation1,
+                                                         axis=1, num_outputs=2)
             arg_arrays[var_name] = mx.nd.ones(weight_shape, dtype=np.float32)
 
         with mx.AttrScope(ctx_group='machine0'):
-            data0 = mx.symbol.SliceChannel(partial_activation0 + partial_activation1,
-                                           axis=1, num_outputs=2)[0]
+            data0 = partial_activation0[0] + partial_activation1[0]
+            # data0 = mx.symbol.SliceChannel(partial_activation0 + partial_activation1,
+                                           # axis=1, num_outputs=2)[0]
 
         with mx.AttrScope(ctx_group='machine1'):
-            data1 = mx.symbol.SliceChannel(partial_activation0 + partial_activation1,
-                                           axis=1, num_outputs=2)[1]
+            data1 = partial_activation0[1] + partial_activation1[1]
+            # data1 = mx.symbol.SliceChannel(partial_activation0 + partial_activation1,
+                                           # axis=1, num_outputs=2)[1]
 
     # net = data0 if worker_index == 0 else data1
     net = mx.symbol.Group([data0, data1])

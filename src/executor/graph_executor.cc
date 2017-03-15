@@ -239,14 +239,19 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
 
   //DFSVisit(g.outputs, [&g, &new_idx] (const nnvm::NodePtr& n) {
     //std::cout << n->attrs.name << " : ";
-    //std::cout << " shape-> "
-              //<< g.GetAttr<nnvm::ShapeVector>("shape")[new_idx.node_id(n.get())]
-              //<< " ";
     //for (const auto e : n->inputs) {
-      //std::cout << e.node->attrs.name << ", ";
+      //std::cout << e.node->attrs.name << "_" << e.index << " : ";
+      //std::cout << g.GetAttr<nnvm::ShapeVector>("shape")[new_idx.entry_id(e)]
+                //<< ", ";
+    //}
+    //std::cout << std::endl;
+    //std::cout << n->attrs.name << " : ";
+    //for (const auto dep_n : n->control_deps) {
+      //std::cout << dep_n->attrs.name << ", ";
     //}
     //std::cout << std::endl;
   //});
+  //std::cout << std::endl;
   // head_grad_entry_ will not be used anymore.
   // head_grad_array will be initialized later.
   return g;
@@ -608,6 +613,7 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
         << "Do not support runtime shape op yet. Node's name is "
         << i << " " << data_entry_.size()
         << idx[i].source->attrs.name;
+    //std::cout << "data_entry_[i] " << i << " " << storage_id << std::endl;
     const NDArray& src = data_pool_.at(storage_id);
     data_entry_[i] = src.AsArray(vshape[i], vdtype[i]);
   }
