@@ -1,5 +1,9 @@
 from __future__ import print_function
 import argparse
+import math
+import matplotlib as mpl
+mpl.use('Agg')
+import matplotlib.pyplot as plt
 from multiprocessing import Process
 import mxnet as mx
 import numpy as np
@@ -10,13 +14,15 @@ WEIGHT_SIZE = 1024
 NUM_LAYERS = 5
 NUM_ITERATIONS = 2
 NUM_IGNORED_ITERATIONS = 1
+EXPERIMENT_NAME = ""
 
 class Experiment:
-    def __init__(self, iterations, ignored_iterations):
+    def __init__(self, iterations, ignored_iterations, name):
         self.iterations = iterations
         self.ignored_iterations = ignored_iterations
         self.count = 0
         self.exps = []
+        self.name = name
 
     def __enter__(self):
         self.count += 1
@@ -28,12 +34,31 @@ class Experiment:
             end = time.time()
             self.exps.append(end - self.begin)
 
+    def Histogram(self):
+        min = int(math.floor(self.exps[-1] * 10))
+        max = int(math.ceil(self.exps[0] * 10))
+        interval = (max - min) / 10.0
+        hist = []
+        for t in self.exps:
+            idx = int((t * 10 - min) / interval)
+            hist.append((min + idx * interval) / 10.0)
+        plt.hist(hist)
+        plt.title(self.name)
+        plt.xlabel("Seconds")
+        plt.ylabel("Frequency")
+        plt.savefig("%s.png" % self.name)
+
     def Summary(self):
         assert len(self.exps) == (self.iterations - self.ignored_iterations), len(self.exps)
+        self.exps.sort()
+        self.Histogram()
         exps = np.asarray(self.exps)
         avg = exps.mean()
         std = exps.std()
-        print('avg: %f, std: %f' % (avg, std))
+        line = 'avg: %f, std: %f\n' % (avg, std)
+        print(line)
+        with open('%s.txt' % self.name, 'w') as fp:
+            fp.write(line)
 
 
 def Worker(addresses, worker_index):
@@ -84,13 +109,17 @@ def Worker(addresses, worker_index):
     arg_types, out_types, aux_types = net.infer_type()
     executor = net.bind(ctx=mx.cpu(0, addresses[worker_index]), args=arg_arrays,
                         group2ctx=group2ctx)
-    exp = Experiment(NUM_ITERATIONS, NUM_IGNORED_ITERATIONS)
+    exp = Experiment(NUM_ITERATIONS, NUM_IGNORED_ITERATIONS, EXPERIMENT_NAME)
     for i in range(NUM_ITERATIONS):
         with exp:
             output = executor.forward()
             out = output[-1].asnumpy()
-            print("Finish an iteration")
+            out = output[1].asnumpy()
+            print("=" * 30)
+            print("Finish an iteration %d" % i)
     exp.Summary()
+
+    time.sleep(5)
 
 
 def Single():
@@ -102,6 +131,8 @@ def Single():
         activation = mx.symbol.dot(data0, mx.symbol.Variable(var_name,
                                                              shape=weight_shape,
                                                              dtype=np.float32))
+        # activations = mx.symbol.SliceChannel(activation, axis=1, num_outputs=2)
+        # activation = activations[0] + activations[1]
         arg_arrays[var_name] = mx.nd.ones(weight_shape, dtype=np.float32)
         data0 = activation
 
@@ -110,7 +141,7 @@ def Single():
     arg_types, out_types, aux_types = net.infer_type()
     executor = net.bind(ctx=mx.cpu(0), args=arg_arrays)
 
-    exp = Experiment(NUM_ITERATIONS, NUM_IGNORED_ITERATIONS)
+    exp = Experiment(NUM_ITERATIONS, NUM_IGNORED_ITERATIONS, EXPERIMENT_NAME)
     for i in range(NUM_ITERATIONS):
         with exp:
             output = executor.forward()
@@ -124,6 +155,7 @@ def main():
     global NUM_LAYERS
     global NUM_ITERATIONS
     global NUM_IGNORED_ITERATIONS
+    global EXPERIMENT_NAME
     parser = argparse.ArgumentParser(description='Test p2pnet operators with '
                                                  'new Context implementation.')
     parser.add_argument('-a', '--addresses', type=str,
@@ -144,12 +176,16 @@ def main():
     parser.add_argument('-g', '--num_ignored_iterations', type=int,
                         help='Number of ignored iterations when timing.',
                         default=NUM_IGNORED_ITERATIONS)
+    parser.add_argument('-e', '--experiment_name', type=str,
+                        help='The name of this experiment.',
+                        default='Experiment')
     args = parser.parse_args()
-    BATCH_SIZE=int(args.batch_size)
-    WEIGHT_SIZE=int(args.weight_size)
-    NUM_LAYERS=int(args.num_layers)
-    NUM_ITERATIONS=int(args.num_iterations)
-    NUM_IGNORED_ITERATIONS=int(args.num_ignored_iterations)
+    BATCH_SIZE = int(args.batch_size)
+    WEIGHT_SIZE = int(args.weight_size)
+    NUM_LAYERS = int(args.num_layers)
+    NUM_ITERATIONS = int(args.num_iterations)
+    NUM_IGNORED_ITERATIONS = int(args.num_ignored_iterations)
+    EXPERIMENT_NAME = args.experiment_name
     if args.single_machine:
         Single()
     else:
