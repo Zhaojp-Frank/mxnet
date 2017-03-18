@@ -19,7 +19,7 @@ namespace mxnet {
 namespace op {
 
 struct P2PNetInitParam: public dmlc::Parameter<P2PNetInitParam> {
-  std::string address; 
+  std::string address;
   DMLC_DECLARE_PARAMETER(P2PNetInitParam) {
     DMLC_DECLARE_FIELD(address).set_default("127.0.0.1:11111")
     .describe("The address and port (ip:port) this worker should listen.");

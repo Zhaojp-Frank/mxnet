@@ -61,50 +61,40 @@ class Experiment:
             fp.write(line)
 
 
-def Worker(addresses, worker_index):
-    group2ctx = {'machine0': mx.cpu(0, addresses[0]),
-                 'machine1': mx.cpu(0, addresses[1])}
-
+def MLP_MP(addresses, worker_index):
+    n_workers = len(addresses)
+    group2ctx = {'machine%d' % i : mx.cpu(0, addresses[i])
+                 for i in range(n_workers)}
     arg_arrays = {}
-    with mx.AttrScope(ctx_group='machine0'):
-        data0 = mx.symbol.ones((BATCH_SIZE, WEIGHT_SIZE / 2), dtype=np.float32)
-    with mx.AttrScope(ctx_group='machine1'):
-        data1 = mx.symbol.ones((BATCH_SIZE, WEIGHT_SIZE / 2), dtype=np.float32)
+    data = []
+    for i in range(n_workers):
+        with mx.AttrScope(ctx_group='machine%d' % i):
+            data.append(mx.symbol.ones((BATCH_SIZE, WEIGHT_SIZE / n_workers),
+                                       dtype=np.float32))
 
-    weight_shape = (WEIGHT_SIZE / 2, WEIGHT_SIZE)
-    for i in range(NUM_LAYERS):
-        with mx.AttrScope(ctx_group='machine0'):
-            var_name =  'w_%d_%d' % (i, 0)
-            partial_activation0 = mx.symbol.dot(
-                                      data0, mx.symbol.Variable(
-                                          var_name, shape=weight_shape,
-                                          dtype=np.float32))
-            partial_activation0 = mx.symbol.SliceChannel(partial_activation0,
-                                                         axis=1, num_outputs=2)
-            arg_arrays[var_name] = mx.nd.ones(weight_shape, dtype=np.float32)
+    weight_shape = (WEIGHT_SIZE / n_workers, WEIGHT_SIZE)
+    activations = [None for k in range(n_workers)]
+    for l in range(NUM_LAYERS):
+        for w in range(n_workers):
+            with mx.AttrScope(ctx_group='machine%d' % w):
+                var_name = 'w_%d_%d' % (l, w)
+                activations[w] = mx.symbol.dot(
+                                    data[w], mx.symbol.Variable(
+                                                 var_name, shape=weight_shape,
+                                                 dtype=np.float32))
+                activations[w] = mx.symbol.SliceChannel(
+                                     activations[w], axis=1,
+                                     num_outputs=n_workers)
+                arg_arrays[var_name] = mx.nd.ones(weight_shape, dtype=np.float32)
 
-        with mx.AttrScope(ctx_group='machine1'):
-            var_name =  'w_%d_%d' % (i, 1)
-            partial_activation1 = mx.symbol.dot(
-                                      data1, mx.symbol.Variable(
-                                          var_name, shape=weight_shape,
-                                          dtype=np.float32))
-            partial_activation1 = mx.symbol.SliceChannel(partial_activation1,
-                                                         axis=1, num_outputs=2)
-            arg_arrays[var_name] = mx.nd.ones(weight_shape, dtype=np.float32)
+        for w in range(n_workers):
+            with mx.AttrScope(ctx_group='machine%d' % w):
+                all_parts = [activations[i][w] for i in range(n_workers)]
+                # all_parts2 = [activations[i][w] + 1 for i in range(n_workers)]
+                # data[w] = sum(all_parts) + sum(all_parts2)
+                data[w] = sum(all_parts)
 
-        with mx.AttrScope(ctx_group='machine0'):
-            data0 = partial_activation0[0] + partial_activation1[0]
-            # data0 = mx.symbol.SliceChannel(partial_activation0 + partial_activation1,
-                                           # axis=1, num_outputs=2)[0]
-
-        with mx.AttrScope(ctx_group='machine1'):
-            data1 = partial_activation0[1] + partial_activation1[1]
-            # data1 = mx.symbol.SliceChannel(partial_activation0 + partial_activation1,
-                                           # axis=1, num_outputs=2)[1]
-
-    # net = data0 if worker_index == 0 else data1
-    net = mx.symbol.Group([data0, data1])
+    net = mx.symbol.Group(data)
     arg_shapes, out_shapes, aux_shapes = net.infer_shape()
     arg_types, out_types, aux_types = net.infer_type()
     executor = net.bind(ctx=mx.cpu(0, addresses[worker_index]), args=arg_arrays,
@@ -113,13 +103,15 @@ def Worker(addresses, worker_index):
     for i in range(NUM_ITERATIONS):
         with exp:
             output = executor.forward()
-            out = output[-1].asnumpy()
-            out = output[1].asnumpy()
-            print("=" * 30)
-            print("Finish an iteration %d" % i)
+            for s in output:
+                s.asnumpy()
+        print("=" * 30)
+        print("Finish an iteration %d" % i)
     exp.Summary()
-
     time.sleep(5)
+
+def MLP_DP(addresses, worker_index):
+    pass
 
 
 def Single():
@@ -146,6 +138,8 @@ def Single():
         with exp:
             output = executor.forward()
             out = output[0].asnumpy()
+        print("=" * 30)
+        print("Finish an iteration %d" % i)
     exp.Summary()
 
 
@@ -190,8 +184,7 @@ def main():
         Single()
     else:
         addresses = args.addresses.split(',')
-        assert len(addresses) == 2
-        Worker(addresses, int(args.worker_index))
+        MLP_MP(addresses, int(args.worker_index))
 
 
 if __name__ == "__main__":

@@ -61,36 +61,11 @@ class P2PNetRecvOp : public Operator {
                const std::vector<TBlob> &out_data,
                const std::vector<TBlob> &aux_args) override {
     std::cout << "P2PNetRecv::Forward in" << std::endl;
-    //Context ndctx = Context::CPU();
-    //std::vector<NDArray*> ndptrs;
-    //std::vector<engine::VarHandle> read_vars;
-    //for (const auto input : in_data) {
-      //NDArray* nd = new NDArray(input, ndctx.dev_id);
-      //read_vars.push_back(nd->var());
-      //ndptrs.push_back(nd);
-    //}
-    //std::vector<engine::VarHandle> write_vars;
-    //for (const auto output : out_data) {
-      //NDArray* nd = new NDArray(output, ndctx.dev_id);
-      //write_vars.push_back(nd->var());
-      //ndptrs.push_back(nd);
-    //}
-    std::cout << "P2PNetRecv::Forward " << address_ << std::endl;
     P2PNet::Request* request = new P2PNet::Request{
       P2PNet::RecvRequest, address_, tensor_id_, out_data[0].dptr_,
       out_data[0].shape_.Size() * sizeof(DType), ctx.async_on_complete};
-      //out_data[0].shape_.Size() * sizeof(DType), ndptrs};
-    // TODO: Make sure this call (and the PushAsync in net_send-int.h) is
-    // correct. For example, currently, we don't use ctx(OpContext). Is
-    // this correct?
-    //Engine::Get()->PushAsync(
-      //[request](RunContext rctx, Engine::CallbackOnComplete on_complete) {
-        //request->on_complete = on_complete;
-        //P2PNet::Get().DoRequest(request);
-      //}, ndctx, read_vars, write_vars, FnProperty::kNormal, 0,
-      //PROFILER_MESSAGE("P2PNetRecv"));
-    //request->on_complete = ctx.async_on_complete;
-    P2PNet::Get().DoRequest(request);
+    //P2PNet::Get().DoRequest(request);
+    ctx.async_on_complete();
     std::cout << "P2PNetRecv::Forward out " << request << std::endl;
   }
 
