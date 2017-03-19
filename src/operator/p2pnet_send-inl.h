@@ -51,7 +51,7 @@ class P2PNetSendOp : public Operator {
     P2PNet::Request* request = new P2PNet::Request{
       P2PNet::SendRequest, address_, tensor_id_, in_data[0].dptr_,
       in_data[0].shape_.Size() * sizeof(DType), ctx.async_on_complete};
-    if (P2PNetDebugger::Get().Debugging() == 2) {
+    if (P2PNetDebugger::Get().Level() & P2PNetDebugger::kDebugNoCommunication) {
       ctx.async_on_complete();
     } else {
       P2PNet::Get().DoRequest(request);

@@ -34,12 +34,12 @@ class P2PNetDebugger {
     return instance;
   }
 
-  int Debugging() {
+  int Level() {
     return level_;
   }
 
   void PrintTime(const char *fmt, ...) {
-    if (level_ > 0) {
+    if (level_ & kDebugPrintTime) {
       static char str_buf[2048];
       auto now = high_resolution_clock::now();
       auto now_ms = duration_cast<milliseconds>(now.time_since_epoch()).count();
@@ -55,6 +55,9 @@ class P2PNetDebugger {
   P2PNetDebugger(P2PNetDebugger const&) = delete;
   void operator=(P2PNetDebugger const&) = delete;
   ~P2PNetDebugger() { };
+
+  constexpr static int kDebugPrintTime = 1;
+  constexpr static int kDebugNoCommunication = 2;
 
  private:
   P2PNetDebugger() {
