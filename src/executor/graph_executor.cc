@@ -14,6 +14,7 @@
 #include "./exec_pass.h"
 #include "./graph_executor.h"
 #include "../engine/profiler.h"
+#include "../operator/p2pnet_common.h"
 
 namespace mxnet {
 namespace exec {
@@ -726,12 +727,15 @@ void GraphExecutor::InitCachedOps() {
         exec->Setup();
       }, Context::CPU(), {}, all_vars, FnProperty::kNormal, 0,
       PROFILER_MESSAGE("SetupExec"));
-    auto exec_fun = [exec, is_async, is_gpu] (
+    auto& name = idx[nid].source->attrs.name;
+    auto exec_fun = [exec, is_async, is_gpu, name] (
         RunContext ctx, Engine::CallbackOnComplete on_complete) {
       if (is_async) {
         exec->op_ctx.async_on_complete = on_complete;
       }
+      op::P2PNetDebugger::Get().PrintTime("Begin executing %s", name.c_str());
       exec->Run(ctx);
+      op::P2PNetDebugger::Get().PrintTime("Finish executing %s", name.c_str());
       // call on complete only if it is async op
       if (!is_async) {
         if (is_gpu) {

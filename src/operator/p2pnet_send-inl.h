@@ -48,13 +48,14 @@ class P2PNetSendOp : public Operator {
                const std::vector<OpReqType> &req,
                const std::vector<TBlob> &out_data,
                const std::vector<TBlob> &aux_args) override {
-    std::cout << "P2PNetSend::Forward in" << std::endl;
     P2PNet::Request* request = new P2PNet::Request{
       P2PNet::SendRequest, address_, tensor_id_, in_data[0].dptr_,
       in_data[0].shape_.Size() * sizeof(DType), ctx.async_on_complete};
-    //P2PNet::Get().DoRequest(request);
-    ctx.async_on_complete();
-    std::cout << "P2PNetSend::Forward out" << std::endl;
+    if (P2PNetDebugger::Get().Debugging() == 2) {
+      ctx.async_on_complete();
+    } else {
+      P2PNet::Get().DoRequest(request);
+    }
   }
 
   ExecType exec_type() const override {

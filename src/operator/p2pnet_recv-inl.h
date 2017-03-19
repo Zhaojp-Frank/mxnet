@@ -60,13 +60,14 @@ class P2PNetRecvOp : public Operator {
                const std::vector<OpReqType> &req,
                const std::vector<TBlob> &out_data,
                const std::vector<TBlob> &aux_args) override {
-    std::cout << "P2PNetRecv::Forward in" << std::endl;
     P2PNet::Request* request = new P2PNet::Request{
       P2PNet::RecvRequest, address_, tensor_id_, out_data[0].dptr_,
       out_data[0].shape_.Size() * sizeof(DType), ctx.async_on_complete};
-    //P2PNet::Get().DoRequest(request);
-    ctx.async_on_complete();
-    std::cout << "P2PNetRecv::Forward out " << request << std::endl;
+    if (P2PNetDebugger::Get().Debugging() == 2) {
+      ctx.async_on_complete();
+    } else {
+      P2PNet::Get().DoRequest(request);
+    }
   }
 
   ExecType exec_type() const override {

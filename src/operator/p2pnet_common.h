@@ -6,6 +6,9 @@
 */
 #ifndef MXNET_OPERATOR_NET_COMMON_H_
 #define MXNET_OPERATOR_NET_COMMON_H_
+#include <chrono>
+#include <cstdlib>
+#include <cstring>
 #include <dmlc/logging.h>
 #include <map>
 #include <mutex>
@@ -17,12 +20,48 @@
 #include <thread>
 #include <utility>
 #include <vector>
-#include <mutex>
 #include <zmq.h>
 #include "./operator_common.h"
 
+using namespace std::chrono;
+
 namespace mxnet {
 namespace op {
+class P2PNetDebugger {
+ public:
+  static P2PNetDebugger& Get() {
+    static P2PNetDebugger instance;
+    return instance;
+  }
+
+  int Debugging() {
+    return level_;
+  }
+
+  void PrintTime(const char *fmt, ...) {
+    if (level_ > 0) {
+      static char str_buf[2048];
+      auto now = high_resolution_clock::now();
+      auto now_ms = duration_cast<milliseconds>(now.time_since_epoch()).count();
+      va_list args;
+      va_start(args, fmt);
+      vsprintf(str_buf, fmt, args);
+      va_end(args);
+      std::cout << str_buf << " at " << (now_ms % 100000000) * 1.0 / 1000
+                << " seconds" << std::endl;
+    }
+  }
+
+  P2PNetDebugger(P2PNetDebugger const&) = delete;
+  void operator=(P2PNetDebugger const&) = delete;
+  ~P2PNetDebugger() { };
+
+ private:
+  P2PNetDebugger() {
+    level_ = dmlc::GetEnv("MXNET_P2PNET_DEBUG", 0);
+  };
+  int level_;
+};
 
 class P2PNet {
  public:

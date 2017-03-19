@@ -73,10 +73,13 @@ static std::string CreateIdentity() {
 void DoSendOnComplete(void* data, void* hint) {
   (void) data;
   P2PNet::Request* request = reinterpret_cast<P2PNet::Request*>(hint);
+  P2PNetDebugger::Get().PrintTime("DoSend of %u calls on_complete",
+                                  request->tensor_id);
   request->on_complete();
 }
 
 void P2PNet::DoSend(struct Request* request) {
+  P2PNetDebugger::Get().PrintTime("DoSend of %u", request->tensor_id);
   std::string receiver_identity = tensor_to_receiver_map_[request->tensor_id];
   tensor_to_send_request_map_.erase(request->tensor_id);
   tensor_to_receiver_map_.erase(request->tensor_id);
@@ -128,12 +131,16 @@ void P2PNet::DoInternalRequest(size_t index) {
   struct Request* request = internal_request_queue_[index];
   internal_mtx.unlock();
   if (request->type == SendRequest) {
+    P2PNetDebugger::Get().PrintTime("Received %u SendRequest",
+                                    request->tensor_id);
     tensor_to_send_request_map_[request->tensor_id] = index;
     if (tensor_to_receiver_map_.find(request->tensor_id) !=
         tensor_to_receiver_map_.end()) {
       DoSend(request);
     }
   } else if (request->type == RecvRequest) {
+    P2PNetDebugger::Get().PrintTime("Received %u RecvRequest",
+                                    request->tensor_id);
     tensor_to_recv_request_map_[request->tensor_id] = index;
     DoRecv(request);
   }
@@ -176,9 +183,12 @@ void P2PNet::Main() {
         struct Request* request = internal_request_queue_[it->second];
         internal_mtx.unlock();
         tensor_to_recv_request_map_.erase(it);
+        P2PNetDebugger::Get().PrintTime("Recv of %u", request->tensor_id);
         zmq_recv(poll_items_[i].socket, request->buffer, 0, 0);
         zmq_recv(poll_items_[i].socket, request->buffer, request->buffer_size,
                  0);
+        P2PNetDebugger::Get().PrintTime("Recv of %u calls on_complete",
+                                        request->tensor_id);
         request->on_complete();
       }
     }
