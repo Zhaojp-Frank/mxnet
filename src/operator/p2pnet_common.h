@@ -7,6 +7,7 @@
 #ifndef MXNET_OPERATOR_NET_COMMON_H_
 #define MXNET_OPERATOR_NET_COMMON_H_
 #include <chrono>
+#include <cstdarg>
 #include <cstdlib>
 #include <cstring>
 #include <dmlc/logging.h>
