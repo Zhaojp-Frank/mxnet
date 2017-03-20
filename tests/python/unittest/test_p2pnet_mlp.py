@@ -63,12 +63,12 @@ class Experiment:
 
 def MLP_MP(addresses, worker_index):
     n_workers = len(addresses)
-    group2ctx = {'machine%d' % i : mx.cpu(0, addresses[i])
+    group2ctx = {'group:%d' % i : mx.cpu(0, addresses[i])
                  for i in range(n_workers)}
     arg_arrays = {}
     data = []
     for i in range(n_workers):
-        with mx.AttrScope(ctx_group='machine%d' % i):
+        with mx.AttrScope(ctx_group='group:%d' % i):
             data.append(mx.symbol.ones((BATCH_SIZE, WEIGHT_SIZE / n_workers),
                                        dtype=np.float32))
 
@@ -76,7 +76,7 @@ def MLP_MP(addresses, worker_index):
     activations = [None for k in range(n_workers)]
     for l in range(NUM_LAYERS):
         for w in range(n_workers):
-            with mx.AttrScope(ctx_group='machine%d' % w):
+            with mx.AttrScope(ctx_group='group:%d' % w):
                 var_name = 'w_%d_%d' % (l, w)
                 activations[w] = mx.symbol.dot(
                                     data[w], mx.symbol.Variable(
@@ -88,7 +88,7 @@ def MLP_MP(addresses, worker_index):
                 arg_arrays[var_name] = mx.nd.ones(weight_shape, dtype=np.float32)
 
         for w in range(n_workers):
-            with mx.AttrScope(ctx_group='machine%d' % w):
+            with mx.AttrScope(ctx_group='group:%d' % w):
                 all_parts = [activations[i][w] for i in range(n_workers)]
                 # all_parts2 = [activations[i][w] + 1 for i in range(n_workers)]
                 # data[w] = sum(all_parts) + sum(all_parts2)
