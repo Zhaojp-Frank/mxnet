@@ -8,6 +8,7 @@
 #define MXNET_OPERATOR_NET_COMMON_H_
 #include <atomic>
 #include <chrono>
+#include <cstdarg>
 #include <cstdlib>
 #include <cstring>
 #include <dmlc/logging.h>
