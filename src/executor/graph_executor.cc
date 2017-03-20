@@ -750,8 +750,16 @@ void GraphExecutor::InitCachedOps() {
       }
     };
     // setup the vars
+    FnProperty prop;
+    const auto op_name = std::string(idx[nid].source->op()->name);
+    if (op_name == "P2PNetInit" || op_name == "P2PNetRecv" ||
+        op_name == "P2PNetSend") {
+      prop = FnProperty::kCPUPrioritized;
+    } else {
+      prop = FnProperty::kNormal;
+    }
     op_nodes_[nid].cached_opr = Engine::Get()->NewOperator(
-        exec_fun, use_vars, mutate_vars, FnProperty::kNormal,
+        exec_fun, use_vars, mutate_vars, prop,
         PROFILER_MESSAGE(op_nodes_[nid].opr_name));
   }
 }

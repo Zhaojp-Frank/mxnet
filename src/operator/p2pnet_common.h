@@ -6,10 +6,12 @@
 */
 #ifndef MXNET_OPERATOR_NET_COMMON_H_
 #define MXNET_OPERATOR_NET_COMMON_H_
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <dmlc/logging.h>
+#include <iomanip>
 #include <map>
 #include <mutex>
 #include <mxnet/engine.h>
@@ -47,8 +49,7 @@ class P2PNetDebugger {
       va_start(args, fmt);
       vsprintf(str_buf, fmt, args);
       va_end(args);
-      std::cout << str_buf << " at " << (now_ms % 100000000) * 1.0 / 1000
-                << " seconds" << std::endl;
+      std::cout << str_buf << " at " << now_ms << " millisecond" << std::endl;
     }
   }
 
@@ -98,6 +99,8 @@ class P2PNet {
   void DoRequest(struct Request* request);
   void FreeRequest(struct Request* request);
 
+  constexpr static int kRequestQueueSize = 1024 * 1024 * 2;
+
  private:
   P2PNet();
   void Main();
@@ -118,6 +121,7 @@ class P2PNet {
   size_t poll_items_count_;
   std::thread* main_thread_;
   std::vector<struct Request*> internal_request_queue_;
+  std::atomic<size_t> internal_request_queue_size_;
   std::mutex internal_mtx; // mutex lock for request_queue_
   std::map<unsigned, std::string> tensor_to_receiver_map_;
   std::map<unsigned, size_t> tensor_to_send_request_map_;

@@ -56,6 +56,8 @@ class Symbol(SymbolBase):
         if isinstance(other, Symbol):
             return _internal._Plus(self, other)
         if isinstance(other, Number):
+            if other == 0:
+                return self
             return _internal._PlusScalar(self, scalar=other)
         else:
             raise TypeError('type %s not supported' % str(type(other)))

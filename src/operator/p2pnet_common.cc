@@ -18,11 +18,14 @@ namespace op {
 
 P2PNet::P2PNet() {
   zmq_context_ =  zmq_ctx_new();
+  zmq_ctx_set(zmq_context_, ZMQ_IO_THREADS, 4);
   server_ = zmq_socket(zmq_context_, ZMQ_ROUTER);
   internal_server_ = zmq_socket(zmq_context_, ZMQ_ROUTER);
   is_main_start_ = false;
   is_bind_ = false;
   main_thread_ = nullptr;
+  internal_request_queue_size_ = 0;
+  internal_request_queue_.resize(kRequestQueueSize);
 }
 
 P2PNet::~P2PNet() {
@@ -31,10 +34,16 @@ P2PNet::~P2PNet() {
 }
 
 bool P2PNet::Init(const std::string& address) {
-  for (auto& r : internal_request_queue_) {
-    delete r;
+  for (unsigned i = 0; i < internal_request_queue_size_; i++) {
+    delete internal_request_queue_[i];
+    internal_request_queue_[i] = nullptr;
   }
-  internal_request_queue_.clear();
+  internal_request_queue_size_ = 0;
+
+  //for (auto r : internal_request_queue_) {
+    //delete r;
+  //}
+  //internal_request_queue_.clear();
 
   if (!is_bind_) {
     srand(time(nullptr));
@@ -44,8 +53,12 @@ bool P2PNet::Init(const std::string& address) {
     if (ret == 0) {
       zmq_bind(internal_server_, "inproc://mxnet_local_request");
       is_bind_ = true;
+      std::cout << "Successfully bound to " << address_with_proto.str()
+                << std::endl;
       return true;
     } else {
+      std::cout << "Failed to bind to " << address_with_proto.str()
+                << std::endl;
       return false;
     }
   }
@@ -73,8 +86,9 @@ static std::string CreateIdentity() {
 void DoSendOnComplete(void* data, void* hint) {
   (void) data;
   P2PNet::Request* request = reinterpret_cast<P2PNet::Request*>(hint);
-  P2PNetDebugger::Get().PrintTime("DoSend of %u calls on_complete",
-                                  request->tensor_id);
+  P2PNetDebugger::Get().PrintTime(
+      "DoSend of %u calls on_complete with %u bytes",
+      request->tensor_id, request->buffer_size);
   request->on_complete();
 }
 
@@ -83,7 +97,6 @@ void P2PNet::DoSend(struct Request* request) {
   std::string receiver_identity = tensor_to_receiver_map_[request->tensor_id];
   tensor_to_send_request_map_.erase(request->tensor_id);
   tensor_to_receiver_map_.erase(request->tensor_id);
-  //internal_request_queue_[index] = nullptr;
   zmq_msg_t msg;
   zmq_msg_init_size(&msg, receiver_identity.size());
   memcpy(zmq_msg_data(&msg), receiver_identity.c_str(), receiver_identity.size());
@@ -127,9 +140,9 @@ void P2PNet::DoRecv(struct Request* request) {
 }
 
 void P2PNet::DoInternalRequest(size_t index) {
-  internal_mtx.lock();
+  //internal_mtx.lock();
   struct Request* request = internal_request_queue_[index];
-  internal_mtx.unlock();
+  //internal_mtx.unlock();
   if (request->type == SendRequest) {
     P2PNetDebugger::Get().PrintTime("Received %u SendRequest",
                                     request->tensor_id);
@@ -152,10 +165,11 @@ void P2PNet::DoExternalRequest() {
   RecvWithIdentity(server_, &identity, &tensor_id, sizeof(tensor_id));
   tensor_to_receiver_map_[tensor_id] = identity;
   auto it = tensor_to_send_request_map_.find(tensor_id);
+  P2PNetDebugger::Get().PrintTime("Received %u ExternalRequest", tensor_id);
   if (it != tensor_to_send_request_map_.end()) {
-    internal_mtx.lock();
+    //internal_mtx.lock();
     struct Request* request = internal_request_queue_[it->second];
-    internal_mtx.unlock();
+    //internal_mtx.unlock();
     DoSend(request);
   }
 }
@@ -179,9 +193,9 @@ void P2PNet::Main() {
     for (unsigned i = 2; i < poll_items_count_; i++) {
       if (poll_items_[i].revents & ZMQ_POLLIN) {
         auto it = tensor_to_recv_request_map_.find(recv_request_poll_indices[i]);
-        internal_mtx.lock();
+        //internal_mtx.lock();
         struct Request* request = internal_request_queue_[it->second];
-        internal_mtx.unlock();
+        //internal_mtx.unlock();
         tensor_to_recv_request_map_.erase(it);
         P2PNetDebugger::Get().PrintTime("Recv of %u", request->tensor_id);
         zmq_recv(poll_items_[i].socket, request->buffer, 0, 0);
@@ -207,11 +221,13 @@ void P2PNet::DoRequest(struct Request* request) {
   std::string identity = CreateIdentity();
   zmq_setsockopt(request_socket, ZMQ_IDENTITY, identity.c_str(), 8);
   zmq_connect(request_socket, "inproc://mxnet_local_request");
-  internal_mtx.lock();
-  size_t index = internal_request_queue_.size();
-  internal_request_queue_.resize(index + 1);
+  //internal_mtx.lock();
+  //size_t index = internal_request_queue_.size();
+  //internal_request_queue_.resize(index + 1);
+  //internal_request_queue_[index] = request;
+  //internal_mtx.unlock();
+  size_t index = internal_request_queue_size_.fetch_add(1);
   internal_request_queue_[index] = request;
-  internal_mtx.unlock();
   zmq_send(request_socket, &index, sizeof(index), 0);
   zmq_close(request_socket);
 }

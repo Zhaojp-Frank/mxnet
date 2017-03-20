@@ -40,7 +40,10 @@ class Experiment:
         interval = (max - min) / 10.0
         hist = []
         for t in self.exps:
-            idx = int((t * 10 - min) / interval)
+            if interval > 0:
+                idx = int((t * 10 - min) / interval)
+            else:
+                idx = 0
             hist.append((min + idx * interval) / 10.0)
         plt.hist(hist)
         plt.title(self.name)
