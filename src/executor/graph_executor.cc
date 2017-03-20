@@ -486,9 +486,15 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   // setup gradient
   nnvm::Graph g = InitFullGraph(symbol, grad_req_type, arg_grad_store);
   g = InferShapeType(g, in_args, aux_states);
-  // TODO(minjie): call partition pass here
-  // TODO(minjie): correctly setup the ctx_map
-
+  // Call partition pass here.
+  const int num_procs = ctx_map.size();
+  LOG(INFO) << "Num procedures: " << num_procs;
+  if (num_procs > 1) {
+    g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_procs);
+    g = nnvm::ApplyPass(g, "PartitionPass");
+  }
+  // TODO(minjie): Here has an implicit assumption.
+  // The ctx_map is of form {"group:%d" % id : context object}
   // assign contexts to the graph.
   g = AssignContext(g, default_ctx, ctx_map,
                     in_args,
