@@ -71,6 +71,9 @@ class GraphExecutor : public Executor {
   Graph InitFullGraph(nnvm::Symbol symbol,
                       const std::vector<OpReqType>& grad_req_type,
                       const std::vector<NDArray>& arg_grad_store);
+  Graph InferShapeType(nnvm::Graph graph,
+                       const std::vector<NDArray>& in_args,
+                       const std::vector<NDArray>& aux_states);
   Graph SplitDistributedGraph(Graph& g, const Context& default_ctx);
   // initialize the cached operator
   void InitCachedOps();

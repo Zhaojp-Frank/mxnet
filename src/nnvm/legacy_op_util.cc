@@ -12,6 +12,8 @@
 #include <nnvm/graph.h>
 #include <memory>
 
+#include "./legacy_op_util.h"
+
 namespace mxnet {
 namespace op {
 
@@ -20,40 +22,6 @@ using nnvm::Node;
 using nnvm::NodePtr;
 using nnvm::NodeAttrs;
 using nnvm::NodeEntry;
-
-class ParsedOpProp {
- public:
-  std::shared_ptr<OperatorProperty> ptr;
-  std::vector<std::string> arguments;
-  std::vector<std::string> aux_states;
-  std::vector<std::string> inputs;
-  std::vector<std::string> outputs;
-  // initializer
-  void Init(const NodeAttrs& attrs) {
-    std::vector<std::pair<std::string, std::string> > kwargs(
-        attrs.dict.begin(), attrs.dict.end());
-    try {
-      ptr->Init(kwargs);
-    } catch (const dmlc::ParamError& e) {
-      std::ostringstream os;
-      os << e.what();
-      os << ", in operator " << attrs.op->name << "("
-         << "name=\"" << attrs.name << "\"";
-      for (const auto& k : attrs.dict) {
-        os << ", " << k.first << "=\"" << k.second << "\"";
-      }
-      os << ")";
-      throw dmlc::ParamError(os.str());
-    }
-    arguments = ptr->ListArguments();
-    aux_states = ptr->ListAuxiliaryStates();
-    outputs = ptr->ListOutputs();
-    inputs = arguments;
-    inputs.insert(
-        inputs.end(), aux_states.begin(), aux_states.end());
-  }
-};
-
 
 // function to use operator property to infer attr
 // get op property from the attribute

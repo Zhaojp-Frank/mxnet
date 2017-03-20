@@ -444,6 +444,38 @@ void GraphExecutor::Init(nnvm::Symbol symbol,
   this->InitCachedOps();
 }
 
+Graph GraphExecutor::InferShapeType(
+    Graph g,
+    const std::vector<NDArray>& in_args,
+    const std::vector<NDArray>& aux_states) {
+  const auto& idx = g.indexed_graph();
+  // Setup argument shape and type.
+  const std::unordered_set<uint32_t>& mutable_nodes = idx.mutable_input_nodes();
+  nnvm::ShapeVector arg_shapes;
+  nnvm::DTypeVector arg_types;
+  size_t arg_top = 0, aux_top = 0;
+  for (size_t i = 0; i < num_forward_inputs_; ++i) {
+    const uint32_t nid = idx.input_nodes().at(i);
+    if (mutable_nodes.count(nid)) {
+      CHECK_LT(aux_top, aux_states.size());
+      arg_shapes.push_back(aux_states[aux_top].shape());
+      arg_types.push_back(aux_states[aux_top].dtype());
+      ++aux_top;
+    } else {
+      CHECK_LT(arg_top, in_args.size());
+      arg_shapes.push_back(in_args[arg_top].shape());
+      arg_types.push_back(in_args[arg_top].dtype());
+      ++arg_top;
+    }
+  }
+  arg_shapes.resize(idx.input_nodes().size(), TShape());
+  arg_types.resize(idx.input_nodes().size(), 0);
+  g = nnvm::pass::InferShape(g, arg_shapes, "__shape__");
+  g = nnvm::pass::InferType(g, arg_types);
+  return g;
+}
+
+
 Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
                                const Context& default_ctx,
                                const std::map<std::string, Context>& ctx_map,
@@ -453,6 +485,11 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
                                const std::vector<NDArray>& aux_states) {
   // setup gradient
   nnvm::Graph g = InitFullGraph(symbol, grad_req_type, arg_grad_store);
+  g = InferShapeType(g, in_args, aux_states);
+  // TODO(minjie): call partition pass here
+  // TODO(minjie): correctly setup the ctx_map
+
+  // assign contexts to the graph.
   g = AssignContext(g, default_ctx, ctx_map,
                     in_args,
                     grad_store_,
@@ -460,25 +497,19 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
                     num_forward_inputs_,
                     num_forward_outputs_);
   const auto& idx = g.indexed_graph();
-  // Setup data entry, shape and type.
+  const std::unordered_set<uint32_t>& mutable_nodes = idx.mutable_input_nodes();
+  // Setup data entry and point input/output to proper arguments.
   data_entry_.resize(idx.num_node_entries());
-  auto mutable_nodes = idx.mutable_input_nodes();
-  nnvm::ShapeVector arg_shapes;
-  nnvm::DTypeVector arg_types;
   size_t arg_top = 0, aux_top = 0;
   for (size_t i = 0; i < num_forward_inputs_; ++i) {
     const uint32_t nid = idx.input_nodes().at(i);
     if (mutable_nodes.count(nid)) {
       CHECK_LT(aux_top, aux_states.size());
       data_entry_[idx.entry_id(nid, 0)] = aux_states[aux_top];
-      arg_shapes.push_back(aux_states[aux_top].shape());
-      arg_types.push_back(aux_states[aux_top].dtype());
       ++aux_top;
     } else {
       CHECK_LT(arg_top, in_args.size());
       data_entry_[idx.entry_id(nid, 0)] = in_args[arg_top];
-      arg_shapes.push_back(in_args[arg_top].shape());
-      arg_types.push_back(in_args[arg_top].dtype());
       ++arg_top;
     }
   }
@@ -486,12 +517,6 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
     data_entry_[idx.entry_id(idx.outputs()[j])]
         = grad_store_[j - num_forward_outputs_].second;
   }
-
-  arg_shapes.resize(idx.input_nodes().size(), TShape());
-  arg_types.resize(idx.input_nodes().size(), -1);
-  // other initializations
-  g = nnvm::pass::InferShape(g, arg_shapes, "__shape__");
-  g = nnvm::pass::InferType(g, arg_types, "__dtype__");
 
   // We wait until the last momoent, right before allocating memory, to split
   // the graph.
