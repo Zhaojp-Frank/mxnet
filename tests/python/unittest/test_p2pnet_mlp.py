@@ -95,7 +95,7 @@ def MLP_MP(addresses, worker_index):
                 all_parts = [activations[i][w] for i in range(n_workers)]
                 # all_parts2 = [activations[i][w] + 1 for i in range(n_workers)]
                 # data[w] = sum(all_parts) + sum(all_parts2)
-                data[w] = sum(all_parts)
+                data[w] = mx.symbol.ElementWiseSum(*all_parts)
 
     net = mx.symbol.Group(data)
     arg_shapes, out_shapes, aux_shapes = net.infer_shape()
@@ -106,12 +106,10 @@ def MLP_MP(addresses, worker_index):
     for i in range(NUM_ITERATIONS):
         with exp:
             output = executor.forward()
-            for s in output:
-                s.asnumpy()
+            output[0].wait_to_read()
         print("=" * 30)
         print("Finish an iteration %d" % i)
     exp.Summary()
-    time.sleep(5)
 
 def MLP_DP(addresses, worker_index):
     pass
@@ -140,7 +138,7 @@ def Single():
     for i in range(NUM_ITERATIONS):
         with exp:
             output = executor.forward()
-            out = output[0].asnumpy()
+            out = output[0].wait_to_read()
         print("=" * 30)
         print("Finish an iteration %d" % i)
     exp.Summary()

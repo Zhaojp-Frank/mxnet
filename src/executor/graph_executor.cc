@@ -701,8 +701,10 @@ void GraphExecutor::InitCachedOps() {
     op_nodes_[e.node_id].exec->req[e.index] =
         grad_store_[j - num_forward_outputs_].first;
   }
+  std::vector<Engine::VarHandle> finish_vars(idx.num_nodes());
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
+    finish_vars[nid] = Engine::Get()->NewVariable();
     if (inode.source->is_variable()) continue;
     if (op_nodes_[nid].skip_exec_node) continue;
     auto& exec = op_nodes_[nid].exec;
@@ -728,6 +730,12 @@ void GraphExecutor::InitCachedOps() {
         use_vars.push_back(nd.var());
       }
     }
+    // Handle control dependencies.
+    for (auto & depend_node : inode.source->control_deps) {
+      const uint32_t depend_nid = idx.node_id(depend_node.get());
+      CHECK_LT(depend_nid, nid);
+      use_vars.push_back(finish_vars[depend_nid]);
+    }
     for (auto& r : exec->op_ctx.requested) {
       all_vars.push_back(r.var);
       mutate_vars.push_back(r.var);
@@ -736,6 +744,7 @@ void GraphExecutor::InitCachedOps() {
       all_vars.push_back(nd.var());
       mutate_vars.push_back(nd.var());
     }
+    mutate_vars.push_back(finish_vars[nid]);
     auto dedup = [] (std::vector<Engine::VarHandle>& vars) {  // NOLINT(*)
       std::sort(vars.begin(), vars.end());
       vars.resize(std::unique(vars.begin(), vars.end()) - vars.begin());
