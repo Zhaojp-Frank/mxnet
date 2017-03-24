@@ -65,28 +65,24 @@ class Experiment:
             fp.write(line)
 
 
-def SingleMKL(num_cut, with_add):
+def Single_MAT(num_cut, with_add_slice):
     weight_shape = (WEIGHT_SIZE / num_cut, WEIGHT_SIZE)
     arg_arrays = {}
-    activations = [None for i in range(num_cut)]
-    in_data = [None for i in range(num_cut)]
-    out_data = None if with_add else [None for i in range(num_cut)]
-    for i in range(num_cut):
-        in_data[i] = mx.symbol.ones((BATCH_SIZE, WEIGHT_SIZE / num_cut), dtype=np.float32)
+    data = mx.symbol.ones((BATCH_SIZE, WEIGHT_SIZE / num_cut), dtype=np.float32)
     for i in range(NUM_LAYERS):
-        for j in range(num_cut):
-            var_name = 'w_%d_%d' % (i, j)
-            activations[j] = mx.symbol.dot(in_data[j], mx.symbol.Variable(var_name,
-                                                                shape=weight_shape,
-                                                                dtype=np.float32))
-            arg_arrays[var_name] = mx.nd.ones(weight_shape, dtype=np.float32)
-        if with_add:
-            out_data = mx.symbol.ElementWiseSum(*activations)
-        else:
-            for k in range(num_cut):
-                out_data[k] = activations[k]
+        var_name = 'w_%d' % i
+        activation = mx.symbol.dot(data, mx.symbol.Variable(var_name,
+                                                         shape=weight_shape,
+                                                        dtype=np.float32))
+        arg_arrays[var_name] = mx.nd.ones(weight_shape, dtype=np.float32)
+        if with_add_slice:
+            activation = mx.symbol.SliceChannel(activation, axis=1, num_outputs=num_cut)
+            #activations = [activation[0] for _ in range(num_cut)]
+            data = mx.symbol.ElementWiseSum(*activation)
+        else:    
+            data = activation
 
-    net = mx.symbol.Group(out_data)
+    net = mx.symbol.Group(data)
     arg_shapes, out_shapes, aux_shapes = net.infer_shape()
     arg_types, out_types, aux_types = net.infer_type()
     executor = net.bind(ctx=mx.cpu(0), args=arg_arrays)
@@ -102,6 +98,44 @@ def SingleMKL(num_cut, with_add):
         print("Finish an iteration %d" % i)
     exp.Summary()
 
+def Single_OP(num_cut, op, num_iter=30):
+    weight_shape = (WEIGHT_SIZE / num_cut, WEIGHT_SIZE)
+    arg_arrays = {}
+    data = None
+    if op == 'add':
+        data = [mx.symbol.ones((BATCH_SIZE, WEIGHT_SIZE / num_cut), dtype=np.float32)] * num_cut
+        #data = [mx.symbol.ones((BATCH_SIZE, WEIGHT_SIZE / num_cut), 
+        #                        dtype=np.float32) for _ in range(num_cut)]
+    elif op == 'slice':
+        data = mx.symbol.ones((BATCH_SIZE, WEIGHT_SIZE), dtype=np.float32)
+    out = None
+    for i in range(NUM_LAYERS):
+        if op == 'slice':
+            out = []
+            for i in range(num_iter):
+                activation = mx.symbol.SliceChannel(data, axis=1, num_outputs=num_cut)
+                out.append(activation)
+        elif op == 'add':
+            for i in range(num_iter):
+                activation = mx.symbol.ElementWiseSum(*data)
+                data = [activation] * num_cut
+            out = data
+
+    net = mx.symbol.Group(out)
+    arg_shapes, out_shapes, aux_shapes = net.infer_shape()
+    arg_types, out_types, aux_types = net.infer_type()
+    executor = net.bind(ctx=mx.cpu(0), args=arg_arrays)
+    print(out_shapes)
+
+    exp = Experiment(NUM_ITERATIONS, NUM_IGNORED_ITERATIONS, EXPERIMENT_NAME)
+    for i in range(NUM_ITERATIONS):
+        with exp:
+            output = executor.forward()
+            for out in output:
+                out.wait_to_read()
+        print("=" * 30)
+        print("Finish an iteration %d" % i)
+    exp.Summary()
 
 def main():
     global BATCH_SIZE
@@ -141,13 +175,17 @@ def main():
     NUM_IGNORED_ITERATIONS = int(args.num_ignored_iterations)
     EXPERIMENT_NAME = args.experiment_name
     if args.single_machine:
-        print("No split")
-        SingleMKL(1, False)
-        for i in [2, 4, 8]:
-            print("Split by %d with add" % i)
-            SingleMKL(i, True)
-            print("Split by %d without add" % i)
-            SingleMKL(i, False)
+        print("No Split")
+        Single_MAT(1, False)
+        for i in [2, 4, 8, 16, 32, 64]:
+            print("Split by %d dot only" % i)
+            Single_MAT(i, False)
+            print("Split by %d dot with add + slice" % i)
+            Single_MAT(i, True)
+            print("Split by %d add only" % i)
+            Single_OP(i, 'add', 30)
+            print("Split by %d slice only" % i)
+            Single_OP(i, 'slice', 30)
     else:
         pass
 
