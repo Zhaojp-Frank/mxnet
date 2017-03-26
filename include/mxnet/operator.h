@@ -306,6 +306,17 @@ class OperatorProperty {
     CHECK(InferShape(in_shape, &out_shape, &aux_shape));
     return CreateOperator(ctx);
   }
+  // [Optional] Create an operator that is used to do backward.
+  // It defaults to return null, which means the backward operator cannot be created
+  // standalone and should be created together with forward operator.
+  virtual Operator* CreateBackwardOperatorEx(
+      const Context& ctx,
+      const std::vector<TShape>& in_shape,
+      const std::vector<int>& in_type,
+      const std::vector<TShape>& out_shape,
+      const std::vector<int>& out_type) const {
+    return nullptr;
+  }
   /*!
    * \brief return the type string of the Operator
    *  subclasses override this function.

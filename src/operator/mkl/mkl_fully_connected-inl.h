@@ -41,10 +41,6 @@ class MKLFullyConnectedOp : public Operator {
     fullyConnectedBwdFilter(NULL),
     fullyConnectedBwdBias(NULL) {
     param_ = p;
-    fwd_top_data = MKLData<DType>::create();
-    fwd_bottom_data = MKLData<DType>::create();
-    bwd_bottom_diff = MKLData<DType>::create();
-    bwd_top_diff = MKLData<DType>::create();
   }
 
   ~MKLFullyConnectedOp() {
@@ -80,12 +76,6 @@ class MKLFullyConnectedOp : public Operator {
 
     dst_sizes[0] = output_channels;
     dst_sizes[1] = output_batch_size;
-
-    // Names are for debugging only
-    fwd_bottom_data->name = "fwd_bottom_data   @ " + getName();
-    fwd_top_data->name = "fwd_top_data      @ " + getName();
-    bwd_bottom_diff->name = "bwd_bottom_diff   @ " + getName();
-    bwd_top_diff->name = "bwd_top_diff      @ " + getName();
 
     dnnPrimitiveAttributes_t attributes = NULL;
     status = dnnPrimitiveAttributesCreate<DType>(&attributes);
@@ -142,6 +132,7 @@ class MKLFullyConnectedOp : public Operator {
                        const std::vector<TBlob> &aux_args) {
     using namespace mshadow;
     using namespace mshadow::expr;
+    void* res_fullyConnected[dnnResourceNumber];
 
     if (req[fullc::kOut] == kNullOp) return;
     CHECK_EQ(req[fullc::kOut], kWriteTo);
@@ -192,6 +183,7 @@ class MKLFullyConnectedOp : public Operator {
                         const std::vector<TBlob> &aux_args) {
     using namespace mshadow;
     using namespace mshadow::expr;
+    void* res_fullyConnected[dnnResourceNumber];
 
     CHECK_EQ(out_grad.size(), 1);
     size_t expected = param_.no_bias ? 2 : 3;
@@ -229,10 +221,7 @@ class MKLFullyConnectedOp : public Operator {
   dnnPrimitive_t fullyConnectedBwdData;
   dnnPrimitive_t fullyConnectedBwdFilter;
   dnnPrimitive_t fullyConnectedBwdBias;
-  std::shared_ptr<MKLData<DType>> fwd_top_data, fwd_bottom_data;
-  std::shared_ptr<MKLData<DType>> bwd_bottom_diff, bwd_top_diff;
   FullyConnectedParam param_;
-  void* res_fullyConnected[dnnResourceNumber];
 };  // class MKLFullyConnectedOp
 }  // namespace op
 }  // namespace mxnet

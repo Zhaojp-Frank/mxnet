@@ -8,13 +8,11 @@
 #include <mxnet/op_attr_types.h>
 #include <nnvm/graph_attr_types.h>
 #include "./exec_pass.h"
+#include "../nnvm/legacy_op_util.h"
+
+using namespace std;
 
 namespace mxnet {
-
-namespace op {
-const OperatorProperty* OpPropGetOpProperty(const NodeAttrs& attrs);
-}  // namespace op
-
 namespace exec {
 
 // forward executor
@@ -42,16 +40,16 @@ class ForwardOpExecutor : public OpExecutor {
   Operator::ExecType exec_type() const override {
     return op_->exec_type();
   }
-  explicit ForwardOpExecutor(Operator* op, std::vector<uint32_t> aux_index)
+  explicit ForwardOpExecutor(Operator* op, vector<uint32_t> aux_index)
       : op_(op), aux_index_(aux_index) {
     std::sort(aux_index_.begin(), aux_index_.end());
   }
 
  private:
   friend Graph AttachOpExecs(Graph g);
-  std::shared_ptr<Operator> op_;
-  std::vector<uint32_t> aux_index_;
-  std::vector<TBlob> in_data_, out_data_, aux_data_;
+  shared_ptr<Operator> op_;
+  vector<uint32_t> aux_index_;
+  vector<TBlob> in_data_, out_data_, aux_data_;
 };
 
 // backward executor
@@ -82,9 +80,9 @@ class BackwardOpExecutor : public OpExecutor {
   Operator::ExecType exec_type() const override {
     return op_->exec_type();
   }
-  explicit BackwardOpExecutor(std::shared_ptr<Operator> op,
+  explicit BackwardOpExecutor(shared_ptr<Operator> op,
                               const OperatorProperty* prop,
-                              std::vector<uint32_t> aux_index)
+                              vector<uint32_t> aux_index)
       : op_(op), aux_index_(aux_index) {
     std::sort(aux_index_.begin(), aux_index_.end());
     out_grad_.resize(prop->NumVisibleOutputs());
@@ -92,15 +90,15 @@ class BackwardOpExecutor : public OpExecutor {
     in_grad_.resize(in_data_.size());
     out_data_.resize(prop->NumOutputs());
 
-    std::vector<TBlob*> out_grad_ptr(out_grad_.size());
+    vector<TBlob*> out_grad_ptr(out_grad_.size());
     for (size_t i = 0; i < out_grad_.size(); ++i) {
       out_grad_ptr[i] = &out_grad_[i];
     }
-    std::vector<TBlob*> in_data_ptr(in_data_.size());
+    vector<TBlob*> in_data_ptr(in_data_.size());
     for (size_t i = 0; i < in_data_.size(); ++i) {
       in_data_ptr[i] = &in_data_[i];
     }
-    std::vector<TBlob*> out_data_ptr(out_data_.size());
+    vector<TBlob*> out_data_ptr(out_data_.size());
     for (size_t i = 0; i < out_data_.size(); ++i) {
       out_data_ptr[i] = &out_data_[i];
     }
@@ -109,10 +107,10 @@ class BackwardOpExecutor : public OpExecutor {
   }
 
  private:
-  std::shared_ptr<Operator> op_;
-  std::vector<uint32_t> aux_index_;
-  std::vector<TBlob> out_grad_, in_grad_, in_data_, out_data_, aux_data_;
-  std::vector<TBlob*> arg_data_ptr_;
+  shared_ptr<Operator> op_;
+  vector<uint32_t> aux_index_;
+  vector<TBlob> out_grad_, in_grad_, in_data_, out_data_, aux_data_;
+  vector<TBlob*> arg_data_ptr_;
 };
 
 // fcompute executor executor
@@ -154,8 +152,66 @@ class FComputeExecutor : public OpExecutor {
  private:
   FCompute fcompute_;
   NodeAttrs attrs_;
-  std::vector<TBlob> in_data_, out_data_;
+  vector<TBlob> in_data_, out_data_;
 };
+
+const OperatorProperty& ParseOpProp(const NodeAttrs& attrs) {
+  return nnvm::get<mxnet::op::ParsedOpProp>(attrs.parsed).ptr.get();
+}
+
+inline vector<uint32_t> OpPropMutateInputs(const OperatorProperty& prop) {
+  vector<uint32_t> ret;
+  for (uint32_t i = 0; i < prop.aux_states.size(); ++i) {
+    ret.push_back(static_cast<uint32_t>(i + prop.ListArguments().size()));
+  }
+  return ret;
+}
+
+inline Operator* OpPropCreateLayerOp(
+    const OperatorProperty& prop,
+    const Context& ctx,
+    const vector<TShape>& ishape,
+    const vector<int>& itype) {
+  const size_t num_args = prop.ListArguments().size();
+  vector<TShape> is(ishape.begin(), ishape.begin() + num_args);
+  vector<int> it(itype.begin(), itype.begin() + num_args);
+  return prop.CreateOperatorEx(ctx, &is, &it);
+}
+
+inline Operator* OpPropCreateBackwardLayerOp(
+    const OperatorProperty& prop,
+    const Context& ctx,
+    const vector<TShape>& ishape,
+    const vector<int>& itype,
+    const vector<TShape>& oshape,
+    const vector<int>& otype) {
+  return prop.CreateBackwardOperatorEx(ctx, ishape, itype, oshape, otype);
+}
+
+template<typename T>
+inline vector<T> ParseInAttrs(
+    const nnvm::IndexedGraph& idx,
+    const vector<T>& entry_attrs,
+    const nnvm::IndexedGraph::Node& inode) {
+  vector<T> ret;
+  for (const auto& e : inode.inputs) {
+    ret.emplace_back(entry_attrs[idx.entry_id(e)]);
+  }
+  return ret;
+}
+
+template<typename T>
+inline vector<T> ParseOutAttrs(
+    const nnvm::IndexedGraph& idx,
+    const vector<T>& entry_attrs,
+    const nnvm::IndexedGraph::Node& inode) {
+  const uint32_t nid = idx.node_id(inode.source);
+  vector<T> ret;
+  for (size_t i = 0; i < inode.source->num_outputs(); ++i) {
+    ret.emplace_back(entry_attrs[idx.entry_id(nid, i)])
+  }
+  return ret;
+}
 
 // pass to attach operator executors
 Graph AttachOpExecs(Graph g) {
@@ -163,8 +219,9 @@ Graph AttachOpExecs(Graph g) {
   using nnvm::ShapeVector;
   using nnvm::FMutateInputs;
 
-  auto& fcreate_layer_op = nnvm::Op::GetAttr<FCreateLayerOp>("FCreateLayerOp");
-  auto& fmutate_inputs = nnvm::Op::GetAttr<FMutateInputs>("FMutateInputs");
+  //auto& fcreate_layer_op = nnvm::Op::GetAttr<FCreateLayerOp>("FCreateLayerOp");
+  //auto& fmutate_inputs = nnvm::Op::GetAttr<FMutateInputs>("FMutateInputs");
+  auto& is_layer_forward = nnvm::Op::GetAttr<bool>("TIsLayerOpForward");
   auto& is_layer_backward = nnvm::Op::GetAttr<bool>("TIsLayerOpBackward");
 
   const auto& vdtype = g.GetAttr<DTypeVector>("dtype");
@@ -173,40 +230,54 @@ Graph AttachOpExecs(Graph g) {
 
   // get the graph
   const auto& idx = g.indexed_graph();
-  std::vector<std::shared_ptr<OpExecutor> > ret(idx.num_nodes());
+  vector<shared_ptr<OpExecutor> > ret(idx.num_nodes());
 
   // initialize the nodes
   for (size_t i = 0; i < idx.num_nodes(); ++i) {
     const auto& inode = idx[i];
-    if (inode.source->is_variable()) continue;
-    std::vector<uint32_t> mutate_index;
-    if (fmutate_inputs.count(inode.source->op())) {
-      mutate_index = fmutate_inputs[inode.source->op()](inode.source->attrs);
+    if (inode.source->is_variable()) {
+      // No need to generate OpExecutor for variable node.
+      continue;
     }
-    FCompute fcompute = FComputeExecutor::GetFCompute(inode.source->op(), vctx[i]);
-    if (fcreate_layer_op.count(inode.source->op())) {
-      std::vector<TShape> ishape;
-      std::vector<int> itype;
-      for (const auto& e : inode.inputs) {
-        ishape.emplace_back(vshape[idx.entry_id(e)]);
-        itype.emplace_back(vdtype[idx.entry_id(e)]);
+    const nnvm::Op* op = CHECK_NOTNULL(inode.source->op());
+    if (is_layer_forward.count(op) || is_layer_backward.count(op)) {
+      // Layer operator.
+      const OperatorProperty& prop = ParseOpProp(inode.source->attrs);
+      const vector<unint32_t>& mutate_index = OpPropMutateInputs(prop);
+      const vector<TShape>& ishape = ParseInAttrs(idx, vshape, inode);
+      const vector<int>& itype = ParseInAttrs(idx, vtype, inode);
+      const vector<TShape>& oshape = ParseOutAttrs(idx, vshape, inode);
+      const vector<int>& otype = ParseOutAttrs(idx, vtype, inode);
+      if (is_layer_forward.count(op)) {
+        // Forward operator.
+        Operator* layer_fwd_op = OpPropCreateLayerOp(prop, vctx[i], ishape, itype);
+        ret[i] = std::make_shared<ForwardOpExecutor>(layer_fwd_op, mutate_index);
+      } else {
+        // Backward operator.
+        Operator* layer_bwd_op = OpPropCreateBackwardLayerOp(
+            prop, vctx[i], ishape, itype, oshape, otype);
+        if (layer_bwd_op != nullptr) {
+          ret[i] = std::make_shared<BackwardOpExecutor>(layer_bwd_op, prop, mutate_index);
+        } else {
+          // No standalone backward operator can be created. The operator is stateful.
+          // Thus, the backward operator need to reuse the forward one.
+          CHECK_GT(inode.control_deps.size(), 0)
+            << "Stateful backward node requires to have a control dependency to its forward node.";
+          const uint32_t fwd_id = inode.control_deps[0];
+          CHECK(vctx[fwd_id] == vctx[i])
+            << "Stateful backward node requires to have the same device context with the forward node.";
+          CHECK(ret[fwd_id] != nullptr)
+            << "Stateful backward node requires its forward OpExecutor to be created.";
+          ret[i] = std::make_shared<BackwardOpExecutor>(
+              std::dynamic_pointer_cast<ForwardOpExecutor>(ret[fwd_id])->op_,
+              prop,
+              mutate_index);
+        }
       }
-      ret[i] = std::make_shared<ForwardOpExecutor>(
-          fcreate_layer_op[inode.source->op()](
-              inode.source->attrs, vctx[i], ishape, itype), mutate_index);
-    } else if (is_layer_backward.get(inode.source->op(), false)) {
-      uint32_t fwd_id = inode.control_deps[0];
-      CHECK_GE(inode.control_deps.size(), 1);
-      CHECK(vctx[fwd_id] == vctx[i]);
-      CHECK(ret[fwd_id] != nullptr);
-      ret[i] = std::make_shared<BackwardOpExecutor>(
-          dynamic_cast<ForwardOpExecutor*>(ret[fwd_id].get())->op_,
-          mxnet::op::OpPropGetOpProperty(inode.source->attrs),
-          mutate_index);
-    } else if (fcompute != nullptr) {
-      ret[i] = std::make_shared<FComputeExecutor>(fcompute, inode.source->attrs);
     } else {
-      LOG(INFO) << "FCompute not registered " << inode.source->op()->name;
+      FCompute fcompute = FComputeExecutor::GetFCompute(inode.source->op(), vctx[i]);
+      CHECK(fcompute != nullptr) << "FCompute not registered " << inode.source->op()->name;
+      ret[i] = std::make_shared<FComputeExecutor>(fcompute, inode.source->attrs);
     }
   }
   g.attrs["op_execs"] = std::make_shared<nnvm::any>(ret);

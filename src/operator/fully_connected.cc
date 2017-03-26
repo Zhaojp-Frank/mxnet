@@ -20,7 +20,7 @@ Operator* CreateOp<cpu>(FullyConnectedParam param, int dtype,
                         std::vector<TShape> *in_shape,
                         std::vector<TShape> *out_shape,
                         Context ctx) {
-  Operator *op = NULL;
+  Operator *op = nullptr;
 #if MXNET_USE_MKL2017 == 1
   switch (dtype) {
   case mshadow::kFloat32:
@@ -65,6 +65,43 @@ Operator* CreateOp<cpu>(FullyConnectedParam param, int dtype,
   return op;
 }
 
+
+Operator* CreateBackwardOp<cpu>(const FullyConnectedParam& param,
+                                int dtype,
+                                const std::vector<TShape>& in_shape,
+                                const std::vector<TShape>& out_shape,
+                                const Context& ctx) {
+#if MXNET_USE_MKL2017 == 1
+  switch (dtype) {
+  case mshadow::kFloat32:
+    return new MKLFullyConnectedOp<cpu, float>(param);
+  case mshadow::kFloat64:
+    return new MKLFullyConnectedOp<cpu, double>(param);
+  default:
+    LOG(INFO) << MKLFullyConnectedOp<cpu, float>::getName() << " Skip MKL optimization";
+    break;
+  }
+#endif
+#if MXNET_USE_NNPACK == 1
+  LOG(INFO) << "Skip NNPACK for backward fully-connected layer.";
+#endif
+  switch (dtype) {
+  case mshadow::kFloat32:
+    return new FullyConnectedOp<cpu, float>(param);
+    break;
+  case mshadow::kFloat64:
+    return new FullyConnectedOp<cpu, double>(param);
+    break;
+  case mshadow::kFloat16:
+    LOG(FATAL) << "float16 fully connected layer is currently"
+                  "only supported by CuDNN version.";
+    break;
+  default:
+    LOG(FATAL) << "Unsupported type " << dtype;
+  }
+  return nullptr;
+}
+
 // DO_BIND_DISPATCH comes from operator_common.h
 Operator *FullyConnectedProp::CreateOperatorEx(Context ctx, std::vector<TShape> *in_shape,
                                      std::vector<int> *in_type) const {
@@ -74,6 +111,17 @@ Operator *FullyConnectedProp::CreateOperatorEx(Context ctx, std::vector<TShape> 
   CHECK(InferShape(in_shape, &out_shape, &aux_shape));
   DO_BIND_DISPATCH(CreateOp, param_, (*in_type)[0], in_shape, &out_shape, ctx);
 }
+
+Operator* FullyConnectedProp::CreateBackwardOperatorEx(
+    const Context& ctx,
+    const std::vector<TShape>& in_shape,
+    const std::vector<int>& in_type,
+    const std::vector<TShape>& out_shape,
+    const std::vector<int>& out_type) const {
+  DO_BIND_DISPATCH(CreateBackwardOp, param_, (*in_type)[0],
+                   in_shape, out_shape, ctx);
+}
+
 
 DMLC_REGISTER_PARAMETER(FullyConnectedParam);
 

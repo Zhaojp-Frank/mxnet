@@ -140,6 +140,13 @@ Operator* CreateOp(FullyConnectedParam param, int dtype,
                    std::vector<TShape> *out_shape,
                    Context ctx);
 
+template<typename xpu>
+Operator* CreateBackwardOp(const FullyConnectedParam& param,
+                           int dtype,
+                           const std::vector<TShape>& in_shape,
+                           const std::vector<TShape>& out_shape,
+                           const Context& ctx);
+
 #if DMLC_USE_CXX11
 class FullyConnectedProp : public OperatorProperty {
  public:
@@ -241,6 +248,13 @@ class FullyConnectedProp : public OperatorProperty {
 
   Operator* CreateOperatorEx(Context ctx, std::vector<TShape> *in_shape,
                              std::vector<int> *in_type) const override;
+
+  Operator* CreateBackwardOperatorEx(
+      const Context& ctx,
+      const std::vector<TShape>& in_shape,
+      const std::vector<TShape>& in_type,
+      const std::vector<TShape>& out_shape,
+      const std::vector<TShape>& out_type) const override;
 
  private:
   FullyConnectedParam param_;
