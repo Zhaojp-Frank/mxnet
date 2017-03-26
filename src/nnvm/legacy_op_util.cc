@@ -300,6 +300,7 @@ void RegisterLegacyOpProp() {
     if (reg->key_var_num_args.length() != 0) {
       op.set_attr<std::string>("key_var_num_args", reg->key_var_num_args);
     }
+    op.set_attr<bool>("TIsLayerOpForward", true);
     // register BackwardOps
     std::string back_op_name = "_backward_" + reg->name;
     Op& back_op = ::dmlc::Registry<::nnvm::Op>::Get()->__REGISTER__(back_op_name);
