@@ -65,7 +65,7 @@ Operator* CreateOp<cpu>(FullyConnectedParam param, int dtype,
   return op;
 }
 
-
+template<>
 Operator* CreateBackwardOp<cpu>(const FullyConnectedParam& param,
                                 int dtype,
                                 const std::vector<TShape>& in_shape,
@@ -118,7 +118,7 @@ Operator* FullyConnectedProp::CreateBackwardOperatorEx(
     const std::vector<int>& in_type,
     const std::vector<TShape>& out_shape,
     const std::vector<int>& out_type) const {
-  DO_BIND_DISPATCH(CreateBackwardOp, param_, (*in_type)[0],
+  DO_BIND_DISPATCH(CreateBackwardOp, param_, in_type[0],
                    in_shape, out_shape, ctx);
 }
 

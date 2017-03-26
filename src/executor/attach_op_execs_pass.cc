@@ -40,7 +40,7 @@ class ForwardOpExecutor : public OpExecutor {
   Operator::ExecType exec_type() const override {
     return op_->exec_type();
   }
-  explicit ForwardOpExecutor(Operator* op, vector<uint32_t> aux_index)
+  explicit ForwardOpExecutor(shared_ptr<Operator> op, const vector<uint32_t>& aux_index)
       : op_(op), aux_index_(aux_index) {
     std::sort(aux_index_.begin(), aux_index_.end());
   }
@@ -81,14 +81,14 @@ class BackwardOpExecutor : public OpExecutor {
     return op_->exec_type();
   }
   explicit BackwardOpExecutor(shared_ptr<Operator> op,
-                              const OperatorProperty* prop,
-                              vector<uint32_t> aux_index)
+                              const OperatorProperty& prop,
+                              const vector<uint32_t>& aux_index)
       : op_(op), aux_index_(aux_index) {
     std::sort(aux_index_.begin(), aux_index_.end());
-    out_grad_.resize(prop->NumVisibleOutputs());
-    in_data_.resize(prop->ListArguments().size());
+    out_grad_.resize(prop.NumVisibleOutputs());
+    in_data_.resize(prop.ListArguments().size());
     in_grad_.resize(in_data_.size());
-    out_data_.resize(prop->NumOutputs());
+    out_data_.resize(prop.NumOutputs());
 
     vector<TBlob*> out_grad_ptr(out_grad_.size());
     for (size_t i = 0; i < out_grad_.size(); ++i) {
@@ -102,7 +102,7 @@ class BackwardOpExecutor : public OpExecutor {
     for (size_t i = 0; i < out_data_.size(); ++i) {
       out_data_ptr[i] = &out_data_[i];
     }
-    arg_data_ptr_ = prop->BackwardInputs(
+    arg_data_ptr_ = prop.BackwardInputs(
         out_grad_ptr, in_data_ptr, out_data_ptr);
   }
 
@@ -156,12 +156,12 @@ class FComputeExecutor : public OpExecutor {
 };
 
 const OperatorProperty& ParseOpProp(const NodeAttrs& attrs) {
-  return nnvm::get<mxnet::op::ParsedOpProp>(attrs.parsed).ptr.get();
+  return *nnvm::get<mxnet::op::ParsedOpProp>(attrs.parsed).ptr.get();
 }
 
 inline vector<uint32_t> OpPropMutateInputs(const OperatorProperty& prop) {
   vector<uint32_t> ret;
-  for (uint32_t i = 0; i < prop.aux_states.size(); ++i) {
+  for (uint32_t i = 0; i < prop.ListAuxiliaryStates().size(); ++i) {
     ret.push_back(static_cast<uint32_t>(i + prop.ListArguments().size()));
   }
   return ret;
@@ -208,7 +208,7 @@ inline vector<T> ParseOutAttrs(
   const uint32_t nid = idx.node_id(inode.source);
   vector<T> ret;
   for (size_t i = 0; i < inode.source->num_outputs(); ++i) {
-    ret.emplace_back(entry_attrs[idx.entry_id(nid, i)])
+    ret.emplace_back(entry_attrs[idx.entry_id(nid, i)]);
   }
   return ret;
 }
@@ -243,19 +243,19 @@ Graph AttachOpExecs(Graph g) {
     if (is_layer_forward.count(op) || is_layer_backward.count(op)) {
       // Layer operator.
       const OperatorProperty& prop = ParseOpProp(inode.source->attrs);
-      const vector<unint32_t>& mutate_index = OpPropMutateInputs(prop);
+      const vector<uint32_t>& mutate_index = OpPropMutateInputs(prop);
       const vector<TShape>& ishape = ParseInAttrs(idx, vshape, inode);
-      const vector<int>& itype = ParseInAttrs(idx, vtype, inode);
+      const vector<int>& itype = ParseInAttrs(idx, vdtype, inode);
       const vector<TShape>& oshape = ParseOutAttrs(idx, vshape, inode);
-      const vector<int>& otype = ParseOutAttrs(idx, vtype, inode);
+      const vector<int>& otype = ParseOutAttrs(idx, vdtype, inode);
       if (is_layer_forward.count(op)) {
         // Forward operator.
-        Operator* layer_fwd_op = OpPropCreateLayerOp(prop, vctx[i], ishape, itype);
+        shared_ptr<Operator> layer_fwd_op(OpPropCreateLayerOp(prop, vctx[i], ishape, itype));
         ret[i] = std::make_shared<ForwardOpExecutor>(layer_fwd_op, mutate_index);
       } else {
         // Backward operator.
-        Operator* layer_bwd_op = OpPropCreateBackwardLayerOp(
-            prop, vctx[i], ishape, itype, oshape, otype);
+        shared_ptr<Operator> layer_bwd_op(OpPropCreateBackwardLayerOp(
+            prop, vctx[i], ishape, itype, oshape, otype));
         if (layer_bwd_op != nullptr) {
           ret[i] = std::make_shared<BackwardOpExecutor>(layer_bwd_op, prop, mutate_index);
         } else {

@@ -252,9 +252,9 @@ class FullyConnectedProp : public OperatorProperty {
   Operator* CreateBackwardOperatorEx(
       const Context& ctx,
       const std::vector<TShape>& in_shape,
-      const std::vector<TShape>& in_type,
+      const std::vector<int>& in_type,
       const std::vector<TShape>& out_shape,
-      const std::vector<TShape>& out_type) const override;
+      const std::vector<int>& out_type) const override;
 
  private:
   FullyConnectedParam param_;
