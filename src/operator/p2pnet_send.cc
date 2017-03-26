@@ -85,6 +85,50 @@ MXNET_REGISTER_OP_PROPERTY(P2PNetSend, P2PNetSendProperty)
 .add_arguments(P2PNetSendParam::__FIELDS__())
 .describe("Special op to send a matrix.");
 
+inline bool P2PNetSendSinkInferShape(const nnvm::NodeAttrs& attrs,
+                                       std::vector<TShape> *in_shapes,
+                                       std::vector<TShape> *out_shapes) {
+  // Avoid unused variable warnings.
+  (void)attrs;
+  CHECK_EQ(in_shapes->size(), 0);
+  CHECK_EQ(out_shapes->size(), 1);
+  TShape outshape(1);
+  outshape[0] = 1;
+  SHAPE_ASSIGN_CHECK(*out_shapes, 0, outshape);
+  return true;
+}
+
+inline bool P2PNetSendSinkInferType(const nnvm::NodeAttrs& attrs,
+                                      std::vector<int> *in_types,
+                                      std::vector<int> *out_types) {
+  (void)attrs;
+  CHECK_EQ(in_types->size(), 0);
+  CHECK_EQ(out_types->size(), 1);
+  TYPE_ASSIGN_CHECK(*out_types, 0, mshadow::kFloat32);
+  return true;
+}
+
+void P2PNetSendSinkCompute(const nnvm::NodeAttrs& attrs,
+                             const OpContext& ctx,
+                             const std::vector<TBlob>& inputs,
+                             const std::vector<OpReqType>& req,
+                             const std::vector<TBlob>& outputs) {
+  (void)attrs;
+  (void)ctx;
+  (void)inputs;
+  (void)req;
+  (void)outputs;
+}
+
+NNVM_REGISTER_OP(P2PNetSendSink)
+  .set_num_inputs(0)
+  .set_num_outputs(1)
+  .set_attr<FCompute>("FCompute<cpu>", P2PNetSendSinkCompute)
+  .set_attr<nnvm::FInferShape>("FInferShape", P2PNetSendSinkInferShape)
+  .set_attr<nnvm::FInferType>("FInferType", P2PNetSendSinkInferType)
+  .add_arguments(P2PNetSendParam::__FIELDS__())
+  .describe("Special op to be P2PNetSend sink.");
+
 inline void P2PNetSendAttrParser(NodeAttrs* attrs) {
   P2PNetSendParam param;
   std::vector<std::pair<std::string, std::string> > kwargs(

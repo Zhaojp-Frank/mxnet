@@ -26,7 +26,7 @@ class P2PNetRecvProperty : public OperatorProperty {
                   std::vector<TShape> *aux_shape) const override {
     // Avoid unused variable warnings.
     (void)aux_shape;
-    CHECK_EQ(in_shape->size(), 2) << "Input:[data]";
+    CHECK_EQ(in_shape->size(), 1) << "Input:[data]";
     out_shape->clear();
     out_shape->push_back(param_.shape);
     return true;
@@ -43,7 +43,8 @@ class P2PNetRecvProperty : public OperatorProperty {
   }
 
   std::vector<std::string> ListArguments() const override {
-    return {"data", "control"};
+    //return {"data", "control"};
+    return {"control"};
   }
 
   Operator* CreateOperator(Context ctx) const override {
@@ -71,7 +72,7 @@ class P2PNetRecvProperty : public OperatorProperty {
 DMLC_REGISTER_PARAMETER(P2PNetRecvParam);
 
 MXNET_REGISTER_OP_PROPERTY(P2PNetRecv, P2PNetRecvProperty)
-.add_argument("data", "Symbol", "Control matrix to the P2PNetRecvOp.")
+//.add_argument("data", "Symbol", "Control matrix to the P2PNetRecvOp.")
 .add_argument("control", "Symbol", "Control matrix to the P2PNetRecvOp.")
 .add_arguments(P2PNetRecvParam::__FIELDS__())
 .describe("Special op to receive a matrix.");
@@ -99,7 +100,7 @@ inline void P2PNetRecvAttrParser(NodeAttrs* attrs) {
 inline bool P2PNetRecvInferShape(const nnvm::NodeAttrs& attrs,
                                  std::vector<TShape> *in_shapes,
                                  std::vector<TShape> *out_shapes) {
-  CHECK_EQ(in_shapes->size(), 2);
+  CHECK_EQ(in_shapes->size(), 1);
   CHECK_EQ(out_shapes->size(), 1);
   const P2PNetRecvParam& param = nnvm::get<P2PNetRecvParam>(attrs.parsed);
   SHAPE_ASSIGN_CHECK(*out_shapes, 0, param.shape);
@@ -109,7 +110,7 @@ inline bool P2PNetRecvInferShape(const nnvm::NodeAttrs& attrs,
 inline bool P2PNetRecvInferType(const nnvm::NodeAttrs& attrs,
                                 std::vector<int> *in_types,
                                 std::vector<int> *out_types) {
-  CHECK_EQ(in_types->size(), 2);
+  CHECK_EQ(in_types->size(), 1);
   CHECK_EQ(out_types->size(), 1);
   const P2PNetRecvParam& param = nnvm::get<P2PNetRecvParam>(attrs.parsed);
   TYPE_ASSIGN_CHECK(*out_types, 0, param.dtype);

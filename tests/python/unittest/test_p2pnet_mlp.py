@@ -69,6 +69,8 @@ def MLP_MP(addresses, worker_index):
     group2ctx = {'machine%d' % i : mx.cpu(0, addresses[i])
                  for i in range(n_workers)}
     arg_arrays = {}
+    arg_grads = {}
+    grad_reqs = {}
     data = []
     for i in range(n_workers):
         with mx.AttrScope(ctx_group='machine%d' % i):
@@ -89,6 +91,8 @@ def MLP_MP(addresses, worker_index):
                                      activations[w], axis=1,
                                      num_outputs=n_workers)
                 arg_arrays[var_name] = mx.nd.ones(weight_shape, dtype=np.float32)
+                arg_grads[var_name] = mx.nd.empty(weight_shape, dtype=np.float32)
+                grad_reqs[var_name] = 'write'
 
         for w in range(n_workers):
             with mx.AttrScope(ctx_group='machine%d' % w):
@@ -101,6 +105,7 @@ def MLP_MP(addresses, worker_index):
     arg_shapes, out_shapes, aux_shapes = net.infer_shape()
     arg_types, out_types, aux_types = net.infer_type()
     executor = net.bind(ctx=mx.cpu(0, addresses[worker_index]), args=arg_arrays,
+                        args_grad=arg_grads, grad_req=grad_reqs,
                         group2ctx=group2ctx)
     exp = Experiment(NUM_ITERATIONS, NUM_IGNORED_ITERATIONS, EXPERIMENT_NAME)
     for i in range(NUM_ITERATIONS):
