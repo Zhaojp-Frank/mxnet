@@ -16,6 +16,8 @@
 #include "../engine/profiler.h"
 #include "../operator/p2pnet_common.h"
 
+#define SPLIT_GRADIENT_TEST
+
 namespace mxnet {
 namespace exec {
 GraphExecutor::~GraphExecutor() {
@@ -386,7 +388,7 @@ Graph AssignContext(Graph g,
     device_map[kv.first] = ctx2id.at(kv.second);
   }
 
-#if 0
+#ifdef SPLIT_GRADIENT_TEST
   g = nnvm::pass::SplitGradientTest(g, "__ctx_group__", num_forward_outputs);
 #endif
   size_t arg_top = 0, aux_top = 0;
