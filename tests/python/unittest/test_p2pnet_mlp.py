@@ -83,10 +83,12 @@ def MLP_MP(addresses, worker_index):
         for w in range(n_workers):
             with mx.AttrScope(ctx_group='group:%d' % w):
                 var_name = 'w_%d_%d' % (l, w)
-                activations[w] = mx.symbol.dot(
-                                    data[w], mx.symbol.Variable(
-                                                 var_name, shape=weight_shape,
-                                                 dtype=np.float32))
+                weight = mx.symbol.Variable(var_name, shape=weight_shape,
+                                            dtype=np.float32)
+                activations[w] = mx.symbol.dot(data[w], weight)
+                # activations[w] = mx.symbol.FullyConnected(
+                                    # data=data[w], weight=weight,
+                                    # num_hidden=weight_size, no_bias=True)
                 activations[w] = mx.symbol.SliceChannel(
                                      activations[w], axis=1,
                                      num_outputs=n_workers)
@@ -126,15 +128,20 @@ def Single():
     arg_arrays = {}
     for i in range(NUM_LAYERS):
         var_name = 'w_%d' % i
-        activation = mx.symbol.dot(data0, mx.symbol.Variable(var_name,
-                                                             shape=weight_shape,
-                                                             dtype=np.float32))
-        # activations = mx.symbol.SliceChannel(activation, axis=1, num_outputs=2)
+        weight = mx.symbol.Variable(var_name, shape=weight_shape,
+                                    dtype=np.float32)
+        # activation = mx.symbol.dot(data0, weight)
+        activation = mx.symbol.FullyConnected(data=data0, weight=weight,
+                                              num_hidden=WEIGHT_SIZE,
+                                              no_bias=True)
+        # activations = mx.symbol.SliceChannel(activation, axis=0, num_outputs=2)
         # activation = activations[0] + activations[1]
+        # activation = mx.symbol.ElementWiseSum(*activations)
         arg_arrays[var_name] = mx.nd.ones(weight_shape, dtype=np.float32)
         data0 = activation
 
-    net = mx.symbol.Group(data0)
+    # net = mx.symbol.Group(data0)
+    net = data0
     arg_shapes, out_shapes, aux_shapes = net.infer_shape()
     arg_types, out_types, aux_types = net.infer_type()
     executor = net.bind(ctx=mx.cpu(0), args=arg_arrays)
