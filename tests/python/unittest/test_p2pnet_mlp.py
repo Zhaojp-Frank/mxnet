@@ -77,7 +77,7 @@ def MLP_MP(addresses, worker_index):
             data.append(mx.symbol.ones((BATCH_SIZE, WEIGHT_SIZE / n_workers),
                                        dtype=np.float32))
 
-    weight_shape = (WEIGHT_SIZE / n_workers, WEIGHT_SIZE)
+    weight_shape = (WEIGHT_SIZE, WEIGHT_SIZE / n_workers)
     activations = [None for k in range(n_workers)]
     for l in range(NUM_LAYERS):
         for w in range(n_workers):
@@ -85,10 +85,10 @@ def MLP_MP(addresses, worker_index):
                 var_name = 'w_%d_%d' % (l, w)
                 weight = mx.symbol.Variable(var_name, shape=weight_shape,
                                             dtype=np.float32)
-                activations[w] = mx.symbol.dot(data[w], weight)
-                # activations[w] = mx.symbol.FullyConnected(
-                                    # data=data[w], weight=weight,
-                                    # num_hidden=weight_size, no_bias=True)
+                # activations[w] = mx.symbol.dot(data[w], weight)
+                activations[w] = mx.symbol.FullyConnected(
+                                     data=data[w], weight=weight,
+                                     num_hidden=WEIGHT_SIZE, no_bias=True)
                 activations[w] = mx.symbol.SliceChannel(
                                      activations[w], axis=1,
                                      num_outputs=n_workers)
@@ -107,7 +107,7 @@ def MLP_MP(addresses, worker_index):
     arg_shapes, out_shapes, aux_shapes = net.infer_shape()
     arg_types, out_types, aux_types = net.infer_type()
     executor = net.bind(ctx=mx.cpu(0, addresses[worker_index]), args=arg_arrays,
-                        args_grad=arg_grads, grad_req=grad_reqs,
+                        #args_grad=arg_grads, grad_req=grad_reqs,
                         group2ctx=group2ctx)
     exp = Experiment(NUM_ITERATIONS, NUM_IGNORED_ITERATIONS, EXPERIMENT_NAME)
     for i in range(NUM_ITERATIONS):
@@ -134,9 +134,9 @@ def Single():
         activation = mx.symbol.FullyConnected(data=data0, weight=weight,
                                               num_hidden=WEIGHT_SIZE,
                                               no_bias=True)
-        # activations = mx.symbol.SliceChannel(activation, axis=0, num_outputs=2)
-        # activation = activations[0] + activations[1]
-        # activation = mx.symbol.ElementWiseSum(*activations)
+        #activations = mx.symbol.SliceChannel(activation, axis=0, num_outputs=2)
+        #activation = mx.symbol.ElementWiseSum(*activations)
+        #activation = activations[0] + activations[1]
         arg_arrays[var_name] = mx.nd.ones(weight_shape, dtype=np.float32)
         data0 = activation
 
@@ -167,6 +167,8 @@ def main():
                                                  'new Context implementation.')
     parser.add_argument('-a', '--addresses', type=str,
                         help='Addresses of all workers.')
+    parser.add_argument('-f', '--host_file', type=str,
+                        help='Host file that contains addresses of all workers.')
     parser.add_argument('-i', '--worker_index', type=int,
                         help='Index of this worker in addresses.')
     parser.add_argument('-s', '--single_machine', action='store_const',
@@ -196,7 +198,14 @@ def main():
     if args.single_machine:
         Single()
     else:
-        addresses = args.addresses.split(',')
+        addresses = []
+        if args.host_file is not None:
+            with open(args.host_file) as fp:
+                for line in fp:
+                    addresses.append(line.strip() + ":9000")
+        else:
+            addresses = args.addresses.split(',')
+        print(addresses)
         MLP_MP(addresses, int(args.worker_index))
 
 

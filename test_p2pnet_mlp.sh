@@ -1,5 +1,3 @@
-addresses=216.165.108.105:9000,216.165.108.104:9000
-#,216.165.108.103:9000,216.165.108.102:9000
 batch=8192
 weight=8192
 layers=5
@@ -8,8 +6,8 @@ ignored=5
 export KMP_AFFINITY="explicit,granularity=fine,proclist=[0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30]"
 export NNVM_EXEC_MATCH_RANGE=0
 export MXNET_P2PNET_DEBUG=1
-python tests/python/unittest/test_p2pnet_mlp.py --address=$addresses -b $batch -w $weight -l $layers -n $iterations -g $ignored -i $1 -e m2_l${layers}_comm_$1 | tee m2_l${layers}_comm_$1
-export MXNET_P2PNET_DEBUG=3
-python tests/python/unittest/test_p2pnet_mlp.py --address=$addresses -b $batch -w $weight -l $layers -n $iterations -g $ignored -i $1 -e m2_l${layers}_no_comm_$1 | tee m2_l${layers}_no_comm_$1
-export MXNET_P2PNET_DEBUG=1
-python tests/python/unittest/test_p2pnet_mlp.py -s -b $batch -w $weight -l $layers -n $iterations -g $ignored -e m2_l{$layers}_single_$1 | tee m2_l${layers}_single_$1
+python tests/python/unittest/test_p2pnet_mlp.py -f all_private_ips -b $batch -w $weight -l $layers -n $iterations -g $ignored -i $1 -e l${layers}_comm_$1 | tee l${layers}_comm_$1
+#export MXNET_P2PNET_DEBUG=3
+#python tests/python/unittest/test_p2pnet_mlp.py -f all_private_ips -b $batch -w $weight -l $layers -n $iterations -g $ignored -i $1 -e l${layers}_no_comm_$1 | tee l${layers}_no_comm_$1
+#export MXNET_P2PNET_DEBUG=1
+#python tests/python/unittest/test_p2pnet_mlp.py -s -b $batch -w $weight -l $layers -n $iterations -g $ignored -e l${layers}_single_$1 | tee l${layers}_single_$1
