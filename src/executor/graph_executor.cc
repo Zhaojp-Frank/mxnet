@@ -176,6 +176,10 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     address_vec.push_back(context_vec[nid].dev_address);
   }
+  std::set<std::string> address_set(address_vec.begin(), address_vec.end());
+  if (address_set.size() == 1) {
+    return g;
+  }
   //std::cout << "==================== Original Graph ====================" << std::endl;
   //DFSVisit(g.outputs, [&g, &idx] (const nnvm::NodePtr& n) {
     //std::cout << n->attrs.name << "(" << idx.node_id(n.get()) << ")" << " : ";
@@ -382,10 +386,8 @@ Graph AssignContext(Graph g,
     device_map[kv.first] = ctx2id.at(kv.second);
   }
 
-#if 1
-  g = nnvm::pass::SplitGradientTest(g, "127.0.0.1:9000", "127.0.0.1:8000",
-                                    num_forward_outputs);
-  const auto& addresses = g.GetAttr<nnvm::AddressVector>("addresses");
+#if 0
+  g = nnvm::pass::SplitGradientTest(g, "__ctx_group__", num_forward_outputs);
 #endif
   size_t arg_top = 0, aux_top = 0;
   for (size_t i = 0; i < num_forward_inputs; ++i) {
@@ -400,9 +402,6 @@ Graph AssignContext(Graph g,
       ctx = in_args[arg_top].ctx();
       ++arg_top;
     }
-#if 1
-    ctx.dev_address = addresses[nid];
-#endif
     if (ctx2id.count(ctx) == 0) {
       ctx2id[ctx] = static_cast<int>(ctx_list.size());
       ctx_list.push_back(ctx);
@@ -519,12 +518,12 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   nnvm::Graph g = InitFullGraph(symbol, grad_req_type, arg_grad_store);
   g = InferShapeType(g, in_args, aux_states);
   // Call partition pass here.
-  const int num_procs = ctx_map.size();
-  LOG(INFO) << "Num procedures: " << num_procs;
-  if (num_procs > 1) {
-    g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_procs);
-    g = nnvm::ApplyPass(g, "PartitionPass");
-  }
+  //const int num_procs = ctx_map.size();
+  //LOG(INFO) << "Num procedures: " << num_procs;
+  //if (num_procs > 1) {
+    //g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_procs);
+    //g = nnvm::ApplyPass(g, "PartitionPass");
+  //}
   // TODO(minjie): Here has an implicit assumption.
   // The ctx_map is of form {"group:%d" % id : context object}
   // assign contexts to the graph.
