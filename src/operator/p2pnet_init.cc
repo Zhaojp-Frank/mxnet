@@ -58,7 +58,8 @@ class P2PNetInitProperty : public OperatorProperty {
                   std::vector<TShape> *aux_shape) const override {
     // Avoid unused variable warnings.
     (void)aux_shape;
-    CHECK_EQ(in_shape->size(), 1) << "Input:[data]";
+    //CHECK_EQ(in_shape->size(), 1) << "Input:[control]";
+    CHECK_EQ(in_shape->size(), 1) << "Input:[control]";
     TShape outshape(1);
     outshape[0] = 1;
     out_shape->clear();

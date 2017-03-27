@@ -169,18 +169,38 @@ inline ValueType get_node_attr(
 
 Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
 {
+
   const auto& idx = g.indexed_graph();
-  const uint32_t old_num_outputs = g.outputs.size(); // Will need this later.
   nnvm::AddressVector address_vec;
   const ContextVector& context_vec = g.GetAttr<ContextVector>("context");
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     address_vec.push_back(context_vec[nid].dev_address);
   }
+  std::set<std::string> address_set(address_vec.begin(), address_vec.end());
+  if (address_set.size() == 1) {
+    return g;
+  }
+  //std::cout << "==================== Original Graph ====================" << std::endl;
+  //DFSVisit(g.outputs, [&g, &idx] (const nnvm::NodePtr& n) {
+    //std::cout << n->attrs.name << "(" << idx.node_id(n.get()) << ")" << " : ";
+    //for (const auto e : n->inputs) {
+      //std::cout << e.node->attrs.name << "(" << idx.node_id(e.node.get()) << ")" << "_" << e.index << " : ";
+      //std::cout << g.GetAttr<nnvm::ShapeVector>("shape")[idx.entry_id(e)]
+                //<< ", ";
+    //}
+    //std::cout << std::endl;
+    ////std::cout << n->attrs.name << " : ";
+    ////for (const auto dep_n : n->control_deps) {
+      ////std::cout << dep_n->attrs.name << ", ";
+    ////}
+    ////std::cout << std::endl;
+  //});
+
   g = nnvm::pass::SplitDistributedGraph(g, address_vec, default_ctx.dev_address,
                                         g.GetAttr<nnvm::ShapeVector>("shape"),
                                         g.GetAttr<nnvm::DTypeVector>("dtype"),
                                         "_CrossDeviceCopy", "P2PNetInit",
-                                        "P2PNetSend", "P2PNetRecv",
+                                        "P2PNetSend", "P2PNetRecv", "P2PNetSendSink",
                                         &num_forward_inputs_, &num_forward_outputs_);
   // Renews everything
   ContextVector new_context_vec;
@@ -233,11 +253,18 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
 
   const uint32_t grad_output_size =
       new_idx.outputs().size() - num_forward_outputs_;
-  //std::vector<std::pair<OpReqType, NDArray> > new_grad_store(grad_output_size);
-  CHECK(grad_output_size == grad_store_.size());
-  //grad_store_ = new_grad_store;
+  std::vector<std::pair<OpReqType, NDArray> > new_grad_store(grad_output_size);
+  for (uint32_t j = num_forward_outputs_, k = 0; j < new_idx.outputs().size(); j++) {
+      const uint32_t eid = new_idx.entry_id(new_idx.outputs()[j]);
+      const auto old_eid_it = entry_id_map.find(eid);
+    if (old_eid_it != entry_id_map.end()) {
+      new_grad_store[j - num_forward_outputs_] = grad_store_[k++];
+    }
+  }
+  grad_store_ = new_grad_store;
   std::cout << "SplitDistributedGraph finished" << std::endl;
 
+  //std::cout << "==================== New Graph ====================" << std::endl;
   //DFSVisit(g.outputs, [&g, &new_idx] (const nnvm::NodePtr& n) {
     //std::cout << n->attrs.name << " : ";
     //for (const auto e : n->inputs) {
@@ -246,11 +273,11 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
                 //<< ", ";
     //}
     //std::cout << std::endl;
-    //std::cout << n->attrs.name << " : ";
-    //for (const auto dep_n : n->control_deps) {
-      //std::cout << dep_n->attrs.name << ", ";
-    //}
-    //std::cout << std::endl;
+    ////std::cout << n->attrs.name << " : ";
+    ////for (const auto dep_n : n->control_deps) {
+      ////std::cout << dep_n->attrs.name << ", ";
+    ////}
+    ////std::cout << std::endl;
   //});
   //std::cout << std::endl;
   // head_grad_entry_ will not be used anymore.
@@ -277,6 +304,7 @@ nnvm::Graph GraphExecutor::InitFullGraph(
   if (!need_grad) return g;
   for (size_t i = 0; i < g.outputs.size(); ++i) {
     NodeEntry ngrad{nnvm::Node::Create(), 0, 0};
+    ngrad.node->attrs.name = std::string("ngrad") + std::to_string(i);
     head_grad_entry_.emplace_back(AttrHint(ngrad, g.outputs[i]));
     head_grad_map_[ngrad.node.get()] = i;
   }
@@ -358,6 +386,9 @@ Graph AssignContext(Graph g,
     device_map[kv.first] = ctx2id.at(kv.second);
   }
 
+#if 0
+  g = nnvm::pass::SplitGradientTest(g, "__ctx_group__", num_forward_outputs);
+#endif
   size_t arg_top = 0, aux_top = 0;
   for (size_t i = 0; i < num_forward_inputs; ++i) {
     const uint32_t nid = idx.input_nodes().at(i);
@@ -437,8 +468,11 @@ void GraphExecutor::Init(nnvm::Symbol symbol,
     head_grad_array_.resize(symbol.outputs.size());
     for (size_t i = num_forward_inputs_; i < idx.input_nodes().size(); ++i) {
       uint32_t nid = idx.input_nodes().at(i);
-      uint32_t oid = head_grad_map_.at(idx[nid].source);
-      head_grad_array_[oid] = data_entry_[idx.entry_id(nid, 0)];
+      auto it = head_grad_map_.find(idx[nid].source);
+      if (it != head_grad_map_.end()) {
+        uint32_t oid = it->second;
+        head_grad_array_[oid] = data_entry_[idx.entry_id(nid, 0)];
+      }
     }
   }
   this->InitCachedOps();
@@ -487,12 +521,12 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   nnvm::Graph g = InitFullGraph(symbol, grad_req_type, arg_grad_store);
   g = InferShapeType(g, in_args, aux_states);
   // Call partition pass here.
-  const int num_procs = ctx_map.size();
-  LOG(INFO) << "Num procedures: " << num_procs;
-  if (num_procs > 1) {
-    g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_procs);
-    g = nnvm::ApplyPass(g, "PartitionPass");
-  }
+  //const int num_procs = ctx_map.size();
+  //LOG(INFO) << "Num procedures: " << num_procs;
+  //if (num_procs > 1) {
+    //g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_procs);
+    //g = nnvm::ApplyPass(g, "PartitionPass");
+  //}
   // TODO(minjie): Here has an implicit assumption.
   // The ctx_map is of form {"group:%d" % id : context object}
   // assign contexts to the graph.
@@ -579,15 +613,22 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
   using PoolEntry = std::pair<Context, size_t>;
   std::vector<PoolEntry> pool_info;
 
-  // assign array to head gradient
   for (size_t i = num_forward_inputs_; i < idx.input_nodes().size(); ++i) {
     uint32_t nid = idx.input_nodes().at(i);
-    uint32_t oid = head_grad_map_.at(idx[nid].source);
-    uint32_t eid = idx.entry_id(idx.outputs()[oid]);
-    CHECK_NE(vshape[eid].ndim(), 0);
-    CHECK_NE(vdtype[eid], -1);
-    data_entry_[idx.entry_id(nid, 0)] =
-        NDArray(vshape[eid], data_context[eid], false, vdtype[eid]);
+    const auto& it = head_grad_map_.find(idx[nid].source);
+    if (it == head_grad_map_.end()) {
+      uint32_t grad_eid = idx.entry_id(nid, 0);
+      data_entry_[grad_eid] = NDArray(vshape[grad_eid], data_context[grad_eid],
+                                      false, vdtype[grad_eid]);
+    } else {
+      //uint32_t oid = head_grad_map_.at(idx[nid].source);
+      uint32_t oid = it->second;
+      uint32_t eid = idx.entry_id(idx.outputs()[oid]);
+      CHECK_NE(vshape[eid].ndim(), 0);
+      CHECK_NE(vdtype[eid], -1);
+      data_entry_[idx.entry_id(nid, 0)] =
+          NDArray(vshape[eid], data_context[eid], false, vdtype[eid]);
+    }
   }
   // get maximum bytes in each pool
   for (size_t i = 0; i < vshape.size(); ++i) {
@@ -642,10 +683,10 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
     // assign allocated array by storage id
     int storage_id = vstorage[i];
     CHECK_GE(storage_id, 0)
-        << "Do not support runtime shape op yet. Node's name is "
-        << i << " " << data_entry_.size()
-        << idx[i].source->attrs.name;
-    //std::cout << "data_entry_[i] " << i << " " << storage_id << std::endl;
+        << "Do not support runtime shape op yet. Node's name is"
+        << " " << idx[i].source->attrs.name << ". "
+        << i << " " << data_entry_.size() << std::endl
+        << "Shape is " << vshape[i] << std::endl;
     const NDArray& src = data_pool_.at(storage_id);
     data_entry_[i] = src.AsArray(vshape[i], vdtype[i]);
   }
@@ -707,8 +748,10 @@ void GraphExecutor::InitCachedOps() {
     op_nodes_[e.node_id].exec->req[e.index] =
         grad_store_[j - num_forward_outputs_].first;
   }
+  std::vector<Engine::VarHandle> finish_vars(idx.num_nodes());
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
+    finish_vars[nid] = Engine::Get()->NewVariable();
     if (inode.source->is_variable()) continue;
     if (op_nodes_[nid].skip_exec_node) continue;
     auto& exec = op_nodes_[nid].exec;
@@ -734,6 +777,12 @@ void GraphExecutor::InitCachedOps() {
         use_vars.push_back(nd.var());
       }
     }
+    // Handle control dependencies.
+    for (auto & depend_node : inode.source->control_deps) {
+      const uint32_t depend_nid = idx.node_id(depend_node.get());
+      CHECK_LT(depend_nid, nid);
+      use_vars.push_back(finish_vars[depend_nid]);
+    }
     for (auto& r : exec->op_ctx.requested) {
       all_vars.push_back(r.var);
       mutate_vars.push_back(r.var);
@@ -742,6 +791,7 @@ void GraphExecutor::InitCachedOps() {
       all_vars.push_back(nd.var());
       mutate_vars.push_back(nd.var());
     }
+    mutate_vars.push_back(finish_vars[nid]);
     auto dedup = [] (std::vector<Engine::VarHandle>& vars) {  // NOLINT(*)
       std::sort(vars.begin(), vars.end());
       vars.resize(std::unique(vars.begin(), vars.end()) - vars.begin());

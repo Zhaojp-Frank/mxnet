@@ -69,6 +69,8 @@ def MLP_MP(addresses, worker_index):
     group2ctx = {'group:%d' % i : mx.cpu(0, addresses[i])
                  for i in range(n_workers)}
     arg_arrays = {}
+    arg_grads = {}
+    grad_reqs = {}
     data = []
     for i in range(n_workers):
         with mx.AttrScope(ctx_group='group:%d' % i):
@@ -81,37 +83,40 @@ def MLP_MP(addresses, worker_index):
         for w in range(n_workers):
             with mx.AttrScope(ctx_group='group:%d' % w):
                 var_name = 'w_%d_%d' % (l, w)
-                activations[w] = mx.symbol.dot(
-                                    data[w], mx.symbol.Variable(
-                                                 var_name, shape=weight_shape,
-                                                 dtype=np.float32))
+                weight = mx.symbol.Variable(var_name, shape=weight_shape,
+                                            dtype=np.float32)
+                activations[w] = mx.symbol.dot(data[w], weight)
+                # activations[w] = mx.symbol.FullyConnected(
+                                    # data=data[w], weight=weight,
+                                    # num_hidden=weight_size, no_bias=True)
                 activations[w] = mx.symbol.SliceChannel(
                                      activations[w], axis=1,
                                      num_outputs=n_workers)
                 arg_arrays[var_name] = mx.nd.ones(weight_shape, dtype=np.float32)
+                arg_grads[var_name] = mx.nd.empty(weight_shape, dtype=np.float32)
+                grad_reqs[var_name] = 'write'
 
         for w in range(n_workers):
             with mx.AttrScope(ctx_group='group:%d' % w):
                 all_parts = [activations[i][w] for i in range(n_workers)]
                 # all_parts2 = [activations[i][w] + 1 for i in range(n_workers)]
                 # data[w] = sum(all_parts) + sum(all_parts2)
-                data[w] = sum(all_parts)
+                data[w] = mx.symbol.ElementWiseSum(*all_parts)
 
     net = mx.symbol.Group(data)
     arg_shapes, out_shapes, aux_shapes = net.infer_shape()
     arg_types, out_types, aux_types = net.infer_type()
     executor = net.bind(ctx=mx.cpu(0, addresses[worker_index]), args=arg_arrays,
+                        args_grad=arg_grads, grad_req=grad_reqs,
                         group2ctx=group2ctx)
     exp = Experiment(NUM_ITERATIONS, NUM_IGNORED_ITERATIONS, EXPERIMENT_NAME)
     for i in range(NUM_ITERATIONS):
         with exp:
             output = executor.forward()
-            for s in output:
-                s.asnumpy()
+            output[0].wait_to_read()
         print("=" * 30)
         print("Finish an iteration %d" % i)
     exp.Summary()
-    time.sleep(5)
 
 def MLP_DP(addresses, worker_index):
     pass
@@ -123,15 +128,20 @@ def Single():
     arg_arrays = {}
     for i in range(NUM_LAYERS):
         var_name = 'w_%d' % i
-        activation = mx.symbol.dot(data0, mx.symbol.Variable(var_name,
-                                                             shape=weight_shape,
-                                                             dtype=np.float32))
-        # activations = mx.symbol.SliceChannel(activation, axis=1, num_outputs=2)
+        weight = mx.symbol.Variable(var_name, shape=weight_shape,
+                                    dtype=np.float32)
+        # activation = mx.symbol.dot(data0, weight)
+        activation = mx.symbol.FullyConnected(data=data0, weight=weight,
+                                              num_hidden=WEIGHT_SIZE,
+                                              no_bias=True)
+        # activations = mx.symbol.SliceChannel(activation, axis=0, num_outputs=2)
         # activation = activations[0] + activations[1]
+        # activation = mx.symbol.ElementWiseSum(*activations)
         arg_arrays[var_name] = mx.nd.ones(weight_shape, dtype=np.float32)
         data0 = activation
 
-    net = mx.symbol.Group(data0)
+    # net = mx.symbol.Group(data0)
+    net = data0
     arg_shapes, out_shapes, aux_shapes = net.infer_shape()
     arg_types, out_types, aux_types = net.infer_type()
     executor = net.bind(ctx=mx.cpu(0), args=arg_arrays)
@@ -140,7 +150,7 @@ def Single():
     for i in range(NUM_ITERATIONS):
         with exp:
             output = executor.forward()
-            out = output[0].asnumpy()
+            out = output[0].wait_to_read()
         print("=" * 30)
         print("Finish an iteration %d" % i)
     exp.Summary()

@@ -67,13 +67,13 @@ class P2PNetSendOp : public Operator {
   unsigned tensor_id_;
 };  // class P2PNetSendOp
 
-void P2PNetSendCompute(const nnvm::NodeAttrs& attrs,
-                       const OpContext& ctx,
-                       const std::vector<TBlob>& inputs,
-                       const std::vector<OpReqType>& req,
-                       const std::vector<TBlob>& outputs) {
-  const P2PNetSendParam& param = nnvm::get<P2PNetSendParam>(attrs.parsed);
-  std::cout << "P2PNetSendCompute in" << std::endl;
+//void P2PNetSendCompute(const nnvm::NodeAttrs& attrs,
+                       //const OpContext& ctx,
+                       //const std::vector<TBlob>& inputs,
+                       //const std::vector<OpReqType>& req,
+                       //const std::vector<TBlob>& outputs) {
+  //const P2PNetSendParam& param = nnvm::get<P2PNetSendParam>(attrs.parsed);
+  //std::cout << "P2PNetSendCompute in" << std::endl;
   //Context ndctx = Context::CPU();
   //std::vector<NDArray*> ndptrs;
   //std::vector<engine::VarHandle> read_vars;
@@ -93,8 +93,8 @@ void P2PNetSendCompute(const nnvm::NodeAttrs& attrs,
       //P2PNet::Get().DoRequest(request);
     //}, ndctx, read_vars, {}, FnProperty::kNormal, 0,
     //PROFILER_MESSAGE("P2PNetSendCompute"));
-  std::cout << "P2PNetSendCompute out" << std::endl;
-}
+  //std::cout << "P2PNetSendCompute out" << std::endl;
+//}
 
 }  // namespace op
 }  // namespace mxnet
