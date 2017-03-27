@@ -200,7 +200,7 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
                                         g.GetAttr<nnvm::ShapeVector>("shape"),
                                         g.GetAttr<nnvm::DTypeVector>("dtype"),
                                         "_CrossDeviceCopy", "P2PNetInit",
-                                        "P2PNetSend", "P2PNetRecv",
+                                        "P2PNetSend", "P2PNetRecv", "P2PNetSendSink",
                                         &num_forward_inputs_, &num_forward_outputs_);
   // Renews everything
   ContextVector new_context_vec;
@@ -468,8 +468,11 @@ void GraphExecutor::Init(nnvm::Symbol symbol,
     head_grad_array_.resize(symbol.outputs.size());
     for (size_t i = num_forward_inputs_; i < idx.input_nodes().size(); ++i) {
       uint32_t nid = idx.input_nodes().at(i);
-      uint32_t oid = head_grad_map_.at(idx[nid].source);
-      head_grad_array_[oid] = data_entry_[idx.entry_id(nid, 0)];
+      auto it = head_grad_map_.find(idx[nid].source);
+      if (it != head_grad_map_.end()) {
+        uint32_t oid = it->second;
+        head_grad_array_[oid] = data_entry_[idx.entry_id(nid, 0)];
+      }
     }
   }
   this->InitCachedOps();
@@ -612,12 +615,20 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
 
   for (size_t i = num_forward_inputs_; i < idx.input_nodes().size(); ++i) {
     uint32_t nid = idx.input_nodes().at(i);
-    uint32_t oid = head_grad_map_.at(idx[nid].source);
-    uint32_t eid = idx.entry_id(idx.outputs()[oid]);
-    CHECK_NE(vshape[eid].ndim(), 0);
-    CHECK_NE(vdtype[eid], -1);
-    data_entry_[idx.entry_id(nid, 0)] =
-        NDArray(vshape[eid], data_context[eid], false, vdtype[eid]);
+    const auto& it = head_grad_map_.find(idx[nid].source);
+    if (it == head_grad_map_.end()) {
+      uint32_t grad_eid = idx.entry_id(nid, 0);
+      data_entry_[grad_eid] = NDArray(vshape[grad_eid], data_context[grad_eid],
+                                      false, vdtype[grad_eid]);
+    } else {
+      //uint32_t oid = head_grad_map_.at(idx[nid].source);
+      uint32_t oid = it->second;
+      uint32_t eid = idx.entry_id(idx.outputs()[oid]);
+      CHECK_NE(vshape[eid].ndim(), 0);
+      CHECK_NE(vdtype[eid], -1);
+      data_entry_[idx.entry_id(nid, 0)] =
+          NDArray(vshape[eid], data_context[eid], false, vdtype[eid]);
+    }
   }
   // get maximum bytes in each pool
   for (size_t i = 0; i < vshape.size(); ++i) {

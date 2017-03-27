@@ -98,8 +98,13 @@ def MLP(worker_index):
     exp = Experiment(NUM_ITERATIONS, NUM_IGNORED_ITERATIONS, EXPERIMENT_NAME)
     for i in range(NUM_ITERATIONS):
         with exp:
-            output = executor.forward()
-            output[0].wait_to_read()
+            forward_output = executor.forward()
+            if forward_output:
+                for o in forward_output:
+                    o.wait_to_read()
+            backward_output = executor.backward(forward_output)
+            for grad_name, grad in arg_grads.items():
+                grad.wait_to_read()
         print('=' * 30)
         print('Finish an iteration %d' % i)
     exp.Summary()
