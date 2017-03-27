@@ -110,15 +110,10 @@ Operator* ConvolutionProp::CreateBackwardOperatorEx(
     const std::vector<int>& in_type,
     const std::vector<TShape>& out_shape,
     const std::vector<int>& out_type) const {
-  std::vector<TShape> *out_grad_shape, *in_data_shape, *out_data_shape;
-  ParseBackwardInputs(*this, in_shape, out_grad_shape, in_data_shape, out_data_shape);
-  DO_BIND_DISPATCH(CreateBackwardOp,
-                   param_,
-                   in_type[0],
-                   *out_grad_shape,
-                   *in_data_shape,
-                   *out_data_shape,
-                   out_shape);
+  std::vector<TShape> out_grad_shape, in_data_shape, out_data_shape;
+  ParseBackwardInputs(*this, in_shape, &out_grad_shape, &in_data_shape, &out_data_shape);
+  DO_BIND_DISPATCH(CreateBackwardOp, param_, in_type[0],
+                   out_grad_shape, in_data_shape, out_data_shape, out_shape);
 }
 
 MXNET_REGISTER_OP_PROPERTY(Convolution, ConvolutionProp)
