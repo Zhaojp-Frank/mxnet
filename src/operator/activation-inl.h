@@ -86,6 +86,9 @@ class ActivationOp : public Operator {
 template<typename xpu>
 Operator* CreateOp(ActivationParam type, int dtype);
 
+template<typename xpu>
+Operator* CreateBackwardOp(const ActivationParam& type, int dtype);
+
 #if DMLC_USE_CXX11
 class ActivationProp : public OperatorProperty {
  public:
@@ -172,6 +175,13 @@ class ActivationProp : public OperatorProperty {
 
   Operator* CreateOperatorEx(Context ctx, std::vector<TShape> *in_shape,
                              std::vector<int> *in_type) const override;
+
+  Operator* CreateBackwardOperatorEx(
+      const Context& ctx,
+      const std::vector<TShape>& in_shape,
+      const std::vector<int>& in_type,
+      const std::vector<TShape>& out_shape,
+      const std::vector<int>& out_type) const override;
 
  private:
   ActivationParam param_;

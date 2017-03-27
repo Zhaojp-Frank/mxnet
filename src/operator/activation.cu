@@ -46,6 +46,13 @@ Operator *CreateOp<gpu>(ActivationParam param, int dtype) {
 #endif  // MXNET_USE_CUDNN
   return op;
 }
+
+
+template<>
+Operator* CreateBackwardOp<cpu>(const ActivationParam& type, int dtype) {
+  return CreateOp<cpu>(type, dtype);
+}
+
 }  // namespace op
 }  // namespace mxnet
 
