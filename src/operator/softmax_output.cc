@@ -27,6 +27,15 @@ Operator *SoftmaxOutputProp::CreateOperatorEx(Context ctx, std::vector<TShape> *
   DO_BIND_DISPATCH(CreateOp, param_, (*in_type)[0]);
 }
 
+Operator* SoftmaxOutputProp::CreateBackwardOperatorEx(
+    const Context& ctx,
+    const std::vector<TShape>& in_shape,
+    const std::vector<int>& in_type,
+    const std::vector<TShape>& out_shape,
+    const std::vector<int>& out_type) const {
+  DO_BIND_DISPATCH(CreateOp, param_, in_type[0]);
+}
+
 DMLC_REGISTER_PARAMETER(SoftmaxOutputParam);
 
 MXNET_REGISTER_OP_PROPERTY(SoftmaxOutput, SoftmaxOutputProp)

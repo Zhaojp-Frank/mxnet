@@ -424,6 +424,7 @@ Graph AssignContext(Graph g,
   }
   g.attrs["device"] = std::make_shared<dmlc::any>(std::move(device));
   g = nnvm::pass::PlaceDevice(g, "__ctx_group__", device_map, "_CrossDeviceCopy");
+  LOG(INFO) << "Place device pass finished.";
   const auto& assigned_device = g.GetAttr<nnvm::DeviceVector>("device");
 
   ContextVector vcontext;
