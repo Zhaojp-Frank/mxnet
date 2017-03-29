@@ -65,7 +65,7 @@ def GetAllIPs(master):
                 ips = line.strip().split()
                 public_ip = ips[0]
                 private_ip = ips[1]
-                if private_ip != master:
+                if private_ip != "None" and private_ip != master :
                     fp.write(private_ip + '\n')
                     all_ips.append(private_ip)
     print(all_ips)
