@@ -16,7 +16,7 @@
 #include "../engine/profiler.h"
 #include "../operator/p2pnet_common.h"
 
-#define SPLIT_GRADIENT_TEST
+//#define SPLIT_GRADIENT_TEST
 
 namespace mxnet {
 namespace exec {
@@ -75,12 +75,13 @@ const std::vector<NDArray>& GraphExecutor::outputs() const {
 }
 
 nnvm::NodeEntry AttrHint(nnvm::NodeEntry src, nnvm::NodeEntry like) {
-  static const Op* id_like = Op::Get("_identity_with_attr_like_rhs");
-  nnvm::NodePtr n = nnvm::Node::Create();
-  n->attrs.op = id_like;
-  n->attrs.name = src.node->attrs.name + "_id";
-  n->inputs = {src, like};
-  return nnvm::NodeEntry{n, 0, 0};
+  //static const Op* id_like = Op::Get("_identity_with_attr_like_rhs");
+  //nnvm::NodePtr n = nnvm::Node::Create();
+  //n->attrs.op = id_like;
+  //n->attrs.name = src.node->attrs.name + "_id";
+  //n->inputs = {src, like};
+  //return nnvm::NodeEntry{n, 0, 0};
+  return src;
 }
 
 nnvm::NodeEntry AggregateGradient(std::vector<nnvm::NodeEntry>&& v) {
@@ -299,6 +300,7 @@ nnvm::Graph GraphExecutor::InitFullGraph(
 
   nnvm::Graph g;
   g.outputs = symbol.outputs;
+
   bool need_grad = false;
   for (OpReqType req : grad_req_type) {
     if (req != kNullOp) need_grad = true;
@@ -338,11 +340,7 @@ nnvm::Graph GraphExecutor::InitFullGraph(
   nnvm::Graph g_grad = nnvm::pass::Gradient(
       g, symbol.outputs, xs, head_grad_entry_,
       AggregateGradient, need_mirror);
-  CHECK_EQ(g_grad.outputs.size(), xs.size());
-  for (const auto &e : g_grad.outputs) {
-    g.outputs.push_back(e);
-  }
-  return g;
+  return g_grad;
 }
 
 // pass to assign context to the graph
@@ -523,12 +521,12 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   nnvm::Graph g = InitFullGraph(symbol, grad_req_type, arg_grad_store);
   g = InferShapeType(g, in_args, aux_states);
   // Call partition pass here.
-  //const int num_procs = ctx_map.size();
-  //LOG(INFO) << "Num procedures: " << num_procs;
-  //if (num_procs > 1) {
-    //g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_procs);
-    //g = nnvm::ApplyPass(g, "PartitionPass");
-  //}
+  const int num_procs = ctx_map.size();
+  LOG(INFO) << "Num procedures: " << num_procs;
+  if (num_procs > 1) {
+    g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_procs);
+    g = nnvm::ApplyPass(g, "PartitionPass");
+  }
   // TODO(minjie): Here has an implicit assumption.
   // The ctx_map is of form {"group:%d" % id : context object}
   // assign contexts to the graph.

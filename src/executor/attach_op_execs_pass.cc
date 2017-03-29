@@ -280,7 +280,7 @@ Graph AttachOpExecs(Graph g) {
         shared_ptr<Operator> layer_bwd_op(OpPropCreateBackwardLayerOp(
             prop, vctx[i], ishape, itype, oshape, otype));
         CHECK(layer_bwd_op != nullptr)
-          << "Failed to create executor for the backward node.";
+          << "Failed to create executor for the backward node (op: " << op->name << ").";
         ret[i] = std::make_shared<BackwardOpExecutor>(layer_bwd_op, prop, mutate_index);
       }
     } else {

@@ -106,12 +106,15 @@ class ConcatOp : public Operator {
   }
 
  private:
-  int size_;
-  int dimension_;
+  const int size_;
+  const int dimension_;
 };  // class ConcatOp
 
 template<typename xpu>
 Operator *CreateOp(ConcatParam param, int dtype);
+
+template<typename xpu>
+Operator *CreateBackwardOp(ConcatParam param, int dtype);
 
 #if DMLC_USE_CXX11
 class ConcatProp : public OperatorProperty {
@@ -233,6 +236,13 @@ class ConcatProp : public OperatorProperty {
 
   Operator* CreateOperatorEx(Context ctx, std::vector<TShape> *in_shape,
                              std::vector<int> *in_type) const override;
+
+  Operator* CreateBackwardOperatorEx(
+      const Context& ctx,
+      const std::vector<TShape>& in_shape,
+      const std::vector<int>& in_type,
+      const std::vector<TShape>& out_shape,
+      const std::vector<int>& out_type) const;
 
  private:
   ConcatParam param_;

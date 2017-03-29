@@ -180,6 +180,14 @@ vector<SchemeRequest> CutFirstKDimsSchemes(
     const vector<TShape>& input_shapes,
     const vector<TShape>& output_shapes) {
   vector<SchemeRequest> reqs;
+  if (K == 1) {
+    for (auto s : input_shapes) {
+      LOG(INFO) << ">in shape: " << s;
+    }
+    for (auto s : output_shapes) {
+      LOG(INFO) << ">out shape: " << s;
+    }
+  }
   for (size_t i = 0; i < K; ++i) {
     SchemeRequest req;
     for (size_t j = 0; j < input_shapes.size(); ++j) {
@@ -683,6 +691,8 @@ void RegisterOpAlignedSchemes() {
     } else if (name == "Pooling" || name == "_backward_Pooling"
         || name == "Flatten" || name == "_backward_Flatten") {
       op.set_attr<AType>(kAttrName, CutFirstKDimsSchemes<2>);
+    } else if (name == "SoftmaxOutput" || name == "_backward_SoftmaxOutput") {
+      op.set_attr<AType>(kAttrName, CutFirstKDimsSchemes<1>);
     }
   }
 }

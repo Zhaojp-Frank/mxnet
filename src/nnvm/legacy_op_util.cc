@@ -318,13 +318,26 @@ void RegisterLegacyOpProp() {
     back_op.set_attr<bool>("TIsLayerOpBackward", true);
     back_op.set_attr<bool>("TIsBackward", true);
   }
+  // Partitioner register.
+  RegisterOpAlignedSchemes();
 }
 
 // no gradient operator
+void NoGradientCompute(
+    const nnvm::NodeAttrs&,
+    const OpContext&,
+    const std::vector<TBlob>&,
+    const std::vector<OpReqType>&,
+    const std::vector<TBlob>&) {
+  // DO NOTHING.
+}
+
 NNVM_REGISTER_OP(_NoGradient)
 .set_num_inputs(0)
 .set_num_outputs(1)
-.describe("Place holder for variable who cannot perform gradient");
+.describe("Place holder for variable who cannot perform gradient")
+.set_attr<FCompute>("FCompute<cpu>", NoGradientCompute)
+.set_attr<FCompute>("FCompute<gpu>", NoGradientCompute);
 
 void RegisterLegacyNDFunc() {
   for (auto reg : dmlc::Registry<NDArrayFunctionReg>::List()) {
