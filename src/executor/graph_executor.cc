@@ -183,9 +183,11 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
   if (address_set.size() == 1) {
     return g;
   }
-  //std::cout << "==================== Original Graph ====================" << std::endl;
-  //DFSVisit(g.outputs, [&g, &idx] (const nnvm::NodePtr& n) {
-    //std::cout << n->attrs.name << "(" << idx.node_id(n.get()) << ")" << " : ";
+  std::cout << "==================== Original Graph ====================" << std::endl;
+  //DFSVisit(g.outputs, [&g, &idx, & address_vec] (const nnvm::NodePtr& n) {
+    //std::cout << n->attrs.name << "(" << idx.node_id(n.get()) << ")"
+              //<< " " << address_vec[idx.node_id(n.get())]
+              //<< " : ";
     //for (const auto e : n->inputs) {
       //std::cout << e.node->attrs.name << "(" << idx.node_id(e.node.get()) << ")" << "_" << e.index << " : ";
       //std::cout << g.GetAttr<nnvm::ShapeVector>("shape")[idx.entry_id(e)]
@@ -267,7 +269,7 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
   grad_store_ = new_grad_store;
   std::cout << "SplitDistributedGraph finished" << std::endl;
 
-  //std::cout << "==================== New Graph ====================" << std::endl;
+  std::cout << "==================== New Graph ====================" << std::endl;
   //DFSVisit(g.outputs, [&g, &new_idx] (const nnvm::NodePtr& n) {
     //std::cout << n->attrs.name << " : ";
     //for (const auto e : n->inputs) {
