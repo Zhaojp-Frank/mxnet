@@ -28,12 +28,6 @@
 #include "../activation-inl.h"
 #include "./mkl_util-inl.h"
 
-#define MKLDNN_CALL(func)                                                               \
-  {                                                                                     \
-    int status = (func);                                                                \
-    CHECK_EQ(status, 0) << "MKL DNN call failed (status: " << status << ").";           \
-  }
-
 namespace mxnet {
 namespace op {
 
@@ -105,7 +99,6 @@ class MKLFullyConnectedOp : public Operator {
     }
     // TODO(minjie): Shouldn't `attributes` be destroyed?
   }
-
 
   virtual void Forward(const OpContext &ctx,
                        const std::vector<TBlob> &in_data,

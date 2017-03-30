@@ -22,6 +22,14 @@
 #ifndef MXNET_OPERATOR_MKL_MKL_UTIL_INL_H_
 #define MXNET_OPERATOR_MKL_MKL_UTIL_INL_H_
 #include "../operator_common.h"
+#include "./mkl_memory.h"
+#include "./mkl_memory-inl.h"
+
+#define MKLDNN_CALL(func)                                                               \
+  {                                                                                     \
+    int status = (func);                                                                \
+    CHECK_EQ(status, 0) << "MKL DNN call failed (status: " << status << ").";           \
+  }
 
 namespace mxnet {
 namespace op {
@@ -71,7 +79,7 @@ inline  mshadow::Tensor<xpu, dim, DType> mkl_experimental_direct_get_with_shape(
 
 // If shape has less than four dimensions, left pad one.
 // Else, flatten dimensions larger than the forth dimension.
-inline TShape ConvertTo4DShape(const TShape& shape) {
+inline mshadow::Shape<4> ConvertTo4DShape(const TShape& shape) {
   switch (shape.ndim()) {
   case 1:
     return mshadow::Shape4(shape[0], 1, 1, 1);
