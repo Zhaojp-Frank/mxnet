@@ -130,7 +130,8 @@ class P2PNet {
   std::map<unsigned, size_t> tensor_to_send_request_map_;
   std::map<unsigned, size_t> tensor_to_recv_request_map_;
   std::map<unsigned, void*> recv_request_sockets_;
-  std::map<size_t, unsigned> recv_request_poll_indices;
+  std::map<size_t, unsigned> recv_request_tensor_id_;
+  std::map<void*, size_t> recv_poll_indices_;
 };
 
 }  // namespace op

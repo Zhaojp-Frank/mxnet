@@ -141,9 +141,12 @@ void P2PNet::DoRecv(struct Request* request) {
     delete poll_items_;
     poll_items_ = new_poll_items;
     poll_items_[poll_items_count_ - 1] = {request_socket, 0, ZMQ_POLLIN, 0};
-    recv_request_poll_indices[poll_items_count_ - 1] = request->tensor_id;
+    recv_request_tensor_id_[poll_items_count_ - 1] = request->tensor_id;
+    recv_poll_indices_[request_socket]  = poll_items_count_ - 1;
   } else {
     request_socket = it->second;
+    // FIXME
+    poll_items_[recv_poll_indices_[request_socket]].events = ZMQ_POLLIN;
   }
   // TODO: Currently, we only have one and the only one request to the remote
   // worker. Therefore, we assume that the request content is the tensor_id.
@@ -205,13 +208,15 @@ void P2PNet::Main() {
     }
     for (unsigned i = 2; i < poll_items_count_; i++) {
       if (poll_items_[i].revents & ZMQ_POLLIN) {
-        auto it = tensor_to_recv_request_map_.find(recv_request_poll_indices[i]);
+        auto it = tensor_to_recv_request_map_.find(recv_request_tensor_id_[i]);
         //internal_mtx.lock();
         struct Request* request = internal_request_queue_[it->second];
         //internal_mtx.unlock();
         tensor_to_recv_request_map_.erase(it);
+        // FIXME
+        poll_items_[i].events = ZMQ_POLLOUT;
         recv_thread_pool_->push(DoRecvOncomplete, request,
-                               poll_items_[i].socket);
+                                poll_items_[i].socket);
         //P2PNetDebugger::Get().PrintTime("Recv of %u", request->tensor_id);
         //zmq_recv(poll_items_[i].socket, request->buffer, 0, 0);
         //zmq_recv(poll_items_[i].socket, request->buffer, request->buffer_size,
