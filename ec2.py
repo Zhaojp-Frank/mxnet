@@ -40,6 +40,7 @@ def DoIndexedRun(script, master, all_ips, log_path):
 
 
 def DoMount(master, all_ips, log_path):
+    threads = []
     command = "sudo mount -rw %s:/home/ubuntu /home/ubuntu" % master
     for ip in all_ips:
         if ip != master:
