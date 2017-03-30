@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 #include <zmq.h>
+#include "./ctpl_stl.h"
 #include "./operator_common.h"
 
 using namespace std::chrono;
@@ -121,6 +122,7 @@ class P2PNet {
   zmq_pollitem_t* poll_items_;
   size_t poll_items_count_;
   std::thread* main_thread_;
+  ctpl::thread_pool *recv_thread_pool_;
   std::vector<struct Request*> internal_request_queue_;
   std::atomic<size_t> internal_request_queue_size_;
   std::mutex internal_mtx; // mutex lock for request_queue_

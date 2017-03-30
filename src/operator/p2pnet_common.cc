@@ -10,6 +10,7 @@
 #include <thread>
 #include <iterator>
 #include "./p2pnet_common.h"
+#include "./ctpl_stl.h"
 
 using namespace std::chrono;
 
@@ -24,6 +25,7 @@ P2PNet::P2PNet() {
   is_main_start_ = false;
   is_bind_ = false;
   main_thread_ = nullptr;
+  recv_thread_pool_ =  new ctpl::thread_pool(8);
   internal_request_queue_size_ = 0;
   internal_request_queue_.resize(kRequestQueueSize);
 }
@@ -31,6 +33,7 @@ P2PNet::P2PNet() {
 P2PNet::~P2PNet() {
   zmq_close(internal_server_);
   zmq_close(server_);
+  delete recv_thread_pool_;
 }
 
 bool P2PNet::Init(const std::string& address) {
@@ -106,6 +109,16 @@ void P2PNet::DoSend(struct Request* request) {
   zmq_msg_init_data(&msg, (void*)request->buffer, request->buffer_size,
                     DoSendOnComplete, request);
   zmq_msg_send(&msg, server_, 0);
+}
+
+void DoRecvOncomplete(int id, P2PNet::Request* request, void* socket) {
+  (void) id;
+  P2PNetDebugger::Get().PrintTime("Recv of %u", request->tensor_id);
+  zmq_recv(socket, request->buffer, 0, 0);
+  zmq_recv(socket, request->buffer, request->buffer_size, 0);
+  P2PNetDebugger::Get().PrintTime("Recv of %u calls on_complete",
+                                  request->tensor_id);
+  request->on_complete();
 }
 
 void P2PNet::DoRecv(struct Request* request) {
@@ -197,13 +210,15 @@ void P2PNet::Main() {
         struct Request* request = internal_request_queue_[it->second];
         //internal_mtx.unlock();
         tensor_to_recv_request_map_.erase(it);
-        P2PNetDebugger::Get().PrintTime("Recv of %u", request->tensor_id);
-        zmq_recv(poll_items_[i].socket, request->buffer, 0, 0);
-        zmq_recv(poll_items_[i].socket, request->buffer, request->buffer_size,
-                 0);
-        P2PNetDebugger::Get().PrintTime("Recv of %u calls on_complete",
-                                        request->tensor_id);
-        request->on_complete();
+        recv_thread_pool_->push(DoRecvOncomplete, request,
+                               poll_items_[i].socket);
+        //P2PNetDebugger::Get().PrintTime("Recv of %u", request->tensor_id);
+        //zmq_recv(poll_items_[i].socket, request->buffer, 0, 0);
+        //zmq_recv(poll_items_[i].socket, request->buffer, request->buffer_size,
+                 //0);
+        //P2PNetDebugger::Get().PrintTime("Recv of %u calls on_complete",
+                                        //request->tensor_id);
+        //request->on_complete();
       }
     }
   }
