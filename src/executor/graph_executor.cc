@@ -527,7 +527,16 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   const int num_procs = ctx_map.size();
   LOG(INFO) << "Num procedures: " << num_procs;
   if (num_procs > 1) {
+    std::string default_group;
+    for (const auto& kv : ctx_map) {
+      if (kv.second == default_ctx) {
+        default_group = kv.first;
+        break;
+      }
+    }
+    CHECK(default_group != "") << "Default context does not appear in context map";
     g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_procs);
+    g.attrs["default_group"] = std::make_shared<nnvm::any>(default_group);
     g = nnvm::ApplyPass(g, "PartitionPass");
   }
   // TODO(minjie): Here has an implicit assumption.
