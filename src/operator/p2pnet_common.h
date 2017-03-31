@@ -61,6 +61,7 @@ class P2PNetDebugger {
 
   constexpr static int kDebugPrintTime = 1;
   constexpr static int kDebugNoCommunication = 2;
+  constexpr static int kDebugNoReceiveCopy = 4;
 
  private:
   P2PNetDebugger() {

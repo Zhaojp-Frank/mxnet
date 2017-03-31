@@ -43,11 +43,6 @@ bool P2PNet::Init(const std::string& address) {
   }
   internal_request_queue_size_ = 0;
 
-  //for (auto r : internal_request_queue_) {
-    //delete r;
-  //}
-  //internal_request_queue_.clear();
-
   if (!is_bind_) {
     srand(time(nullptr));
     std::ostringstream address_with_proto;
@@ -213,17 +208,24 @@ void P2PNet::Main() {
         struct Request* request = internal_request_queue_[it->second];
         //internal_mtx.unlock();
         tensor_to_recv_request_map_.erase(it);
-        // FIXME
-        poll_items_[i].events = ZMQ_POLLOUT;
-        recv_thread_pool_->push(DoRecvOncomplete, request,
-                                poll_items_[i].socket);
-        //P2PNetDebugger::Get().PrintTime("Recv of %u", request->tensor_id);
-        //zmq_recv(poll_items_[i].socket, request->buffer, 0, 0);
-        //zmq_recv(poll_items_[i].socket, request->buffer, request->buffer_size,
-                 //0);
-        //P2PNetDebugger::Get().PrintTime("Recv of %u calls on_complete",
-                                        //request->tensor_id);
-        //request->on_complete();
+        //// FIXME
+        //poll_items_[i].events = ZMQ_POLLOUT;
+        //recv_thread_pool_->push(DoRecvOncomplete, request,
+                                //poll_items_[i].socket);
+        P2PNetDebugger::Get().PrintTime("Recv of %u", request->tensor_id);
+        zmq_recv(poll_items_[i].socket, request->buffer, 0, 0);
+        if (P2PNetDebugger::Get().Level() &
+            P2PNetDebugger::kDebugNoReceiveCopy) {
+          zmq_msg_t msg;
+          zmq_msg_init_size(&msg, request->buffer_size);
+          zmq_msg_recv(&msg, poll_items_[i].socket, 0);
+        } else {
+          zmq_recv(poll_items_[i].socket, request->buffer, request->buffer_size,
+                   0);
+        }
+        P2PNetDebugger::Get().PrintTime("Recv of %u calls on_complete",
+                                        request->tensor_id);
+        request->on_complete();
       }
     }
   }
