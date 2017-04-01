@@ -18,7 +18,7 @@ def DoSSH(ip, command, log_path):
     thread = Thread(target=run, args=(ip, prog,))
     thread.setDaemon(True)
     thread.start()
-    return thread 
+    return thread
 
 
 def DoRun(script, master, all_ips, log_path):
@@ -27,7 +27,7 @@ def DoRun(script, master, all_ips, log_path):
         threads.append(DoSSH(ip, script, log_path))
     for t in threads:
         t.join()
-    return threads 
+    return threads
 
 
 def DoIndexedRun(script, master, all_ips, log_path):
@@ -36,7 +36,7 @@ def DoIndexedRun(script, master, all_ips, log_path):
         threads.append(DoSSH(ip, script % idx, log_path))
     for t in threads:
         t.join()
-    return threads 
+    return threads
 
 
 def DoMount(master, all_ips, log_path):
@@ -47,7 +47,7 @@ def DoMount(master, all_ips, log_path):
             threads.append(DoSSH(ip, command, log_path))
     for t in threads:
         t.join()
-    return threads 
+    return threads
 
 
 def GetAllIPs(master):
@@ -79,13 +79,13 @@ def main():
                         help='The address of master')
     parser.add_argument('-l', '--log_path', type=str, default='./',
                         help='Log path')
-    parser.add_argument('--mount', action='store_true', 
+    parser.add_argument('--mount', action='store_true',
                         help='Whether to do mount or not.')
     parser.add_argument('--run', type=str, help='Run command.')
     parser.add_argument('--run_indexed', type=str,
                         help='Run command (must contains %%d) with index ' +
                              'which will be assigned by this Python program.')
-    parser.add_argument('--test', action='store_true', 
+    parser.add_argument('--test', action='store_true',
                         help='Fake ips without ec2.')
     args = parser.parse_args()
 
@@ -102,8 +102,8 @@ def main():
         DoRun(args.run, args.master, all_ips, args.log_path)
     if args.run_indexed:
         DoIndexedRun(args.run_indexed, args.master, all_ips, args.log_path)
-            
+
 
 if __name__ == "__main__":
     main()
- 
+
