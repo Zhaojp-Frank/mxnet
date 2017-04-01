@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 #include <zmq.h>
+#include "./ctpl_stl.h"
 #include "./operator_common.h"
 
 using namespace std::chrono;
@@ -60,6 +61,7 @@ class P2PNetDebugger {
 
   constexpr static int kDebugPrintTime = 1;
   constexpr static int kDebugNoCommunication = 2;
+  constexpr static int kDebugNoReceiveCopy = 4;
 
  private:
   P2PNetDebugger() {
@@ -121,6 +123,7 @@ class P2PNet {
   zmq_pollitem_t* poll_items_;
   size_t poll_items_count_;
   std::thread* main_thread_;
+  ctpl::thread_pool *recv_thread_pool_;
   std::vector<struct Request*> internal_request_queue_;
   std::atomic<size_t> internal_request_queue_size_;
   std::mutex internal_mtx; // mutex lock for request_queue_
@@ -128,7 +131,8 @@ class P2PNet {
   std::map<unsigned, size_t> tensor_to_send_request_map_;
   std::map<unsigned, size_t> tensor_to_recv_request_map_;
   std::map<unsigned, void*> recv_request_sockets_;
-  std::map<size_t, unsigned> recv_request_poll_indices;
+  std::map<size_t, unsigned> recv_request_tensor_id_;
+  std::map<void*, size_t> recv_poll_indices_;
 };
 
 }  // namespace op
