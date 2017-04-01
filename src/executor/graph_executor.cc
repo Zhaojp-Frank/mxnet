@@ -526,7 +526,11 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   // Call partition pass here.
   const int num_procs = ctx_map.size();
   LOG(INFO) << "Num procedures: " << num_procs;
-  if (num_procs > 1) {
+  bool need_grad = false;
+  for (OpReqType req : grad_req_type) {
+    if (req != kNullOp) need_grad = true;
+  }
+  if (num_procs > 1 && need_grad) {
     std::string default_group;
     for (const auto& kv : ctx_map) {
       if (kv.second == default_ctx) {
