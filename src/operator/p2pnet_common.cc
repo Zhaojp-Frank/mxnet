@@ -19,7 +19,7 @@ namespace op {
 
 P2PNet::P2PNet() {
   zmq_context_ =  zmq_ctx_new();
-  zmq_ctx_set(zmq_context_, ZMQ_IO_THREADS, 4);
+  zmq_ctx_set(zmq_context_, ZMQ_IO_THREADS, 10);
   server_ = zmq_socket(zmq_context_, ZMQ_ROUTER);
   internal_server_ = zmq_socket(zmq_context_, ZMQ_ROUTER);
   is_main_start_ = false;
@@ -99,26 +99,17 @@ void P2PNet::DoSend(struct Request* request) {
   zmq_msg_init_size(&msg, receiver_identity.size());
   memcpy(zmq_msg_data(&msg), receiver_identity.c_str(), receiver_identity.size());
   zmq_msg_send(&msg, server_, ZMQ_SNDMORE);
-  zmq_msg_init_size(&msg, 0);
+  zmq_msg_init_size(&msg, receiver_identity.size());
+  memcpy(zmq_msg_data(&msg), &request->tensor_id, sizeof(request->tensor_id));
   zmq_msg_send(&msg, server_, ZMQ_SNDMORE);
   zmq_msg_init_data(&msg, (void*)request->buffer, request->buffer_size,
                     DoSendOnComplete, request);
   zmq_msg_send(&msg, server_, 0);
 }
 
-void DoRecvOncomplete(int id, P2PNet::Request* request, void* socket) {
-  (void) id;
-  P2PNetDebugger::Get().PrintTime("Recv of %u", request->tensor_id);
-  zmq_recv(socket, request->buffer, 0, 0);
-  zmq_recv(socket, request->buffer, request->buffer_size, 0);
-  P2PNetDebugger::Get().PrintTime("Recv of %u calls on_complete",
-                                  request->tensor_id);
-  request->on_complete();
-}
-
-void P2PNet::DoRecv(struct Request* request) {
+void P2PNet::DoRequestRecv(struct Request* request) {
   void* request_socket;
-  auto it = recv_request_sockets_.find(request->tensor_id);
+  auto it = recv_request_sockets_.find(request->address);
   if (it == recv_request_sockets_.end()) {
     request_socket = zmq_socket(zmq_context_, ZMQ_DEALER);
     std::ostringstream address;
@@ -127,7 +118,7 @@ void P2PNet::DoRecv(struct Request* request) {
     zmq_setsockopt(request_socket, ZMQ_IDENTITY, identity.c_str(),
                    identity.size());
     zmq_connect(request_socket, address.str().c_str());
-    recv_request_sockets_[request->tensor_id] = request_socket;
+    recv_request_sockets_[request->address] = request_socket;
     // TODO: We can use a more efficient way to avoid copying everytime.
     // But this may not be very critical.
     poll_items_count_++;
@@ -150,10 +141,43 @@ void P2PNet::DoRecv(struct Request* request) {
   zmq_send(request_socket, &request->tensor_id, sizeof(request->tensor_id), 0);
 }
 
+void P2PNet::DoRecv(void* socket) {
+  unsigned tensor_id;
+  zmq_recv(socket, &tensor_id, sizeof(tensor_id), 0);
+  auto it = tensor_to_recv_request_map_.find(tensor_id);
+  struct Request* request = internal_request_queue_[it->second];
+  tensor_to_recv_request_map_.erase(it);
+  //// FIXME
+  //poll_items_[i].events = ZMQ_POLLOUT;
+  //recv_thread_pool_->push(DoRecvOncomplete, request,
+                          //poll_items_[i].socket);
+  P2PNetDebugger::Get().PrintTime("Recv of %u", request->tensor_id);
+  if (P2PNetDebugger::Get().Level() &
+      P2PNetDebugger::kDebugNoReceiveCopy) {
+    zmq_msg_t msg;
+    zmq_msg_init_size(&msg, request->buffer_size);
+    zmq_msg_recv(&msg, socket, 0);
+  } else {
+    zmq_recv(socket, request->buffer, request->buffer_size, 0);
+  }
+  P2PNetDebugger::Get().PrintTime("Recv of %u calls on_complete",
+                                  request->tensor_id);
+  request->on_complete();
+}
+
+void DoRecvOncomplete(int id, P2PNet::Request* request, void* socket) {
+  (void) id;
+  P2PNetDebugger::Get().PrintTime("Recv of %u", request->tensor_id);
+  zmq_recv(socket, request->buffer, 0, 0);
+  zmq_recv(socket, request->buffer, request->buffer_size, 0);
+  P2PNetDebugger::Get().PrintTime("Recv of %u calls on_complete",
+                                  request->tensor_id);
+  request->on_complete();
+}
+
+
 void P2PNet::DoInternalRequest(size_t index) {
-  //internal_mtx.lock();
   struct Request* request = internal_request_queue_[index];
-  //internal_mtx.unlock();
   if (request->type == SendRequest) {
     P2PNetDebugger::Get().PrintTime("Received %u SendRequest",
                                     request->tensor_id);
@@ -166,7 +190,7 @@ void P2PNet::DoInternalRequest(size_t index) {
     P2PNetDebugger::Get().PrintTime("Received %u RecvRequest",
                                     request->tensor_id);
     tensor_to_recv_request_map_[request->tensor_id] = index;
-    DoRecv(request);
+    DoRequestRecv(request);
   }
 }
 
@@ -178,9 +202,7 @@ void P2PNet::DoExternalRequest() {
   auto it = tensor_to_send_request_map_.find(tensor_id);
   P2PNetDebugger::Get().PrintTime("Received %u ExternalRequest", tensor_id);
   if (it != tensor_to_send_request_map_.end()) {
-    //internal_mtx.lock();
     struct Request* request = internal_request_queue_[it->second];
-    //internal_mtx.unlock();
     DoSend(request);
   }
 }
@@ -203,29 +225,7 @@ void P2PNet::Main() {
     }
     for (unsigned i = 2; i < poll_items_count_; i++) {
       if (poll_items_[i].revents & ZMQ_POLLIN) {
-        auto it = tensor_to_recv_request_map_.find(recv_request_tensor_id_[i]);
-        //internal_mtx.lock();
-        struct Request* request = internal_request_queue_[it->second];
-        //internal_mtx.unlock();
-        tensor_to_recv_request_map_.erase(it);
-        //// FIXME
-        //poll_items_[i].events = ZMQ_POLLOUT;
-        //recv_thread_pool_->push(DoRecvOncomplete, request,
-                                //poll_items_[i].socket);
-        P2PNetDebugger::Get().PrintTime("Recv of %u", request->tensor_id);
-        zmq_recv(poll_items_[i].socket, request->buffer, 0, 0);
-        if (P2PNetDebugger::Get().Level() &
-            P2PNetDebugger::kDebugNoReceiveCopy) {
-          zmq_msg_t msg;
-          zmq_msg_init_size(&msg, request->buffer_size);
-          zmq_msg_recv(&msg, poll_items_[i].socket, 0);
-        } else {
-          zmq_recv(poll_items_[i].socket, request->buffer, request->buffer_size,
-                   0);
-        }
-        P2PNetDebugger::Get().PrintTime("Recv of %u calls on_complete",
-                                        request->tensor_id);
-        request->on_complete();
+        DoRecv(poll_items_[i].socket);
       }
     }
   }
@@ -243,11 +243,6 @@ void P2PNet::DoRequest(struct Request* request) {
   std::string identity = CreateIdentity();
   zmq_setsockopt(request_socket, ZMQ_IDENTITY, identity.c_str(), 8);
   zmq_connect(request_socket, "inproc://mxnet_local_request");
-  //internal_mtx.lock();
-  //size_t index = internal_request_queue_.size();
-  //internal_request_queue_.resize(index + 1);
-  //internal_request_queue_[index] = request;
-  //internal_mtx.unlock();
   size_t index = internal_request_queue_size_.fetch_add(1);
   internal_request_queue_[index] = request;
   zmq_send(request_socket, &index, sizeof(index), 0);

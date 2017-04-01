@@ -110,7 +110,8 @@ class P2PNet {
   void DoInternalRequest(size_t request_index);
   void DoExternalRequest();
   void DoSend(struct Request* request);
-  void DoRecv(struct Request* request);
+  void DoRecv(void* socket);
+  void DoRequestRecv(struct Request* request);
 
   void* zmq_context_;
   // Every worker contains a server socket to allow other workers to connect to .
@@ -130,7 +131,7 @@ class P2PNet {
   std::map<unsigned, std::string> tensor_to_receiver_map_;
   std::map<unsigned, size_t> tensor_to_send_request_map_;
   std::map<unsigned, size_t> tensor_to_recv_request_map_;
-  std::map<unsigned, void*> recv_request_sockets_;
+  std::map<std::string, void*> recv_request_sockets_;
   std::map<size_t, unsigned> recv_request_tensor_id_;
   std::map<void*, size_t> recv_poll_indices_;
 };

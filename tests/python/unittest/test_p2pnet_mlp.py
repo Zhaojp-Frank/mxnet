@@ -202,7 +202,10 @@ def main():
         if args.host_file is not None:
             with open(args.host_file) as fp:
                 for line in fp:
-                    addresses.append(line.strip() + ":9000")
+                    if line.find(":") == -1:
+                        addresses.append(line.strip() + ":9000")
+                    else:
+                        addresses.append(line.strip())
         else:
             addresses = args.addresses.split(',')
         print(addresses)
