@@ -13,6 +13,9 @@
 #include "../mshadow_op.h"
 #include "./mkl_util-inl.h"
 
+#undef MKL_EXPERIMENTAL
+#define MKL_EXPERIMENTAL 0
+
 namespace mxnet {
 namespace op {
 
@@ -71,15 +74,24 @@ class MKLElementWiseSumOnlyFwdOp : public Operator {
       const std::vector<TShape>& in_shapes,
       const std::vector<TShape>& out_shapes) {
     SanityCheck(in_shapes, out_shapes);
+    LOG(INFO) << in_shapes[0] << " " << num_args_;
     padded_dshape_ = ConvertTo4DShape(in_shapes[0]);
-    coeffs_ = std::vector<DType>(padded_dshape_.Size(), 1);
+    coeffs_ = std::vector<DType>(num_args_, 1);
 
     const size_t dim_src = 4;
     std::vector<size_t> sizes_src(dim_src), strides_src(dim_src);
     for (size_t d = 0; d < dim_src; ++d) {
-      sizes_src[d] = in_shapes[0][dim_src - d - 1];
+      sizes_src[d] = padded_dshape_[dim_src - d - 1];
       strides_src[d] = (d == 0) ? 1 : strides_src[d - 1] * sizes_src[d - 1];
     }
+    for (size_t d = 0; d < dim_src; ++d) {
+      std::cout << sizes_src[d] << " ";
+    }
+    std::cout << std::endl;
+    for (size_t d = 0; d < dim_src; ++d) {
+      std::cout << strides_src[d] << " ";
+    }
+    std::cout << std::endl;
 
     // Create user layout.
     for (size_t i = 0; i < num_args_; ++i) {
@@ -91,10 +103,13 @@ class MKLElementWiseSumOnlyFwdOp : public Operator {
         dim_src, &sizes_src[0], &strides_src[0]);
 
 #if MKL_EXPERIMENTAL == 0
+    dnnPrimitiveAttributes_t attributes = NULL;
+    MKLDNN_CALL(dnnPrimitiveAttributesCreate<DType>(&attributes));
     // Only create SumPrimitive when NOT using this flag. Otherwise, layout information
     // is required.
     MKLDNN_CALL(dnnSumCreate<DType>(
           &sum_primitive_, nullptr, num_args_, fwd_top_data_->layout_usr, &coeffs_[0]));
+    MKLDNN_CALL(dnnPrimitiveAttributesDestroy<DType>(attributes));
 #endif
   }
 
@@ -176,6 +191,7 @@ class MKLElementWiseSumOnlyFwdOp : public Operator {
       bottom_data.push_back(in_data[i].dptr_);
 #endif
     }
+    LOG(INFO) << "++++++++++++++++++++++++++++++++++++++++++++++++++++";
 
     void *eltwise_res[dnnResourceNumber];
     // Convert input layouts.
