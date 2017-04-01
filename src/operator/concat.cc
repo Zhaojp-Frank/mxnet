@@ -17,7 +17,7 @@ namespace op {
 template<>
 Operator* CreateOp<cpu>(ConcatParam param, int dtype) {
   Operator *op = NULL;
-#if MXNET_USE_MKL2017 == 1
+/*#if MXNET_USE_MKL2017 == 1
   if (1 == param.dim) {
     switch (dtype) {
       case mshadow::kFloat32:
@@ -30,7 +30,7 @@ Operator* CreateOp<cpu>(ConcatParam param, int dtype) {
   }
   if (enableMKLWarnGenerated())
     LOG(INFO) << MKLConcatOp<cpu, float>::getName() << " Skip MKL optimization";
-#endif
+#endif*/
   MSHADOW_TYPE_SWITCH(dtype, DType, {
     op = new ConcatOp<cpu, DType>(param);
   });
@@ -40,6 +40,15 @@ Operator* CreateOp<cpu>(ConcatParam param, int dtype) {
 Operator* ConcatProp::CreateOperatorEx(Context ctx, std::vector<TShape> *in_shape,
                                        std::vector<int> *in_type) const {
   DO_BIND_DISPATCH(CreateOp, param_, in_type->at(0));
+}
+
+Operator* ConcatProp::CreateBackwardOperatorEx(
+    const Context& ctx,
+    const std::vector<TShape>& in_shape,
+    const std::vector<int>& in_type,
+    const std::vector<TShape>& out_shape,
+    const std::vector<int>& out_type) const {
+  DO_BIND_DISPATCH(CreateOp, param_, in_type[0]);
 }
 
 DMLC_REGISTER_PARAMETER(ConcatParam);

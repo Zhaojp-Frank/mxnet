@@ -17,5 +17,22 @@ Operator* CreateOp<gpu>(FullyConnectedParam param, int dtype,
   })
   return op;
 }
+
+
+template<>
+Operator* CreateBackwardOp<gpu>(
+    const FullyConnectedParam& param,
+    int dtype,
+    const std::vector<TShape>& out_grad_shape,
+    const std::vector<TShape>& in_data_shape,
+    const std::vector<TShape>& out_data_shape,
+    const std::vector<TShape>& in_grad_shape) {
+  Operator *op = NULL;
+  MSHADOW_REAL_TYPE_SWITCH(dtype, DType, {
+    op = new FullyConnectedOp<gpu, DType>(param);
+  })
+  return op;
+}
+
 }  // namespace op
 }  // namespace mxnet

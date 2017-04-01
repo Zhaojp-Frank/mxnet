@@ -335,6 +335,15 @@ Operator* CreateOp(ConvolutionParam param, int dtype,
                    std::vector<TShape> *out_shape,
                    Context ctx);
 
+template<typename xpu>
+Operator* CreateBackwardOp(
+    const ConvolutionParam& param,
+    int dtype,
+    const std::vector<TShape>& out_grad_shape,
+    const std::vector<TShape>& in_data_shape,
+    const std::vector<TShape>& out_data_shape,
+    const std::vector<TShape>& in_grad_shape);
+
 #if DMLC_USE_CXX11
 class ConvolutionProp : public OperatorProperty {
  public:
@@ -522,6 +531,13 @@ class ConvolutionProp : public OperatorProperty {
 
   Operator* CreateOperatorEx(Context ctx, std::vector<TShape> *in_shape,
                              std::vector<int> *in_type) const override;
+
+  Operator* CreateBackwardOperatorEx(
+      const Context& ctx,
+      const std::vector<TShape>& in_shape,
+      const std::vector<int>& in_type,
+      const std::vector<TShape>& out_shape,
+      const std::vector<int>& out_type) const override;
 
  private:
   ConvolutionParam param_;

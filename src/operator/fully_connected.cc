@@ -24,9 +24,9 @@ Operator* CreateOp<cpu>(FullyConnectedParam param, int dtype,
 #if MXNET_USE_MKL2017 == 1
   switch (dtype) {
   case mshadow::kFloat32:
-    return new MKLFullyConnectedOp<cpu, float>(param);
+    return new MKLFullyConnectedOp<cpu, float>(param, *in_shape, *out_shape);
   case mshadow::kFloat64:
-    return new MKLFullyConnectedOp<cpu, double>(param);
+    return new MKLFullyConnectedOp<cpu, double>(param, *in_shape, *out_shape);
   default:
     LOG(INFO) << MKLFullyConnectedOp<cpu, float>::getName() << " Skip MKL optimization";
     break;
@@ -66,17 +66,19 @@ Operator* CreateOp<cpu>(FullyConnectedParam param, int dtype,
 }
 
 template<>
-Operator* CreateBackwardOp<cpu>(const FullyConnectedParam& param,
-                                int dtype,
-                                const std::vector<TShape>& in_shape,
-                                const std::vector<TShape>& out_shape,
-                                const Context& ctx) {
+Operator* CreateBackwardOp<cpu>(
+    const FullyConnectedParam& param,
+    int dtype,
+    const std::vector<TShape>& out_grad_shape,
+    const std::vector<TShape>& in_data_shape,
+    const std::vector<TShape>& out_data_shape,
+    const std::vector<TShape>& in_grad_shape) {
 #if MXNET_USE_MKL2017 == 1
   switch (dtype) {
   case mshadow::kFloat32:
-    return new MKLFullyConnectedOp<cpu, float>(param);
+    return new MKLFullyConnectedOp<cpu, float>(param, in_data_shape, out_grad_shape);
   case mshadow::kFloat64:
-    return new MKLFullyConnectedOp<cpu, double>(param);
+    return new MKLFullyConnectedOp<cpu, double>(param, in_data_shape, out_grad_shape);
   default:
     LOG(INFO) << MKLFullyConnectedOp<cpu, float>::getName() << " Skip MKL optimization";
     break;
@@ -118,8 +120,10 @@ Operator* FullyConnectedProp::CreateBackwardOperatorEx(
     const std::vector<int>& in_type,
     const std::vector<TShape>& out_shape,
     const std::vector<int>& out_type) const {
+  std::vector<TShape> out_grad_shape, in_data_shape, out_data_shape;
+  ParseBackwardInputs(*this, in_shape, &out_grad_shape, &in_data_shape, &out_data_shape);
   DO_BIND_DISPATCH(CreateBackwardOp, param_, in_type[0],
-                   in_shape, out_shape, ctx);
+                   out_grad_shape, in_data_shape, out_data_shape, out_shape);
 }
 
 

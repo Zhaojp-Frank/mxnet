@@ -240,6 +240,32 @@ inline void ParamParser(nnvm::NodeAttrs* attrs) {
   attrs->parsed = std::move(param);
 }
 
+template<typename T>
+void ParseBackwardInputs(
+    const OperatorProperty& prop,
+    const std::vector<T>& in,
+    std::vector<T>* out_grad,
+    std::vector<T>* in_data,
+    std::vector<T>* out_data) {
+  out_grad->resize(prop.NumVisibleOutputs());
+  in_data->resize(prop.ListArguments().size());
+  out_data->resize(prop.NumOutputs());
+  // Create pointer arrays.
+  std::vector<T*> out_grad_ptr(out_grad->size());
+  std::vector<T*> in_data_ptr(in_data->size());
+  std::vector<T*> out_data_ptr(out_data->size());
+  auto fn_to_ptr = [] (T& val) { return &val; };
+  std::transform(out_grad->begin(), out_grad->end(), out_grad_ptr.begin(), fn_to_ptr);
+  std::transform(in_data->begin(), in_data->end(), in_data_ptr.begin(), fn_to_ptr);
+  std::transform(out_data->begin(), out_data->end(), out_data_ptr.begin(), fn_to_ptr);
+  const std::vector<T*>& in_ptr = prop.BackwardInputs(
+      out_grad_ptr, in_data_ptr, out_data_ptr);
+  CHECK_EQ(in_ptr.size(), in.size());
+  for (size_t i = 0; i < in_ptr.size(); ++i) {
+    *in_ptr[i] = in[i];
+  }
+}
+
 }  // namespace op
 }  // namespace mxnet
 #endif  // MXNET_OPERATOR_OPERATOR_COMMON_H_

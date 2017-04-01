@@ -16,6 +16,8 @@
 #include "../engine/profiler.h"
 #include "../operator/p2pnet_common.h"
 
+//#define SPLIT_GRADIENT_TEST
+
 namespace mxnet {
 namespace exec {
 GraphExecutor::~GraphExecutor() {
@@ -73,12 +75,13 @@ const std::vector<NDArray>& GraphExecutor::outputs() const {
 }
 
 nnvm::NodeEntry AttrHint(nnvm::NodeEntry src, nnvm::NodeEntry like) {
-  static const Op* id_like = Op::Get("_identity_with_attr_like_rhs");
-  nnvm::NodePtr n = nnvm::Node::Create();
-  n->attrs.op = id_like;
-  n->attrs.name = src.node->attrs.name + "_id";
-  n->inputs = {src, like};
-  return nnvm::NodeEntry{n, 0, 0};
+  //static const Op* id_like = Op::Get("_identity_with_attr_like_rhs");
+  //nnvm::NodePtr n = nnvm::Node::Create();
+  //n->attrs.op = id_like;
+  //n->attrs.name = src.node->attrs.name + "_id";
+  //n->inputs = {src, like};
+  //return nnvm::NodeEntry{n, 0, 0};
+  return src;
 }
 
 nnvm::NodeEntry AggregateGradient(std::vector<nnvm::NodeEntry>&& v) {
@@ -180,9 +183,11 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
   if (address_set.size() == 1) {
     return g;
   }
-  //std::cout << "==================== Original Graph ====================" << std::endl;
-  //DFSVisit(g.outputs, [&g, &idx] (const nnvm::NodePtr& n) {
-    //std::cout << n->attrs.name << "(" << idx.node_id(n.get()) << ")" << " : ";
+  std::cout << "==================== Original Graph ====================" << std::endl;
+  //DFSVisit(g.outputs, [&g, &idx, & address_vec] (const nnvm::NodePtr& n) {
+    //std::cout << n->attrs.name << "(" << idx.node_id(n.get()) << ")"
+              //<< " " << address_vec[idx.node_id(n.get())]
+              //<< " : ";
     //for (const auto e : n->inputs) {
       //std::cout << e.node->attrs.name << "(" << idx.node_id(e.node.get()) << ")" << "_" << e.index << " : ";
       //std::cout << g.GetAttr<nnvm::ShapeVector>("shape")[idx.entry_id(e)]
@@ -264,7 +269,7 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
   grad_store_ = new_grad_store;
   std::cout << "SplitDistributedGraph finished" << std::endl;
 
-  //std::cout << "==================== New Graph ====================" << std::endl;
+  std::cout << "==================== New Graph ====================" << std::endl;
   //DFSVisit(g.outputs, [&g, &new_idx] (const nnvm::NodePtr& n) {
     //std::cout << n->attrs.name << " : ";
     //for (const auto e : n->inputs) {
@@ -297,6 +302,7 @@ nnvm::Graph GraphExecutor::InitFullGraph(
 
   nnvm::Graph g;
   g.outputs = symbol.outputs;
+
   bool need_grad = false;
   for (OpReqType req : grad_req_type) {
     if (req != kNullOp) need_grad = true;
@@ -336,11 +342,7 @@ nnvm::Graph GraphExecutor::InitFullGraph(
   nnvm::Graph g_grad = nnvm::pass::Gradient(
       g, symbol.outputs, xs, head_grad_entry_,
       AggregateGradient, need_mirror);
-  CHECK_EQ(g_grad.outputs.size(), xs.size());
-  for (const auto &e : g_grad.outputs) {
-    g.outputs.push_back(e);
-  }
-  return g;
+  return g_grad;
 }
 
 // pass to assign context to the graph
@@ -386,7 +388,7 @@ Graph AssignContext(Graph g,
     device_map[kv.first] = ctx2id.at(kv.second);
   }
 
-#if 0
+#ifdef SPLIT_GRADIENT_TEST
   g = nnvm::pass::SplitGradientTest(g, "__ctx_group__", num_forward_outputs);
 #endif
   size_t arg_top = 0, aux_top = 0;
@@ -424,6 +426,7 @@ Graph AssignContext(Graph g,
   }
   g.attrs["device"] = std::make_shared<dmlc::any>(std::move(device));
   g = nnvm::pass::PlaceDevice(g, "__ctx_group__", device_map, "_CrossDeviceCopy");
+  LOG(INFO) << "Place device pass finished.";
   const auto& assigned_device = g.GetAttr<nnvm::DeviceVector>("device");
 
   ContextVector vcontext;
@@ -521,12 +524,21 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   nnvm::Graph g = InitFullGraph(symbol, grad_req_type, arg_grad_store);
   g = InferShapeType(g, in_args, aux_states);
   // Call partition pass here.
-  //const int num_procs = ctx_map.size();
-  //LOG(INFO) << "Num procedures: " << num_procs;
-  //if (num_procs > 1) {
-    //g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_procs);
-    //g = nnvm::ApplyPass(g, "PartitionPass");
-  //}
+  const int num_procs = ctx_map.size();
+  LOG(INFO) << "Num procedures: " << num_procs;
+  if (num_procs > 1) {
+    std::string default_group;
+    for (const auto& kv : ctx_map) {
+      if (kv.second == default_ctx) {
+        default_group = kv.first;
+        break;
+      }
+    }
+    CHECK(default_group != "") << "Default context does not appear in context map";
+    g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_procs);
+    g.attrs["default_group"] = std::make_shared<nnvm::any>(default_group);
+    g = nnvm::ApplyPass(g, "PartitionPass");
+  }
   // TODO(minjie): Here has an implicit assumption.
   // The ctx_map is of form {"group:%d" % id : context object}
   // assign contexts to the graph.
