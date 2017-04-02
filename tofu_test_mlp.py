@@ -18,7 +18,10 @@ def get_symbol(args):
   print('Batch size: %d, Hidden size: %d' % (batch_size, hidden_size))
   net = mx.symbol.Variable('data')
   for i in range(args.num_layers):
+    #weight = mx.symbol.Variable('fc%d_weight' % i)
+    #net = mx.symbol.dot(net, weight)
     net = mx.symbol.FullyConnected(net, name='fc%d' % i, num_hidden=hidden_size, no_bias=True)
+    net = mx.symbol.Activation(net, act_type='sigmoid')
   net = mx.symbol.SoftmaxOutput(net)
   return net
 
@@ -47,8 +50,14 @@ def test_mlp():
     print(net.list_outputs())
 
     # infer shapes
-    arg_shapes, out_shapes, aux_shapes = net.infer_shape(data=(args.batch_size, args.hidden_size))
-    arg_types, out_types, aux_types = net.infer_type(data=mx.base.mx_real_t)
+    in_shapes = {}
+    #in_shapes = {'fc%d_weight' % i: (args.hidden_size, args.hidden_size) for i in range(args.num_layers)}
+    in_shapes['data'] = (args.batch_size, args.hidden_size)
+    in_types = {}
+    #in_types = {'fc%d_weight' % i : mx.base.mx_real_t for i in range(args.num_layers)}
+    in_types['data'] = mx.base.mx_real_t
+    arg_shapes, out_shapes, aux_shapes = net.infer_shape(**in_shapes)
+    arg_types, out_types, aux_types = net.infer_type(**in_types)
 
     # create ndarrays for all arguments.
     arg_arrays = [mx.nd.zeros(shape, default_ctx, dtype=dtype)

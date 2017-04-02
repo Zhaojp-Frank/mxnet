@@ -51,6 +51,48 @@ void ElementWiseSumCompute_(const nnvm::NodeAttrs& attrs,
       Assign(out, req[0], in_0 + in_1 + in_2 + in_3);
       break;
     }
+    case 5: {
+      Tensor<xpu, 1, DType> in_0 = in_data[0].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_1 = in_data[1].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_2 = in_data[2].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_3 = in_data[3].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_4 = in_data[4].FlatTo1D<xpu, DType>(s);
+      Assign(out, req[0], in_0 + in_1 + in_2 + in_3 + in_4);
+      break;
+    }
+    case 6: {
+      Tensor<xpu, 1, DType> in_0 = in_data[0].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_1 = in_data[1].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_2 = in_data[2].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_3 = in_data[3].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_4 = in_data[4].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_5 = in_data[5].FlatTo1D<xpu, DType>(s);
+      Assign(out, req[0], in_0 + in_1 + in_2 + in_3 + in_4 + in_5);
+      break;
+    }
+    case 7: {
+      Tensor<xpu, 1, DType> in_0 = in_data[0].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_1 = in_data[1].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_2 = in_data[2].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_3 = in_data[3].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_4 = in_data[4].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_5 = in_data[5].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_6 = in_data[6].FlatTo1D<xpu, DType>(s);
+      Assign(out, req[0], in_0 + in_1 + in_2 + in_3 + in_4 + in_5 + in_6);
+      break;
+    }
+    case 8: {
+      Tensor<xpu, 1, DType> in_0 = in_data[0].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_1 = in_data[1].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_2 = in_data[2].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_3 = in_data[3].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_4 = in_data[4].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_5 = in_data[5].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_6 = in_data[6].FlatTo1D<xpu, DType>(s);
+      Tensor<xpu, 1, DType> in_7 = in_data[7].FlatTo1D<xpu, DType>(s);
+      Assign(out, req[0], in_0 + in_1 + in_2 + in_3 + in_4 + in_5 + in_6 + in_7);
+      break;
+    }
     default: {
       Tensor<xpu, 1, DType> in_0 = in_data[0].FlatTo1D<xpu, DType>(s);
       Assign(out, req[0], F<mshadow_op::identity>(in_0));

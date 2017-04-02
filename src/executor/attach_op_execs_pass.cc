@@ -15,6 +15,16 @@ using namespace std;
 namespace mxnet {
 namespace exec {
 
+namespace {
+  void DoNothingFCompute(const nnvm::NodeAttrs& attrs,
+      const OpContext& ctx,
+      const std::vector<TBlob>& inputs,
+      const std::vector<OpReqType>& req,
+      const std::vector<TBlob>& outputs) {
+    // DO nothing.
+  }
+}
+
 // forward executor
 class ForwardOpExecutor : public OpExecutor {
  public:
@@ -247,6 +257,17 @@ Graph AttachOpExecs(Graph g) {
       continue;
     }
     const nnvm::Op* op = CHECK_NOTNULL(inode.source->op());
+    if (false
+        || op->name == "Concat"
+        || op->name == "_backward_Concat"
+        || op->name == "ElementWiseSum"
+        //|| op->name == "_backward_FullyConnected"
+        //|| op->name == "SoftmaxOutput"
+        //|| op->name == "_backward_SoftmaxOutput"
+        ) {
+      ret[i] = std::make_shared<FComputeExecutor>(DoNothingFCompute, inode.source->attrs);
+      continue;
+    }
     if (is_layer_forward.count(op) || is_layer_backward.count(op)) {
       // Layer operator.
       const OperatorProperty& prop = ParseOpProp(inode.source->attrs);
