@@ -25,6 +25,7 @@
 #include <string>
 #include <algorithm>
 #include <vector>
+#include <sys/time.h>
 #include "../activation-inl.h"
 #include "./mkl_util-inl.h"
 
@@ -142,7 +143,6 @@ class MKLFullyConnectedOp : public Operator {
     const size_t expected = param_.no_bias ? 2 : 3;
     CHECK(in_data.size() == expected && in_grad.size() == expected);
     CHECK_EQ(req.size(), expected);
-    int status;
     res_fullyConnected[dnnResourceSrc] =
       reinterpret_cast<void *>(in_data[fullc::kData].dptr_);
     res_fullyConnected[dnnResourceFilter] =
@@ -158,7 +158,14 @@ class MKLFullyConnectedOp : public Operator {
       res_fullyConnected[dnnResourceDiffBias] =
         reinterpret_cast<void *>(in_grad[fullc::kBias].dptr_);
     }
+    //timeval st, ed;
+    //gettimeofday(&st, 0);
+    //LOG(INFO) << in_data[fullc::kData].shape_ << " " << in_data[fullc::kWeight].shape_;
+    //LOG(INFO) << out_grad[fullc::kOut].shape_;
+    //LOG(INFO) << in_grad[fullc::kData].shape_ << " " << in_grad[fullc::kWeight].shape_;
     MKLDNN_CALL(dnnExecute<DType>(fullyConnectedBwdFilter, res_fullyConnected));
+    //gettimeofday(&ed, 0);
+    //printf("Time: %f\n", (ed.tv_sec - st.tv_sec) * 1000 + (ed.tv_usec - st.tv_usec) * .001);
     if (!param_.no_bias) {
       MKLDNN_CALL(dnnExecute<DType>(fullyConnectedBwdBias, res_fullyConnected));
     }

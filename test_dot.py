@@ -11,7 +11,10 @@ cold_skip = 5
 def get_symbol(args):
   A = mx.symbol.Variable('A')
   B = mx.symbol.Variable('B')
+  #net = mx.symbol.Activation(A, act_type="sigmoid")
   net = mx.symbol.dot(A, B)
+  net = mx.symbol.Activation(net, act_type="sigmoid")
+  #net = mx.symbol.dot(net, B)
   return net
 
 def main():
