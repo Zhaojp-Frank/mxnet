@@ -87,6 +87,7 @@ void DoSendOnComplete(void* data, void* hint) {
   P2PNetDebugger::Get().PrintTime(
       "DoSend of %u calls on_complete with %u bytes",
       request->tensor_id, request->buffer_size);
+  request->is_fulfilled = true;
   request->on_complete();
 }
 
@@ -145,6 +146,10 @@ void P2PNet::DoRecv(void* socket) {
   unsigned tensor_id;
   zmq_recv(socket, &tensor_id, sizeof(tensor_id), 0);
   auto it = tensor_to_recv_request_map_.find(tensor_id);
+  if (it == tensor_to_recv_request_map_.end()) {
+    std::cout << "DoRecv got something unusual " << tensor_id << std::endl;
+    CHECK(false);
+  }
   struct Request* request = internal_request_queue_[it->second];
   tensor_to_recv_request_map_.erase(it);
   //// FIXME
@@ -162,6 +167,7 @@ void P2PNet::DoRecv(void* socket) {
   }
   P2PNetDebugger::Get().PrintTime("Recv of %u calls on_complete",
                                   request->tensor_id);
+  request->is_fulfilled = true;
   request->on_complete();
 }
 
@@ -178,6 +184,7 @@ void DoRecvOncomplete(int id, P2PNet::Request* request, void* socket) {
 
 void P2PNet::DoInternalRequest(size_t index) {
   struct Request* request = internal_request_queue_[index];
+  request->is_fulfilled = false;
   if (request->type == SendRequest) {
     P2PNetDebugger::Get().PrintTime("Received %u SendRequest",
                                     request->tensor_id);
@@ -212,8 +219,29 @@ void P2PNet::Main() {
   poll_items_ = new zmq_pollitem_t[poll_items_count_];
   poll_items_[0] = {internal_server_, 0, ZMQ_POLLIN, 0};
   poll_items_[1] = {server_, 0, ZMQ_POLLIN, 0};
+  long timeout =
+    (P2PNetDebugger::Get().Level() & P2PNetDebugger::kDebugPrintPending) ?
+    5000 : -1;
+
   while (true) {
-    zmq_poll(poll_items_, poll_items_count_, -1);
+    int ret = zmq_poll(poll_items_, poll_items_count_, timeout);
+    if (ret == 0) {
+      CHECK(P2PNetDebugger::Get().Level() & P2PNetDebugger::kDebugPrintPending);
+      for (size_t i = 0; i < internal_request_queue_size_; i++) {
+        struct Request* request = internal_request_queue_[i];
+        if (!request->is_fulfilled) {
+          if (request->type == SendRequest) {
+            std::cout << "Pending SendRequest";
+          } else {
+            std::cout << "Pending RecvRequest";
+          }
+          std::cout << " tensor_id: " << request->tensor_id;
+          std::cout << " address: " << request->address << std::endl;
+        }
+      }
+      std::cout << "==========" << std::endl;
+      continue;
+    }
     if (poll_items_[0].revents & ZMQ_POLLIN) { // internal request
       std::string identity;
       size_t index;
