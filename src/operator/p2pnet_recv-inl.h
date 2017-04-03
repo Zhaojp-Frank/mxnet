@@ -27,7 +27,7 @@ namespace op {
 
 struct P2PNetRecvParam: public dmlc::Parameter<P2PNetRecvParam> {
   std::string address;
-  unsigned tensor_id;
+  uint64_t tensor_id;
   TShape shape;
   int dtype;
   DMLC_DECLARE_PARAMETER(P2PNetRecvParam) {

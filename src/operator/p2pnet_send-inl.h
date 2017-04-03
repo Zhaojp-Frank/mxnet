@@ -27,7 +27,7 @@ namespace op {
 
 struct P2PNetSendParam: public dmlc::Parameter<P2PNetSendParam> {
   std::string address;
-  unsigned tensor_id;
+  uint64_t tensor_id;
   DMLC_DECLARE_PARAMETER(P2PNetSendParam) {
     DMLC_DECLARE_FIELD(address).set_default("127.0.0.1:11111")
     .describe("The address and port (ip:port) this operator will send to.");

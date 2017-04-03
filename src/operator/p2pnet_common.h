@@ -94,7 +94,7 @@ class P2PNet {
   struct Request {
     RequestType type;
     std::string address;
-    unsigned tensor_id;
+    uint64_t tensor_id;
     void* buffer;
     size_t buffer_size;
     engine::CallbackOnComplete on_complete;

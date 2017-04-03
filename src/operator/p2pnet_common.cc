@@ -143,7 +143,7 @@ void P2PNet::DoRequestRecv(struct Request* request) {
 }
 
 void P2PNet::DoRecv(void* socket) {
-  unsigned tensor_id;
+  uint64_t tensor_id;
   zmq_recv(socket, &tensor_id, sizeof(tensor_id), 0);
   auto it = tensor_to_recv_request_map_.find(tensor_id);
   if (it == tensor_to_recv_request_map_.end()) {
@@ -203,7 +203,7 @@ void P2PNet::DoInternalRequest(size_t index) {
 
 void P2PNet::DoExternalRequest() {
   std::string identity;
-  unsigned tensor_id = 0;
+  uint64_t tensor_id = 0;
   RecvWithIdentity(server_, &identity, &tensor_id, sizeof(tensor_id));
   tensor_to_receiver_map_[tensor_id] = identity;
   auto it = tensor_to_send_request_map_.find(tensor_id);
