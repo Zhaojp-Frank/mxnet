@@ -62,6 +62,7 @@ class P2PNetDebugger {
   constexpr static int kDebugPrintTime = 1;
   constexpr static int kDebugNoCommunication = 2;
   constexpr static int kDebugNoReceiveCopy = 4;
+  constexpr static int kDebugPrintPending = 8;
 
  private:
   P2PNetDebugger() {
@@ -96,8 +97,8 @@ class P2PNet {
     unsigned tensor_id;
     void* buffer;
     size_t buffer_size;
-    //std::vector<NDArray*> ndptrs;
     engine::CallbackOnComplete on_complete;
+    bool is_fulfilled;
   };
   void DoRequest(struct Request* request);
   void FreeRequest(struct Request* request);
