@@ -77,6 +77,7 @@ def test_mlp():
 
     for i in range(num_loops):
         print('=> loop %d' % i);
+        st_l = time.time()
         if i == cold_skip:
             t0 = time.time()
         outputs = executor.forward()
@@ -88,6 +89,8 @@ def test_mlp():
         # We need make sure all send nodes have finished before the end of the iteration.
         if len(outputs) > 0:
             outputs[-1].wait_to_read()
+        ed_l = time.time()
+        print('=> loop duration %f' % float(ed_l - st_l))
     t1 = time.time()
 
     duration = t1 - t0
