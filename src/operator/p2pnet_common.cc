@@ -5,10 +5,11 @@
  * \author Chien-Chin Huang
 */
 #include <chrono>
+#include <fstream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <thread>
-#include <iterator>
 #include "./p2pnet_common.h"
 #include "./ctpl_stl.h"
 
@@ -28,6 +29,19 @@ P2PNet::P2PNet() {
   recv_thread_pool_ =  new ctpl::thread_pool(8);
   internal_request_queue_size_ = 0;
   internal_request_queue_.resize(kRequestQueueSize);
+#ifdef P2PNET_MPI
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank_);
+  std::ifstream host_file;
+  host_file.open("/home/fegin/workspace/mxnet/host");
+  std::string host;
+  int rank = 0;
+  while (std::getline(host_file, host)) {
+    mpi_rank_to_host_.push_back(host);
+    mpi_host_to_rank_[host] = rank;
+    std::cout << "Rank : " << rank << " " << host << std::endl;
+    rank++;
+  }
+#endif
 }
 
 P2PNet::~P2PNet() {
@@ -36,39 +50,11 @@ P2PNet::~P2PNet() {
   delete recv_thread_pool_;
 }
 
-bool P2PNet::Init(const std::string& address) {
-  for (unsigned i = 0; i < internal_request_queue_size_; i++) {
-    delete internal_request_queue_[i];
-    internal_request_queue_[i] = nullptr;
-  }
-  internal_request_queue_size_ = 0;
-
-  if (!is_bind_) {
-    srand(time(nullptr));
-    std::ostringstream address_with_proto;
-    address_with_proto << "tcp://" << address;
-    int ret = zmq_bind(server_, address_with_proto.str().c_str());
-    if (ret == 0) {
-      zmq_bind(internal_server_, "inproc://mxnet_local_request");
-      is_bind_ = true;
-      std::cout << "Successfully bound to " << address_with_proto.str()
-                << std::endl;
-      return true;
-    } else {
-      std::cout << "Failed to bind to " << address_with_proto.str()
-                << std::endl;
-      return false;
-    }
-  }
-  return true;
-};
-
 static int RecvWithIdentity(void* socket, std::string* identity, void* buffer,
                             int len) {
-  // TODO: Use constant instead of the magic number 8.
-  char identity_buffer[8];
-  zmq_recv(socket, identity_buffer, 8, 0);
-  *identity = std::string(identity_buffer, 8);
+  char identity_buffer[P2PNet::kIdentitySize];
+  zmq_recv(socket, identity_buffer, P2PNet::kIdentitySize, 0);
+  *identity = std::string(identity_buffer, P2PNet::kIdentitySize);
   zmq_recv(socket, buffer, 0, 0);
   return zmq_recv(socket, buffer, len, 0);
 }
@@ -78,7 +64,9 @@ static std::string CreateIdentity() {
   std::mt19937 rng;
   rng.seed(std::random_device()());
   std::uniform_int_distribution<std::mt19937::result_type> dist6(0, 9999999);
-  return std::to_string(dist6(rng) + 90000000);
+  std::string ret = std::to_string(dist6(rng) + 90000000);
+  CHECK(ret.size() == P2PNet::kIdentitySize);
+  return ret;
 }
 
 void DoSendOnComplete(void* data, void* hint) {
@@ -214,6 +202,19 @@ void P2PNet::DoExternalRequest() {
   }
 }
 
+void P2PNet::SetMainAffinity() {
+  unsigned affinity = dmlc::GetEnv("MXNET_P2PNET_MAIN_AFFINITY", 13);
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  CPU_SET(affinity, &cpuset);
+  int rc = pthread_setaffinity_np(main_thread_->native_handle(),
+				  sizeof(cpu_set_t), &cpuset);
+  if (rc != 0) {
+    std::cerr << "Error calling pthread_setaffinity_np: " << rc << std::endl;
+    CHECK(false);
+  }
+}
+
 void P2PNet::Main() {
   poll_items_count_ = 2;
   poll_items_ = new zmq_pollitem_t[poll_items_count_];
@@ -259,17 +260,147 @@ void P2PNet::Main() {
   }
 }
 
+#ifdef P2PNET_MPI
+void P2PNet::MPI_DoSend(struct Request* request) {
+  MPI_Request *mpi_request = new MPI_Request();
+  int rank = mpi_host_to_rank_[request->address];
+  MPI_Isend(request->buffer, request->buffer_size,  MPI_BYTE, rank,
+            request->tensor_id, MPI_COMM_WORLD, mpi_request);
+  request->mpi_request = mpi_request;
+  mpi_request_queue_.push_back(request);
+  P2PNetDebugger::Get().PrintTime("Sending %u from rank %d to rank %d, address = %s",
+                                  request->tensor_id, mpi_rank_, rank, request->address.c_str());
+}
+
+void P2PNet::MPI_DoRecv(struct Request* request) {
+  MPI_Request *mpi_request = new MPI_Request();
+  int rank = mpi_host_to_rank_[request->address];
+  MPI_Irecv(request->buffer, request->buffer_size,  MPI_BYTE, rank,
+            request->tensor_id, MPI_COMM_WORLD, mpi_request);
+  request->mpi_request = mpi_request;
+  mpi_request_queue_.push_back(request);
+  P2PNetDebugger::Get().PrintTime("Receiving %u from rank %d to rank %d, address = %s",
+                                  request->tensor_id, rank, mpi_rank_, request->address.c_str());
+}
+
+void P2PNet::MPI_RequestOnComplete(struct Request* request) {
+  MPI_Status status;
+  MPI_Wait(request->mpi_request, &status);
+  if (request->type == SendRequest) {
+    P2PNetDebugger::Get().PrintTime("Send %u on_complete with %u bytes",
+                                    request->tensor_id, request->buffer_size);
+  } else if (request->type == RecvRequest) {
+    P2PNetDebugger::Get().PrintTime("Recv %u on_complete with %u bytes",
+                                    request->tensor_id, request->buffer_size);
+  } else {
+    CHECK(false);
+  }
+  request->is_fulfilled = true;
+  request->on_complete();
+}
+
+void P2PNet::MPI_DoInternalRequest(size_t index) {
+  struct Request* request = internal_request_queue_[index];
+  size_t idx = request->address.find_first_of(":");
+  if (idx != request->address.npos) {
+    request->address.resize(idx);
+  }
+  request->is_fulfilled = false;
+  if (request->type == SendRequest) {
+    MPI_DoSend(request);
+  } else if (request->type == RecvRequest) {
+    MPI_DoRecv(request);
+  }
+}
+
+void P2PNet::MPI_Main() {
+  while (true) {
+    // First check the internal request zmq socket.
+    char identity_buffer[P2PNet::kIdentitySize];
+    int ret = zmq_recv(internal_server_, identity_buffer, kIdentitySize,
+                       ZMQ_DONTWAIT);
+    if (ret > 0) {
+      CHECK(ret == kIdentitySize);
+      size_t index;
+      zmq_recv(internal_server_, &index, 0, 0);
+      zmq_recv(internal_server_, &index, sizeof(index), 0);
+      MPI_DoInternalRequest(index);
+    } else {
+      CHECK(errno == EAGAIN || errno == ETERM || errno == ENOTSOCK);
+      if (errno == ETERM || errno == ENOTSOCK) {
+        std::cout << "P2PNet says : bye bye !!!! "<< std::endl;
+        break;
+      }
+    }
+
+    // Loop all MPI requests to see if any request is fulfilled.
+    mpi_request_queue_.erase(
+        std::remove_if (
+          mpi_request_queue_.begin(), mpi_request_queue_.end(),
+          [this] (struct Request* request) {
+            MPI_Status status;
+            int flag;
+            MPI_Test(request->mpi_request, &flag, &status);
+            if (flag) {
+              MPI_RequestOnComplete(request);
+            }
+            return flag;
+          }),
+        mpi_request_queue_.end());
+  }
+}
+#endif
+
+bool P2PNet::Init(const std::string& address) {
+  for (unsigned i = 0; i < internal_request_queue_size_; i++) {
+    delete internal_request_queue_[i];
+    internal_request_queue_[i] = nullptr;
+  }
+  internal_request_queue_size_ = 0;
+
+  if (!is_bind_) {
+    srand(time(nullptr));
+#ifdef P2PNET_MPI
+    (void) address;
+    zmq_bind(internal_server_, "inproc://mxnet_local_request");
+    is_bind_ = true;
+#else
+    std::ostringstream address_with_proto;
+    address_with_proto << "tcp://" << address;
+    int ret = zmq_bind(server_, address_with_proto.str().c_str());
+    if (ret == 0) {
+      zmq_bind(internal_server_, "inproc://mxnet_local_request");
+      is_bind_ = true;
+      std::cout << "Successfully bound to " << address_with_proto.str()
+                << std::endl;
+      return true;
+    } else {
+      std::cout << "Failed to bind to " << address_with_proto.str()
+                << std::endl;
+      return false;
+    }
+#endif
+  }
+  return true;
+};
+
 void P2PNet::Start() {
   if (!is_main_start_) {
+#ifdef P2PNET_MPI
+    main_thread_ = new std::thread(&P2PNet::MPI_Main, this);
+#else
     main_thread_ = new std::thread(&P2PNet::Main, this);
+#endif
     is_main_start_ = true;
+    SetMainAffinity();
   }
 }
 
 void P2PNet::DoRequest(struct Request* request) {
   void* request_socket = zmq_socket(zmq_context_, ZMQ_REQ);
   std::string identity = CreateIdentity();
-  zmq_setsockopt(request_socket, ZMQ_IDENTITY, identity.c_str(), 8);
+  zmq_setsockopt(request_socket, ZMQ_IDENTITY, identity.c_str(),
+                 P2PNet::kIdentitySize);
   zmq_connect(request_socket, "inproc://mxnet_local_request");
   size_t index = internal_request_queue_size_.fetch_add(1);
   internal_request_queue_[index] = request;

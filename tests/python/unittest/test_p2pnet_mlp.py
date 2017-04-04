@@ -5,6 +5,7 @@ import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
 from multiprocessing import Process
+from mpi4py import MPI
 import mxnet as mx
 import numpy as np
 import time
@@ -157,6 +158,7 @@ def Single():
 
 
 def main():
+    import sys
     global BATCH_SIZE
     global WEIGHT_SIZE
     global NUM_LAYERS
@@ -203,13 +205,16 @@ def main():
             with open(args.host_file) as fp:
                 for line in fp:
                     if line.find(":") == -1:
-                        addresses.append(line.strip() + ":9000")
+                        addresses.append(line.strip() + ":9200")
                     else:
                         addresses.append(line.strip())
         else:
             addresses = args.addresses.split(',')
-        print(addresses)
-        MLP_MP(addresses, int(args.worker_index))
+        if args.worker_index is not None:
+            MLP_MP(addresses, int(args.worker_index))
+        else:
+            comm = MPI.COMM_WORLD
+            MLP_MP(addresses, comm.Get_rank())
 
 
 if __name__ == "__main__":

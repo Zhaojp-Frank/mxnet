@@ -1,0 +1,1 @@
+mpiexec -np 2 -ppn 1 -hostfile host  -genv MXNET_P2PNET_DEBUG=1 -genv KMP_AFFINITY="explicit,granularity=fine,proclist=[6,7,8,9,10,11,12,13,14,15,16,17]" python /home/fegin/workspace/mxnet/tests/python/unittest/test_p2pnet_mlp.py -f host -b 8192 -w 8192 -l 1 -n 15 -g 5

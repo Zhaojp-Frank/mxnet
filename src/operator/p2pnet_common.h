@@ -15,6 +15,9 @@
 #include <iomanip>
 #include <map>
 #include <mutex>
+#ifdef P2PNET_MPI
+#include <mpi.h>
+#endif
 #include <mxnet/engine.h>
 #include <mxnet/operator.h>
 #include <mxnet/ndarray.h>
@@ -91,6 +94,7 @@ class P2PNet {
     SendRequest,
     RecvRequest,
   };
+
   struct Request {
     RequestType type;
     std::string address;
@@ -99,20 +103,38 @@ class P2PNet {
     size_t buffer_size;
     engine::CallbackOnComplete on_complete;
     bool is_fulfilled;
+#ifdef P2PNET_MPI
+    MPI_Request *mpi_request;
+#endif
   };
   void DoRequest(struct Request* request);
   void FreeRequest(struct Request* request);
 
   constexpr static int kRequestQueueSize = 1024 * 1024 * 2;
+  constexpr static int kIdentitySize = 8;
 
  private:
   P2PNet();
   void Main();
+  void SetMainAffinity();
   void DoInternalRequest(size_t request_index);
   void DoExternalRequest();
   void DoSend(struct Request* request);
   void DoRecv(void* socket);
   void DoRequestRecv(struct Request* request);
+
+#ifdef P2PNET_MPI
+  void MPI_Main();
+  void MPI_DoInternalRequest(size_t index);
+  void MPI_DoSend(struct Request* request);
+  void MPI_DoRecv(struct Request* request);
+  void MPI_RequestOnComplete(struct Request* request);
+
+  int mpi_rank_;
+  std::vector<std::string> mpi_rank_to_host_;
+  std::map<std::string, int> mpi_host_to_rank_;
+  std::list<struct Request*> mpi_request_queue_;
+#endif
 
   void* zmq_context_;
   // Every worker contains a server socket to allow other workers to connect to .
