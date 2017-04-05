@@ -23,6 +23,11 @@ P2PNet::P2PNet() {
   zmq_ctx_set(zmq_context_, ZMQ_IO_THREADS, 10);
   server_ = zmq_socket(zmq_context_, ZMQ_ROUTER);
   internal_server_ = zmq_socket(zmq_context_, ZMQ_ROUTER);
+  int value = 0;
+  zmq_setsockopt(internal_server_, ZMQ_RCVHWM, &value, sizeof(value));
+  value = 1024;
+  zmq_setsockopt(internal_server_, ZMQ_BACKLOG, &value, sizeof(value));
+  zmq_setsockopt(server_, ZMQ_BACKLOG, &value, sizeof(value));
   is_main_start_ = false;
   is_bind_ = false;
   main_thread_ = nullptr;
@@ -103,7 +108,8 @@ void P2PNet::DoRequestRecv(struct Request* request) {
     request_socket = zmq_socket(zmq_context_, ZMQ_DEALER);
     std::ostringstream address;
     address << "tcp://" << request->address;
-    std::string identity = CreateIdentity();
+    //std::string identity = CreateIdentity();
+    std::string identity = std::to_string(request->tensor_id + 90000000);
     zmq_setsockopt(request_socket, ZMQ_IDENTITY, identity.c_str(),
                    identity.size());
     zmq_connect(request_socket, address.str().c_str());
@@ -353,6 +359,7 @@ void P2PNet::MPI_Main() {
 
 bool P2PNet::Init(const std::string& address) {
   for (unsigned i = 0; i < internal_request_queue_size_; i++) {
+    CHECK(internal_request_queue_[i]->is_fulfilled);
     delete internal_request_queue_[i];
     internal_request_queue_[i] = nullptr;
   }
@@ -398,13 +405,16 @@ void P2PNet::Start() {
 
 void P2PNet::DoRequest(struct Request* request) {
   void* request_socket = zmq_socket(zmq_context_, ZMQ_REQ);
-  std::string identity = CreateIdentity();
+  //std::string identity = CreateIdentity();
+  std::string identity = std::to_string(request->tensor_id + 90000000);
   zmq_setsockopt(request_socket, ZMQ_IDENTITY, identity.c_str(),
                  P2PNet::kIdentitySize);
-  zmq_connect(request_socket, "inproc://mxnet_local_request");
+  int ret = zmq_connect(request_socket, "inproc://mxnet_local_request");
+  CHECK(ret == 0);
   size_t index = internal_request_queue_size_.fetch_add(1);
   internal_request_queue_[index] = request;
-  zmq_send(request_socket, &index, sizeof(index), 0);
+  ret = zmq_send(request_socket, &index, sizeof(index), 0);
+  CHECK((ret == sizeof(index))) << "Ret = " << ret << " Errno = " << errno;
   zmq_close(request_socket);
 }
 
