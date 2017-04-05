@@ -24,4 +24,4 @@ do
 done
 echo $ADDRESS
 set -x
-python tofu_test_conv.py --address=$ADDRESS -i 0 --batch_size=$1 --channel_size=$2 --num_layers=3
+python tofu_test_conv.py --address=$ADDRESS -i 0 --batch_size=$1 --channel_size=$2 --filter_size=$2 --num_layers=3
