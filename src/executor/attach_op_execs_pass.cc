@@ -257,7 +257,7 @@ Graph AttachOpExecs(Graph g) {
       continue;
     }
     const nnvm::Op* op = CHECK_NOTNULL(inode.source->op());
-    if (false
+    /*if (false
         || op->name == "Concat"
         || op->name == "_backward_Concat"
         || op->name == "ElementWiseSum"
@@ -267,7 +267,7 @@ Graph AttachOpExecs(Graph g) {
         ) {
       ret[i] = std::make_shared<FComputeExecutor>(DoNothingFCompute, inode.source->attrs);
       continue;
-    }
+    }*/
     if (is_layer_forward.count(op) || is_layer_backward.count(op)) {
       // Layer operator.
       const OperatorProperty& prop = ParseOpProp(inode.source->attrs);
