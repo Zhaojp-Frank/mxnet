@@ -42,48 +42,14 @@ class MKLConvolutionOp : public Operator {
   static std::string getName() {
     return "MKLConvolutionOp";
   }
-  void SetupBuffer() {
-    convolutionBwdBias = static_cast<dnnPrimitive_t>(NULL);
-    convolutionBwdFilter = static_cast<dnnPrimitive_t>(NULL);
-    convolutionBwdData = static_cast<dnnPrimitive_t>(NULL);
-    convolutionFwd = static_cast<dnnPrimitive_t>(NULL);
-    fwd_bottom_data = MKLData<DType>::create();
-    fwd_top_data = MKLData<DType>::create();
-    fwd_filter_data = MKLData<DType>::create();
-    fwd_bias_data = MKLData<DType>::create();
-    bwdd_top_diff = MKLData<DType>::create();
-    bwdd_bottom_diff = MKLData<DType>::create();
-    bwdd_filter_data = MKLData<DType>::create();
-    bwdf_top_diff = MKLData<DType>::create();
-    bwdf_filter_diff = MKLData<DType>::create();
-    bwdf_bottom_data = MKLData<DType>::create();
-    bwdb_top_diff = MKLData<DType>::create();
-    bwdb_bias_diff = MKLData<DType>::create();
-    // Names are for debugging purposes only.
-    fwd_bottom_data->name = "fwd_bottom_data   @ " + this->getName();
-    fwd_top_data->name = "fwd_top_data      @ " + this->getName();
-    fwd_filter_data->name = "fwd_filter_data   @ " + this->getName();
-    fwd_bias_data->name = "fwd_bias_data     @ " + this->getName();
-    bwdd_top_diff->name = "bwdd_top_diff     @ " + this->getName();
-    bwdd_bottom_diff->name = "bwdd_bottom_diff  @ " + this->getName();
-    bwdd_filter_data->name = "bwdd_filter_data  @ " + this->getName();
-    bwdf_top_diff->name = "bwdf_top_diff     @ " + this->getName();
-    bwdf_bottom_data->name = "bwdf_bottom_data  @ " + this->getName();
-    bwdf_filter_diff->name = "bwdf_filter_diff  @ " + this->getName();
-    bwdb_top_diff->name = "bwdb_top_diff     @ " + this->getName();
-    bwdb_bias_diff->name = "bwdb_bias_diff    @ " + this->getName();
-  }
+  
 
-  explicit MKLConvolutionOp(ConvolutionParam p):
-                            convolutionFwd(NULL),
-                            convolutionBwdData(static_cast<dnnPrimitive_t>(NULL)),
-                            convolutionBwdFilter(static_cast<dnnPrimitive_t>(NULL)),
-                            convolutionBwdBias(static_cast<dnnPrimitive_t>(NULL)) {
-    this->param_ = p;
-    init_mkldnn_ = false;
-    // convert MBytes first to Bytes and then to elements.
-    param_.workspace = (param_.workspace << 20) / sizeof(DType);
+  explicit MKLConvolutionOp(ConvolutionParam p,
+                            const std::vector<TShape>& in_shapes,
+                            const std::vector<TShape>& out_shapes):
+    param_(p) {
     SetupBuffer();
+    LayerSetUp(in_shapes[conv::kData], out_shapes[conv::kOut]);
   }
   void ReleaseBuffer() {
     if (convolutionFwd != NULL) {
@@ -108,40 +74,35 @@ class MKLConvolutionOp : public Operator {
   }
 
  private:
-  void LayerSetUp(const mshadow::Tensor<xpu, 4, DType> &data,
-                  const mshadow::Tensor<xpu, 4, DType> &out) {
-    this->width_ = data.shape_[3];
-    this->height_ = data.shape_[2];
-    this->channels_ = data.shape_[1];
-    this->num_ = data.shape_[0];
-    this->group_ = param_.num_group;
-    this->width_out_ = out.shape_[3];
-    this->height_out_ = out.shape_[2];
-    int channel_out_ = out.shape_[1];
-    this->num_output_ = channel_out_;
-    kernel_w_ = param_.kernel[1];
-    kernel_h_ = param_.kernel[0];
-    stride_w_ = param_.stride[1];
-    stride_h_ = param_.stride[0];
-    pad_w_ = param_.pad[1];
-    pad_h_ = param_.pad[0];
-    int status;
-    size_t n, g;
-    size_t iw, ih, ic;
-    size_t ow, oh, oc;
-    size_t kw, kh;
-    size_t dimension = 4;
-    g = std::max(this->group_, 1);
-    n = this->num_;
-    iw = this->width_;
-    ih = this->height_;
-    ic = this->channels_;
-    ow = this->width_out_;
-    oh = this->height_out_;
-    oc = this->num_output_;
-    kw = this->kernel_w_;
-    kh = this->kernel_h_;
-    oc = this->num_output_;
+  void SetupBuffer() {
+    fwd_bottom_data = MKLData<DType>::create();
+    fwd_top_data = MKLData<DType>::create();
+    fwd_filter_data = MKLData<DType>::create();
+    fwd_bias_data = MKLData<DType>::create();
+    bwdd_top_diff = MKLData<DType>::create();
+    bwdd_bottom_diff = MKLData<DType>::create();
+    bwdd_filter_data = MKLData<DType>::create();
+    bwdf_top_diff = MKLData<DType>::create();
+    bwdf_filter_diff = MKLData<DType>::create();
+    bwdf_bottom_data = MKLData<DType>::create();
+    bwdb_top_diff = MKLData<DType>::create();
+    bwdb_bias_diff = MKLData<DType>::create();
+  }
+
+  void LayerSetUp(
+      const TShape& data_shape,
+      const TShape& out_shape) {
+    const size_t dimension = 4;
+    const size_t g = std::max(param_.num_group, (uint32_t)1);
+    const size_t n = data_shape[0];
+    const size_t iw = data_shape[3];
+    const size_t ih = data_shape[2];
+    const size_t ic = data_shape[1];
+    const size_t ow = out_shape[3];
+    const size_t oh = out_shape[2];
+    const size_t oc = out_shape[1];
+    const size_t kw = param_.kernel[1];
+    const size_t kh = param_.kernel[0];
     size_t bdata_sizes[4] = { iw, ih, ic, n };
     size_t bdata_strides[4] = { 1, iw, iw*ih, iw*ih*ic };
     /* starting with MKL 2017 Gold in case of groups filter layout
@@ -158,38 +119,37 @@ class MKLConvolutionOp : public Operator {
     size_t bias_strides[1] = { 1 };
     size_t tdata_sizes[4] = { ow, oh, oc, n };
     size_t tdata_strides[4] = { 1, ow, ow*oh, ow*oh*oc };
-    size_t convolutionStrides[2] = { this->stride_w_, this->stride_h_ };
-    int    inputOffset[2] = { -this->pad_w_, -this->pad_h_ };
+    size_t convolutionStrides[2] = { param_.stride[1], param_.stride[0] };
+    int    inputOffset[2] = { -param_.pad[1], -param_.pad[0] };
     // Names are for debugging purposes only.
     /*** convolution section ***/
     if (!param_.no_bias) {
-      status = dnnGroupsConvolutionCreateForwardBias<DType>(&convolutionFwd,
-                                                            NULL,
-                                                            dnnAlgorithmConvolutionDirect,
-                                                            g,
-                                                            dimension,
-                                                            bdata_sizes,
-                                                            tdata_sizes,
-                                                            fdata_sizes,
-                                                            convolutionStrides,
-                                                            inputOffset,
-                                                            dnnBorderZeros);
+      MKLDNN_CALL(dnnGroupsConvolutionCreateForwardBias<DType>(
+            &convolutionFwd,
+            nullptr,
+            dnnAlgorithmConvolutionDirect,
+            g,
+            dimension,
+            bdata_sizes,
+            tdata_sizes,
+            fdata_sizes,
+            convolutionStrides,
+            inputOffset,
+            dnnBorderZeros));
     } else {
-      status = dnnGroupsConvolutionCreateForward<DType>(&convolutionFwd,
-                                                        NULL,
-                                                        dnnAlgorithmConvolutionDirect,
-                                                        g,
-                                                        dimension,
-                                                        bdata_sizes,
-                                                        tdata_sizes,
-                                                        fdata_sizes,
-                                                        convolutionStrides,
-                                                        inputOffset,
-                                                        dnnBorderZeros);
+      MKLDNN_CALL(dnnGroupsConvolutionCreateForward<DType>(
+            &convolutionFwd,
+            nullptr,
+            dnnAlgorithmConvolutionDirect,
+            g,
+            dimension,
+            bdata_sizes,
+            tdata_sizes,
+            fdata_sizes,
+            convolutionStrides,
+            inputOffset,
+            dnnBorderZeros));
     }
-    CHECK_EQ(status, 0)
-     << "Failed dnnCreateConvolution<DType>(dnnForward) with status "
-     << status << "\n";
     fwd_bottom_data->create_layouts(convolutionFwd, dnnResourceSrc, dimension,
                                     bdata_sizes, bdata_strides);
     fwd_top_data->create_layouts(convolutionFwd, dnnResourceDst, dimension,
@@ -202,20 +162,18 @@ class MKLConvolutionOp : public Operator {
     /*
     * Backward by data layer setup
     */
-    status = dnnGroupsConvolutionCreateBackwardData<DType>(&convolutionBwdData,
-                                                           NULL,
-                                                           dnnAlgorithmConvolutionDirect,
-                                                           g,
-                                                           dimension,
-                                                           bdata_sizes,
-                                                           tdata_sizes,
-                                                           fdata_sizes,
-                                                           convolutionStrides,
-                                                           inputOffset,
-                                                           dnnBorderZeros);
-    CHECK_EQ(status, 0)
-     << "Failed dnnConvolutionCreateBackwardData with status "
-     << status << "\n";
+    MKLDNN_CALL(dnnGroupsConvolutionCreateBackwardData<DType>(
+          &convolutionBwdData,
+          nullptr,
+          dnnAlgorithmConvolutionDirect,
+          g,
+          dimension,
+          bdata_sizes,
+          tdata_sizes,
+          fdata_sizes,
+          convolutionStrides,
+          inputOffset,
+          dnnBorderZeros));
     bwdd_bottom_diff->create_layouts(convolutionBwdData, dnnResourceDiffSrc,
                                      dimension, bdata_sizes, bdata_strides);
     bwdd_top_diff->create_layouts(convolutionBwdData, dnnResourceDiffDst,
@@ -225,20 +183,18 @@ class MKLConvolutionOp : public Operator {
     /*
     * Backward by filter layer setup
     */
-    status = dnnGroupsConvolutionCreateBackwardFilter<DType>(&convolutionBwdFilter,
-                                                             NULL,
-                                                             dnnAlgorithmConvolutionDirect,
-                                                             g,
-                                                             dimension,
-                                                             bdata_sizes,
-                                                             tdata_sizes,
-                                                             fdata_sizes,
-                                                             convolutionStrides,
-                                                             inputOffset,
-                                                             dnnBorderZeros);
-    CHECK_EQ(status, 0)
-     << "Failed dnnConvolutionCreateBackwardFilter with status "
-     << status << "\n";
+    MKLDNN_CALL(dnnGroupsConvolutionCreateBackwardFilter<DType>(
+          &convolutionBwdFilter,
+          nullptr,
+          dnnAlgorithmConvolutionDirect,
+          g,
+          dimension,
+          bdata_sizes,
+          tdata_sizes,
+          fdata_sizes,
+          convolutionStrides,
+          inputOffset,
+          dnnBorderZeros));
     bwdf_bottom_data->create_layouts(convolutionBwdFilter, dnnResourceSrc,
                                      dimension, bdata_sizes, bdata_strides);
     bwdf_top_diff->create_layouts(convolutionBwdFilter, dnnResourceDiffDst,
@@ -249,15 +205,13 @@ class MKLConvolutionOp : public Operator {
     * Backward by bias layer setup
     */
     if (!param_.no_bias) {
-      status = dnnGroupsConvolutionCreateBackwardBias<DType>(&convolutionBwdBias,
-                                                             NULL,
-                                                             dnnAlgorithmConvolutionDirect,
-                                                             g,
-                                                             dimension,
-                                                             tdata_sizes);
-     CHECK_EQ(status, 0)
-      << "Failed dnnConvolutionCreateBackwardBias with status "
-      << status << "\n";
+      MKLDNN_CALL(dnnGroupsConvolutionCreateBackwardBias<DType>(
+            &convolutionBwdBias,
+            nullptr,
+            dnnAlgorithmConvolutionDirect,
+            g,
+            dimension,
+            tdata_sizes));
      bwdb_top_diff->create_layouts(convolutionBwdBias, dnnResourceDiffDst,
                                    dimension, tdata_sizes, tdata_strides);
      bwdb_bias_diff->create_layouts(convolutionBwdBias, dnnResourceDiffBias, 1,
@@ -282,10 +236,6 @@ class MKLConvolutionOp : public Operator {
       mkl_experimental_direct_get<xpu, 4, DType>(out_data[conv::kOut], s);
     Tensor<xpu, 4, DType> wmat =
       mkl_experimental_direct_get<xpu, 4, DType>(in_data[conv::kWeight], s);
-    if (!init_mkldnn_) {
-      LayerSetUp(data, out);
-      init_mkldnn_ = true;
-    }
     CHECK_EQ(data.CheckContiguous(), true);
     CHECK_EQ(wmat.CheckContiguous(), true);
     CHECK_EQ(out.CheckContiguous(), true);
@@ -381,10 +331,6 @@ class MKLConvolutionOp : public Operator {
       mkl_experimental_direct_get_with_shape<xpu, 3, DType>(
       in_grad[conv::kWeight], wmat_shape, s);
 
-    if (!init_mkldnn_) {
-      init_mkldnn_ = true;
-      LayerSetUp(data, grad);
-    }
     int status;
     if (req[0]) {
       void *res_convolutionBwdData[dnnResourceNumber];
@@ -497,26 +443,12 @@ class MKLConvolutionOp : public Operator {
   }
 
  private:
-  ConvolutionParam param_;
-  size_t width_,
-         height_,
-         width_out_,
-         height_out_,
-         kernel_w_,
-         kernel_h_,
-         stride_w_,
-         stride_h_;
-  int group_,
-      num_,
-      num_output_;
-  size_t channels_;
-  int pad_w_,
-      pad_h_;
-  bool init_mkldnn_;
-  dnnPrimitive_t convolutionFwd;
-  dnnPrimitive_t convolutionBwdData;
-  dnnPrimitive_t convolutionBwdFilter;
-  dnnPrimitive_t convolutionBwdBias;
+  const ConvolutionParam param_;
+
+  dnnPrimitive_t convolutionFwd{nullptr};
+  dnnPrimitive_t convolutionBwdData{nullptr};
+  dnnPrimitive_t convolutionBwdFilter{nullptr};
+  dnnPrimitive_t convolutionBwdBias{nullptr};
   /* Fwd step */
   std::shared_ptr<MKLData<DType> > fwd_bottom_data, fwd_top_data, fwd_filter_data,
                                    fwd_bias_data;
