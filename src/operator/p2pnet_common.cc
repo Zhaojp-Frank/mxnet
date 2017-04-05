@@ -18,9 +18,11 @@ using namespace std::chrono;
 namespace mxnet {
 namespace op {
 
-P2PNet::P2PNet() {
-  zmq_context_ =  zmq_ctx_new();
-  zmq_ctx_set(zmq_context_, ZMQ_IO_THREADS, 10);
+P2PNet::P2PNet() :
+  zmq_context_(zmq_ctx_new()), is_main_start_(false), is_bind_(false),
+  main_thread_(nullptr), internal_request_queue_size_(0) {
+  zmq_ctx_set(zmq_context_, ZMQ_IO_THREADS,
+              dmlc::GetEnv("P2PNET_ZMQ_IO_THREADS", 1));
   server_ = zmq_socket(zmq_context_, ZMQ_ROUTER);
   internal_server_ = zmq_socket(zmq_context_, ZMQ_ROUTER);
   int value = 0;
@@ -28,23 +30,18 @@ P2PNet::P2PNet() {
   value = 1024;
   zmq_setsockopt(internal_server_, ZMQ_BACKLOG, &value, sizeof(value));
   zmq_setsockopt(server_, ZMQ_BACKLOG, &value, sizeof(value));
-  is_main_start_ = false;
-  is_bind_ = false;
-  main_thread_ = nullptr;
-  recv_thread_pool_ =  new ctpl::thread_pool(8);
-  internal_request_queue_size_ = 0;
   internal_request_queue_.resize(kRequestQueueSize);
 #ifdef P2PNET_MPI
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank_);
+  std::string host_path = dmlc::GetEnv("MXNET_P2PNET_HOST_PATH", "");
+  CHECK(host_path != "") << "Current implementation requires explicitly export "
+                         << "host_path for P2PNET_MPI.";
   std::ifstream host_file;
-  host_file.open("/home/fegin/workspace/mxnet/host");
-  std::string host;
-  int rank = 0;
-  while (std::getline(host_file, host)) {
+  host_file.open(host_path);
+  for (int rank = 0, std::string host; std::getline(host_file, host); rank++) {
     mpi_rank_to_host_.push_back(host);
     mpi_host_to_rank_[host] = rank;
     std::cout << "Rank : " << rank << " " << host << std::endl;
-    rank++;
   }
 #endif
 }
@@ -52,7 +49,7 @@ P2PNet::P2PNet() {
 P2PNet::~P2PNet() {
   zmq_close(internal_server_);
   zmq_close(server_);
-  delete recv_thread_pool_;
+  zmq_ctx_destroy(zmq_context_);
 }
 
 static int RecvWithIdentity(void* socket, std::string* identity, void* buffer,
@@ -146,7 +143,6 @@ void P2PNet::DoRecv(void* socket) {
   }
   struct Request* request = internal_request_queue_[it->second];
   tensor_to_recv_request_map_.erase(it);
-  //// FIXME
   //poll_items_[i].events = ZMQ_POLLOUT;
   //recv_thread_pool_->push(DoRecvOncomplete, request,
                           //poll_items_[i].socket);
@@ -209,7 +205,7 @@ void P2PNet::DoExternalRequest() {
 }
 
 void P2PNet::SetMainAffinity() {
-  unsigned affinity = dmlc::GetEnv("MXNET_P2PNET_MAIN_AFFINITY", 13);
+  unsigned affinity = dmlc::GetEnv("MXNET_P2PNET_MAIN_AFFINITY", 1);
   cpu_set_t cpuset;
   CPU_ZERO(&cpuset);
   CPU_SET(affinity, &cpuset);
@@ -410,7 +406,7 @@ void P2PNet::DoRequest(struct Request* request) {
   zmq_setsockopt(request_socket, ZMQ_IDENTITY, identity.c_str(),
                  P2PNet::kIdentitySize);
   int ret = zmq_connect(request_socket, "inproc://mxnet_local_request");
-  CHECK(ret == 0);
+  CHECK(ret == 0) << "Ret = " << ret << " Errno = " << errno;
   size_t index = internal_request_queue_size_.fetch_add(1);
   internal_request_queue_[index] = request;
   ret = zmq_send(request_socket, &index, sizeof(index), 0);
