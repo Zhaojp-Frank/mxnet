@@ -342,12 +342,13 @@ void P2PNet::MPI_Main() {
     mpi_request_queue_.erase(
         std::remove_if (
           mpi_request_queue_.begin(), mpi_request_queue_.end(),
-          [this] (struct Request* request) {
+          [this, &begin] (struct Request* request) {
             MPI_Status status;
             int flag;
             MPI_Test(request->mpi_request, &flag, &status);
             if (flag) {
               MPI_RequestOnComplete(request);
+              begin = high_resolution_clock::now();
             }
             return flag;
           }),
