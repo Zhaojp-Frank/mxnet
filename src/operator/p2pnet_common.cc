@@ -22,7 +22,7 @@ P2PNet::P2PNet() :
   zmq_context_(zmq_ctx_new()), is_main_start_(false), is_bind_(false),
   main_thread_(nullptr), internal_request_queue_size_(0) {
   zmq_ctx_set(zmq_context_, ZMQ_IO_THREADS,
-              dmlc::GetEnv("P2PNET_ZMQ_IO_THREADS", 1));
+              dmlc::GetEnv("MXNET_P2PNET_ZMQ_IO_THREADS", 1));
   server_ = zmq_socket(zmq_context_, ZMQ_ROUTER);
   internal_server_ = zmq_socket(zmq_context_, ZMQ_ROUTER);
   int value = 0;
@@ -33,12 +33,14 @@ P2PNet::P2PNet() :
   internal_request_queue_.resize(kRequestQueueSize);
 #ifdef P2PNET_MPI
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank_);
-  std::string host_path = dmlc::GetEnv("MXNET_P2PNET_HOST_PATH", "");
+  std::string host_path = dmlc::GetEnv<std::string>("MXNET_P2PNET_HOST_PATH",
+                                                    "");
   CHECK(host_path != "") << "Current implementation requires explicitly export "
                          << "host_path for P2PNET_MPI.";
   std::ifstream host_file;
   host_file.open(host_path);
-  for (int rank = 0, std::string host; std::getline(host_file, host); rank++) {
+  std::string host;
+  for (int rank = 0; std::getline(host_file, host); rank++) {
     mpi_rank_to_host_.push_back(host);
     mpi_host_to_rank_[host] = rank;
     std::cout << "Rank : " << rank << " " << host << std::endl;
