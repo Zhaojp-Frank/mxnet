@@ -210,7 +210,7 @@ void P2PNet::SetMainAffinity() {
   CPU_ZERO(&cpuset);
   CPU_SET(affinity, &cpuset);
   int rc = pthread_setaffinity_np(main_thread_->native_handle(),
-				  sizeof(cpu_set_t), &cpuset);
+                                  sizeof(cpu_set_t), &cpuset);
   if (rc != 0) {
     std::cerr << "Error calling pthread_setaffinity_np: " << rc << std::endl;
     CHECK(false);
@@ -316,6 +316,7 @@ void P2PNet::MPI_DoInternalRequest(size_t index) {
 }
 
 void P2PNet::MPI_Main() {
+  auto begin = high_resolution_clock::now();
   while (true) {
     // First check the internal request zmq socket.
     char identity_buffer[P2PNet::kIdentitySize];
@@ -349,6 +350,23 @@ void P2PNet::MPI_Main() {
             return flag;
           }),
         mpi_request_queue_.end());
+
+    if (P2PNetDebugger::Get().Level() & P2PNetDebugger::kDebugPrintPending) {
+      auto now = high_resolution_clock::now();
+      if (now - begin > std::chrono::milliseconds(30000)) {
+        std::cout << "mpi_request_queue_.size : " << mpi_request_queue_.size()
+                  << std::endl;
+        for (auto r : mpi_request_queue_) {
+          std::cout << "===> " << r->tensor_id << " ";
+          if (r->type == RecvRequest) {
+            std::cout << "recving."<< std::endl;
+          } else {
+            std::cout << "sending."<< std::endl;
+          }
+        }
+        begin = high_resolution_clock::now();
+       }
+    }
   }
 }
 #endif
