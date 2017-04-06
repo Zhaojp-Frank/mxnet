@@ -36,12 +36,27 @@ def test_mlp():
     parser.add_argument('--num_layers', type=int, default=5, help='Number of hidden layers')
     parser.add_argument('-a', '--addresses', type=str, help='Addresses of all workers.')
     parser.add_argument('-i', '--worker_index', type=int, help='Index of this worker in addresses')
+    parser.add_argument('-f', '--host_file', type=str,
+                        help='Host file that contains addresses of all workers.')
 
     args = parser.parse_args()
-    addresses = args.addresses.split(',')
+    if args.host_file:
+        with open(args.host_file) as fp:
+            for line in fp:
+                if line.find(":") == -1:
+                    addresses.append(line.strip() + ":9200")
+                else:
+                    addresses.append(line.strip())
+    else:
+        addresses = args.addresses.split(',')
+    if args.worker_index is not None:
+        worker_index = args.worker_index
+    else:
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        worker_index = comm.Get_rank()
     n_workers = len(addresses)
     group2ctx = {'group:%d' % i : mx.cpu(0, addresses[i]) for i in range(n_workers)}
-    worker_index = args.worker_index
     default_ctx = mx.cpu(0, addresses[worker_index])
 
     net = get_symbol(args)

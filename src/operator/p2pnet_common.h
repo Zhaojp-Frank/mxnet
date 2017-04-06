@@ -150,6 +150,8 @@ class P2PNet {
   ctpl::thread_pool *recv_thread_pool_;
   std::vector<struct Request*> internal_request_queue_;
   std::atomic<size_t> internal_request_queue_size_;
+  std::vector<void*> per_thread_isocket_queue_;
+  std::atomic<size_t> per_thread_isocket_queue_size_;
   std::mutex internal_mtx; // mutex lock for request_queue_
   std::map<unsigned, std::string> tensor_to_receiver_map_;
   std::map<unsigned, size_t> tensor_to_send_request_map_;
