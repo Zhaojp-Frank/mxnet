@@ -26,6 +26,7 @@ P2PNet::P2PNet() :
   zmq_ctx_set(zmq_context_, ZMQ_MAX_SOCKETS, 65535);
   server_ = zmq_socket(zmq_context_, ZMQ_ROUTER);
   internal_server_ = zmq_socket(zmq_context_, ZMQ_ROUTER);
+  CHECK(internal_server_);
   int value = 0;
   zmq_setsockopt(internal_server_, ZMQ_RCVHWM, &value, sizeof(value));
   value = 65535;
@@ -37,7 +38,7 @@ P2PNet::P2PNet() :
   std::string host_path = dmlc::GetEnv<std::string>("MXNET_P2PNET_HOST_PATH",
                                                     "");
   CHECK(host_path != "") << "Current implementation requires explicitly export "
-                         << "host_path for P2PNET_MPI.";
+                         << "host_path (MXNET_P2PNET_HOST_PATH) for P2PNET_MPI.";
   std::ifstream host_file;
   host_file.open(host_path);
   std::string host;
