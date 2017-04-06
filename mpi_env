@@ -1,0 +1,18 @@
+#!/bin/bash -x
+if [[ $HOST == 'beaker-16' || $HOST == 'beaker-17']]; then
+  export I_MPI_FABRICS=shm:rdma
+else
+  source /opt/intel/impi/5.1.3.181/bin64/mpivars.sh
+  export I_MPI_FABRICS=shm:dapl
+  # THIS IS A MANDATORY ENVIRONMENT VARIABLE AND MUST BE SET BEFORE RUNNING ANY JOB
+  # Setting the variable to shm:dapl gives best performance for some applications
+  # If your application doesn’t take advantage of shared memory and MPI together, then set only dapl
+  export I_MPI_DAPL_PROVIDER=ofa-v2-ib0
+  # THIS IS A MANDATORY ENVIRONMENT VARIABLE AND MUST BE SET BEFORE RUNNING ANY JOB
+  export I_MPI_DYNAMIC_CONNECTION=0
+  # THIS IS A MANDATORY ENVIRONMENT VARIABLE AND MUST BE SET BEFORE RUNNING ANY JOB
+fi
+
+export I_MPI_DEBUG=+2000 
+export I_MPI_PLATFORM=none 
+
