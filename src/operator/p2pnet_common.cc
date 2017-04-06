@@ -23,7 +23,7 @@ P2PNet::P2PNet() :
   main_thread_(nullptr), internal_request_queue_size_(0) {
   zmq_ctx_set(zmq_context_, ZMQ_IO_THREADS,
               dmlc::GetEnv("MXNET_P2PNET_ZMQ_IO_THREADS", 1));
-  zmq_ctx_set(zmq_context_, ZMQ_IO_THREADS, 65535);
+  zmq_ctx_set(zmq_context_, ZMQ_MAX_SOCKETS, 65535);
   server_ = zmq_socket(zmq_context_, ZMQ_ROUTER);
   internal_server_ = zmq_socket(zmq_context_, ZMQ_ROUTER);
   int value = 0;
