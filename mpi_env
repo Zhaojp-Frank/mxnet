@@ -1,8 +1,8 @@
 #!/bin/bash -x
-if [[ $HOST == 'beaker-16' || $HOST == 'beaker-17']]; then
+if [ "$HOST" = "beaker-16" ] || [ "$HOST" = "beaker-17" ]; then
   export I_MPI_FABRICS=shm:rdma
 else
-  source /opt/intel/impi/5.1.3.181/bin64/mpivars.sh
+  #source /opt/intel/impi/5.1.3.181/bin64/mpivars.sh
   export I_MPI_FABRICS=shm:dapl
   # THIS IS A MANDATORY ENVIRONMENT VARIABLE AND MUST BE SET BEFORE RUNNING ANY JOB
   # Setting the variable to shm:dapl gives best performance for some applications
