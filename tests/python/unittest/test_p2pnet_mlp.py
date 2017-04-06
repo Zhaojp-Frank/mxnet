@@ -5,7 +5,6 @@ import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
 from multiprocessing import Process
-from mpi4py import MPI
 import mxnet as mx
 import numpy as np
 import time
@@ -213,9 +212,9 @@ def main():
         if args.worker_index is not None:
             MLP_MP(addresses, int(args.worker_index))
         else:
+            from mpi4py import MPI
             comm = MPI.COMM_WORLD
             MLP_MP(addresses, comm.Get_rank())
-
 
 if __name__ == "__main__":
     main()
