@@ -30,14 +30,14 @@ P2PNet::P2PNet() : zmq_context_(zmq_ctx_new()), is_main_start_(false),
   CHECK(internal_server_);
   int value = 0;
   zmq_setsockopt(internal_server_, ZMQ_RCVHWM, &value, sizeof(value));
+  zmq_setsockopt(internal_server_, ZMQ_LINGER, &value, sizeof(value));
+  zmq_setsockopt(server_, ZMQ_LINGER, &value, sizeof(value));
   value = 8192;
   zmq_setsockopt(internal_server_, ZMQ_BACKLOG, &value, sizeof(value));
   zmq_setsockopt(server_, ZMQ_BACKLOG, &value, sizeof(value));
-  value = 0;
-  zmq_setsockopt(internal_server_, ZMQ_LINGER, &value, sizeof(value));
-  zmq_setsockopt(server_, ZMQ_LINGER, &value, sizeof(value));
   internal_request_queue_.resize(kRequestQueueSize);
   per_thread_isocket_queue_.resize(128);
+
 #ifdef P2PNET_MPI
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank_);
   std::string host_path = dmlc::GetEnv<std::string>("MXNET_P2PNET_HOST_PATH",
@@ -452,15 +452,15 @@ void P2PNet::DoRequest(struct Request* request) {
   static thread_local void* request_socket = nullptr;
   if (request_socket == nullptr) {
     request_socket = zmq_socket(zmq_context_, ZMQ_REQ);
-    std::string identity = CreateIdentity(request->tensor_id);
+    size_t index = per_thread_isocket_queue_size_.fetch_add(1);
+    per_thread_isocket_queue_[index] = request_socket;
+    std::string identity = CreateIdentity(index);
     zmq_setsockopt(request_socket, ZMQ_IDENTITY, identity.c_str(),
                    P2PNet::kIdentitySize);
     int ret = 0;
     zmq_setsockopt(request_socket, ZMQ_LINGER, &ret, sizeof(ret));
     ret = zmq_connect(request_socket, "inproc://mxnet_local_request");
     CHECK(ret == 0) << "Ret = " << ret << " Errno = " << errno;
-    size_t index = per_thread_isocket_queue_size_.fetch_add(1);
-    per_thread_isocket_queue_[index] = request_socket;
   }
   size_t index = internal_request_queue_size_.fetch_add(1);
   internal_request_queue_[index] = request;
