@@ -56,8 +56,8 @@ P2PNet::P2PNet() : zmq_context_(zmq_ctx_new()), is_main_start_(false),
 }
 
 P2PNet::~P2PNet() {
+  std::cout << "P2PNet is cleaning up." << std::endl;
 #ifndef P2PNET_MPI
-  zmq_close(server_);
   for (size_t i = 2; i < poll_items_count_; i++) {
     zmq_close(poll_items_[i].socket);
   }
@@ -65,8 +65,10 @@ P2PNet::~P2PNet() {
   for (size_t i = 0; i < per_thread_isocket_queue_size_; i++) {
     zmq_close(per_thread_isocket_queue_[i]);
   }
+  zmq_close(server_);
   zmq_close(internal_server_);
   zmq_ctx_destroy(zmq_context_);
+  std::cout << "P2PNet says bye !!!!" << std::endl;
 }
 
 static int RecvWithIdentity(void* socket, std::string* identity, void* buffer,
@@ -263,7 +265,8 @@ void P2PNet::Main() {
   while (true) {
     int ret = zmq_poll(poll_items_, poll_items_count_, timeout);
     if (ret < 0) {
-      return;
+      std::cout << "P2PNet_ZMQ says bye !!!!" << std::endl;
+      break;
     }
     if (ret == 0) {
       CHECK(P2PNetDebugger::Get().Level() & P2PNetDebugger::kDebugPrintPending);
@@ -367,7 +370,7 @@ void P2PNet::MPI_Main() {
     } else {
       CHECK(errno == EAGAIN || errno == ETERM || errno == ENOTSOCK);
       if (errno == ETERM || errno == ENOTSOCK) {
-        std::cout << "P2PNet says : bye bye !!!! "<< std::endl;
+        std::cout << "P2PNet_MPI says bye !!!!" << std::endl;
         break;
       }
     }

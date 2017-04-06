@@ -41,6 +41,7 @@ def test_mlp():
 
     args = parser.parse_args()
     if args.host_file:
+        addresses = []
         with open(args.host_file) as fp:
             for line in fp:
                 if line.find(":") == -1:
