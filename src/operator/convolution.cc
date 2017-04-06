@@ -31,9 +31,9 @@ Operator* CreateOp<cpu>(ConvolutionParam param, int dtype,
       && param.kernel.ndim() == 2) {
     switch (dtype) {
     case mshadow::kFloat32:
-      return new MKLConvolutionOp<cpu, float>(param);
+      return new MKLConvolutionOp<cpu, float>(param, *in_shape, *out_shape);
     case mshadow::kFloat64:
-      return new MKLConvolutionOp<cpu, double>(param);
+      return new MKLConvolutionOp<cpu, double>(param, *in_shape, *out_shape);
     default:
       break;
     }
@@ -74,9 +74,9 @@ Operator* CreateBackwardOp<cpu>(
       && param.kernel.ndim() == 2) {
     switch (dtype) {
     case mshadow::kFloat32:
-      return new MKLConvolutionOp<cpu, float>(param);
+      return new MKLConvolutionOp<cpu, float>(param, in_grad_shape, out_grad_shape);
     case mshadow::kFloat64:
-      return new MKLConvolutionOp<cpu, double>(param);
+      return new MKLConvolutionOp<cpu, double>(param, in_grad_shape, out_grad_shape);
     default:
       break;
     }

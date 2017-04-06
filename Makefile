@@ -131,7 +131,7 @@ ifeq ($(USE_DIST_KVSTORE), 1)
 endif
 
 .PHONY: clean all test lint doc clean_all rcpplint rcppexport roxygen\
-	cython2 cython3 cython cyclean
+	cython2 cython3 cython cyclean ycm
 
 all: lib/libmxnet.a lib/libmxnet.so $(BIN)
 
@@ -353,6 +353,10 @@ clean: cyclean
 endif
 
 clean_all: clean
+
+ycm:
+	echo "-std=c++11 $(CFLAGS)" > ycm.flags
+	echo "$(NVCCFLAGS) $(CUDA_ARCH) -Xcompiler \"$(CFLAGS)\"" >> ycm.flags
 
 -include build/*.d
 -include build/*/*.d
