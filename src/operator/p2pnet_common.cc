@@ -242,14 +242,16 @@ void P2PNet::DoExternalRequest() {
 
 void P2PNet::SetMainAffinity() {
   unsigned affinity = dmlc::GetEnv("MXNET_P2PNET_MAIN_AFFINITY", 1);
-  cpu_set_t cpuset;
-  CPU_ZERO(&cpuset);
-  CPU_SET(affinity, &cpuset);
-  int rc = pthread_setaffinity_np(main_thread_->native_handle(),
-                                  sizeof(cpu_set_t), &cpuset);
-  if (rc != 0) {
-    std::cerr << "Error calling pthread_setaffinity_np: " << rc << std::endl;
-    CHECK(false);
+  if (affinity < 65536) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(affinity, &cpuset);
+    int rc = pthread_setaffinity_np(main_thread_->native_handle(),
+                                    sizeof(cpu_set_t), &cpuset);
+    if (rc != 0) {
+      std::cerr << "Error calling pthread_setaffinity_np: " << rc << std::endl;
+      CHECK(false);
+    }
   }
 }
 
@@ -358,6 +360,9 @@ void P2PNet::MPI_DoInternalRequest(size_t index) {
 
 void P2PNet::MPI_Main() {
   auto begin = high_resolution_clock::now();
+  int sleep_duration = dmlc::GetEnv("MXNET_P2PNET_MPI_SLEEP_DURATION", 0);
+  bool debug = (P2PNetDebugger::Get().Level() &
+                P2PNetDebugger::kDebugPrintPending);
   while (true) {
     // First check the internal request zmq socket.
     std::string identity;
@@ -376,22 +381,38 @@ void P2PNet::MPI_Main() {
     }
 
     // Loop all MPI requests to see if any request is fulfilled.
+    //for (auto it = mpi_request_queue_.begin(); it != mpi_request_queue_.end();) {
+      //MPI_Status status;
+      //int flag;
+      //MPI_Test((*it)->mpi_request, &flag, &status);
+      //if (flag) {
+        //MPI_RequestOnComplete(*it);
+        //if (debug) {
+          //begin = high_resolution_clock::now();
+        //}
+        //it = mpi_request_queue_.erase(it);
+      //} else {
+        //it++;
+      //}
+    //}
     mpi_request_queue_.erase(
         std::remove_if (
           mpi_request_queue_.begin(), mpi_request_queue_.end(),
-          [this, &begin] (struct Request* request) {
+          [this, &begin, debug] (struct Request* request) {
             MPI_Status status;
             int flag;
             MPI_Test(request->mpi_request, &flag, &status);
             if (flag) {
               MPI_RequestOnComplete(request);
-              begin = high_resolution_clock::now();
+              if (debug) {
+                begin = high_resolution_clock::now();
+              }
             }
             return flag;
           }),
         mpi_request_queue_.end());
 
-    if (P2PNetDebugger::Get().Level() & P2PNetDebugger::kDebugPrintPending) {
+    if (debug) {
       auto now = high_resolution_clock::now();
       if (now - begin > std::chrono::milliseconds(30000)) {
         std::cout << "mpi_request_queue_.size : " << mpi_request_queue_.size()
@@ -406,6 +427,10 @@ void P2PNet::MPI_Main() {
         }
         begin = high_resolution_clock::now();
        }
+    }
+
+    if (sleep_duration) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(sleep_duration));
     }
   }
 }
