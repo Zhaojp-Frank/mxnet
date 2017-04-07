@@ -159,8 +159,7 @@ void P2PNet::DoRequestRecv(struct Request* request) {
     recv_poll_indices_[request_socket]  = poll_items_count_ - 1;
   } else {
     request_socket = it->second;
-    // FIXME
-    poll_items_[recv_poll_indices_[request_socket]].events = ZMQ_POLLIN;
+    //poll_items_[recv_poll_indices_[request_socket]].events = ZMQ_POLLIN;
   }
   // TODO: Currently, we only have one and the only one request to the remote
   // worker. Therefore, we assume that the request content is the tensor_id.
@@ -363,16 +362,24 @@ void P2PNet::MPI_Main() {
   int sleep_duration = dmlc::GetEnv("MXNET_P2PNET_MPI_SLEEP_DURATION", 0);
   bool debug = (P2PNetDebugger::Get().Level() &
                 P2PNetDebugger::kDebugPrintPending);
+
   while (true) {
     // First check the internal request zmq socket.
-    std::string identity;
-    size_t index;
-    int ret = RecvWithIdentity(internal_server_, &identity, &index,
-                               sizeof(index), ZMQ_DONTWAIT);
+    poll_items_ = new zmq_pollitem_t[1];
+    poll_items_[0] = {internal_server_, 0, ZMQ_POLLIN, 0};
+    int ret = zmq_poll(poll_items_, 1, sleep_duration);
+
+    //std::string identity;
+    //size_t index;
+    //int ret = RecvWithIdentity(internal_server_, &identity, &index,
+                               //sizeof(index), ZMQ_DONTWAIT);
     if (ret > 0) {
+      std::string identity;
+      size_t index;
+      RecvWithIdentity(internal_server_, &identity, &index, sizeof(index));
       SendWithIdentity(internal_server_, identity, &index, sizeof(index));
       MPI_DoInternalRequest(index);
-    } else {
+    } else if (ret < 0) {
       CHECK(errno == EAGAIN || errno == ETERM || errno == ENOTSOCK);
       if (errno == ETERM || errno == ENOTSOCK) {
         std::cout << "P2PNet_MPI says bye !!!!" << std::endl;
@@ -429,9 +436,9 @@ void P2PNet::MPI_Main() {
        }
     }
 
-    if (sleep_duration) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(sleep_duration));
-    }
+    //if (sleep_duration) {
+      //std::this_thread::sleep_for(std::chrono::milliseconds(sleep_duration));
+    //}
   }
 }
 #endif

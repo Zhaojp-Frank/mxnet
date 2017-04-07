@@ -9,8 +9,8 @@ import time
 BATCH_SIZE = 512
 IN_CHANNEL = 1024
 NUM_FILTER = 1024
-HEIGHT = 10
-WEIGHT = 10
+HEIGHT = 24
+WEIGHT = 24
 NUM_LAYERS = 5
 NUM_ITERATIONS = 25
 NUM_IGNORED_ITERATIONS = 5
@@ -113,6 +113,8 @@ def main():
     parser.add_argument('-g', '--num_ignored_iterations', type=int,
                         help='Number of ignored iterations when timing.',
                         default=NUM_IGNORED_ITERATIONS)
+    parser.add_argument('-t', '--host_file', type=str,
+                        help='Host file that contains addresses of all workers.')
     args = parser.parse_args()
     BATCH_SIZE = int(args.batch_size)
     IN_CHANNEL = int(args.channel_size)
@@ -121,10 +123,30 @@ def main():
     NUM_ITERATIONS = int(args.num_iterations)
     NUM_IGNORED_ITERATIONS = int(args.num_ignored_iterations)
     
-    addresses = args.addresses.split(',')
+    if args.host_file:
+        addresses = []
+        with open(args.host_file) as fp:
+            for line in fp:
+                if line.find(":") == -1:
+                    addresses.append(line.strip() + ":9200")
+                else:
+                    addresses.append(line.strip())
+    else:
+        addresses = args.addresses.split(',')
+    if args.worker_index is not None:
+        worker_index = args.worker_index
+    else:
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        worker_index = comm.Get_rank()
+
     n_workers = len(addresses)
     group2ctx = {'group:%d' % i : mx.cpu(0, addresses[i]) for i in range(n_workers)}
-    worker_index = args.worker_index
+    default_ctx = mx.cpu(0, addresses[worker_index])
+    # addresses = args.addresses.split(',')
+    n_workers = len(addresses)
+    group2ctx = {'group:%d' % i : mx.cpu(0, addresses[i]) for i in range(n_workers)}
+    # worker_index = args.worker_index
     default_ctx = mx.cpu(0, addresses[worker_index])
 
     conv_test(default_ctx, group2ctx)
