@@ -21,7 +21,7 @@ def DoSSH(ip, command, log_path, index=None):
                     print(suffix)
                     print(e)
 
-    prog = 'ssh -o StrictHostKeyChecking=no ' + ip + ' \'' + command + '\''
+    prog = 'ssh -t -o StrictHostKeyChecking=no ' + ip + ' \'' + command + '\''
     thread = Thread(target=run, args=(ip, prog,))
     thread.setDaemon(True)
     thread.start()
@@ -58,7 +58,7 @@ def DoIndexedRun(script, master, all_ips, log_path):
 
 def DoMount(master, all_ips, log_path):
     threads = []
-    command = "sudo mount -rw %s:/home/ubuntu /home/ubuntu" % master
+    command = "sudo mount -rw %s:/home/tofu/mxnet /home/tofu/mxnet" % master
     for ip in all_ips:
         if ip != master:
             threads.append(DoSSH(ip, command, log_path))

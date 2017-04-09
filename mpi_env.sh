@@ -5,3 +5,4 @@ export LD_LIBRARY_PATH=/opt/intel/lib/intel64:$LD_LIBRARY_PATH
 export PYTHONPATH=/home/tofu/mxnet/python
 export NNVM_EXEC_MATCH_RANGE=0
 export OMP_NUM_THREADS=8
+export TOFU_TILING_TYPE=kcuts
