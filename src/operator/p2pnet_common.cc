@@ -368,10 +368,6 @@ void P2PNet::MPI_Main() {
     poll_items_[0] = {internal_server_, 0, ZMQ_POLLIN, 0};
     int ret = zmq_poll(poll_items_, 1, sleep_duration);
 
-    //std::string identity;
-    //size_t index;
-    //int ret = RecvWithIdentity(internal_server_, &identity, &index,
-                               //sizeof(index), ZMQ_DONTWAIT);
     if (ret > 0) {
       std::string identity;
       size_t index;
@@ -387,27 +383,13 @@ void P2PNet::MPI_Main() {
     }
 
     // Loop all MPI requests to see if any request is fulfilled.
-    //for (auto it = mpi_request_queue_.begin(); it != mpi_request_queue_.end();) {
-      //MPI_Status status;
-      //int flag;
-      //MPI_Test((*it)->mpi_request, &flag, &status);
-      //if (flag) {
-        //MPI_RequestOnComplete(*it);
-        //if (debug) {
-          //begin = high_resolution_clock::now();
-        //}
-        //it = mpi_request_queue_.erase(it);
-      //} else {
-        //it++;
-      //}
-    //}
     mpi_request_queue_.erase(
         std::remove_if (
           mpi_request_queue_.begin(), mpi_request_queue_.end(),
           [this, &begin, debug] (struct Request* request) {
-            MPI_Status status;
+            //MPI_Status status;
             int flag;
-            MPI_Test(request->mpi_request, &flag, &status);
+            MPI_Test(request->mpi_request, &flag, MPI_STATUS_IGNORE);
             if (flag) {
               MPI_RequestOnComplete(request);
               if (debug) {
