@@ -830,9 +830,20 @@ void GraphExecutor::InitCachedOps() {
       if (is_async) {
         exec->op_ctx.async_on_complete = on_complete;
       }
-      op::P2PNetDebugger::Get().PrintTime("Begin executing %s", name.c_str());
+      bool do_polling = true;
+      if (name != "NetInit" && name.find("_sender") == name.npos &&
+          name.find("_receiver") == name.npos) {
+        do_polling = false;
+      }
+      op::P2PNetDebugger::Get().PrintTime("Begin executing %s %u", name.c_str(), do_polling);
+      if (!do_polling) {
+        op::P2PNet::Get().DisableMPIPolling();
+      }
       exec->Run(ctx);
-      op::P2PNetDebugger::Get().PrintTime("Finish executing %s", name.c_str());
+      if (!do_polling) {
+        op::P2PNet::Get().EnableMPIPolling();
+      }
+      op::P2PNetDebugger::Get().PrintTime("Finish executing %s %u", name.c_str(), do_polling);
       // call on complete only if it is async op
       if (!is_async) {
         if (is_gpu) {
