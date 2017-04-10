@@ -40,7 +40,6 @@ P2PNet::P2PNet() : zmq_context_(zmq_ctx_new()), is_main_start_(false),
 
 #ifdef P2PNET_MPI
   mpi_do_polling_ = true;
-  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank_);
   std::string host_path = dmlc::GetEnv<std::string>("MXNET_P2PNET_HOST_PATH",
                                                     "");
   CHECK(host_path != "") << "Current implementation requires explicitly export "
@@ -476,7 +475,9 @@ bool P2PNet::Init(const std::string& address) {
     srand(time(nullptr));
     (void) address;
     zmq_bind(internal_server_, "inproc://mxnet_local_request");
-#ifndef P2PNET_MPI
+#ifdef P2PNET_MPI
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank_);
+#else
     std::ostringstream address_with_proto;
     address_with_proto << "tcp://" << address;
     int ret = zmq_bind(server_, address_with_proto.str().c_str());
