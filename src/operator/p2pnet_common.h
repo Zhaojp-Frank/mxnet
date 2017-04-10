@@ -89,12 +89,10 @@ class P2PNet {
   void Start();
 
   enum RequestType {
-    kNewIndexRequest,
-    kAddRequest,
-    kSendRequest,
-    kRecvRequest,
-    kEnableMPIPollingRequest,
-    kDisableMPIPollingRequest,
+    NewIndexRequest,
+    AddRequest,
+    SendRequest,
+    RecvRequest,
   };
 
   struct Request {
@@ -109,12 +107,8 @@ class P2PNet {
     MPI_Request *mpi_request;
 #endif
   };
-  void DoRequest(struct Request* request, bool notify_only=false);
+  void DoRequest(struct Request* request);
   void FreeRequest(struct Request* request);
-#ifdef P2PNET_MPI
-  void EnableMPIPolling();
-  void DisableMPIPolling();
-#endif
 
   constexpr static int kRequestQueueSize = 1024 * 1024 * 2;
   constexpr static int kIdentitySize = 8;
@@ -140,9 +134,6 @@ class P2PNet {
   std::vector<std::string> mpi_rank_to_host_;
   std::map<std::string, int> mpi_host_to_rank_;
   std::list<struct Request*> mpi_request_queue_;
-  std::list<struct Request*> mpi_send_request_queue_;
-  std::list<struct Request*> mpi_recv_request_queue_;
-  bool mpi_do_polling_;
 #endif
 
   void* zmq_context_;

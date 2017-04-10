@@ -49,7 +49,7 @@ class P2PNetSendOp : public Operator {
                const std::vector<TBlob> &out_data,
                const std::vector<TBlob> &aux_args) override {
     P2PNet::Request* request = new P2PNet::Request{
-      P2PNet::kSendRequest, address_, tensor_id_, in_data[0].dptr_,
+      P2PNet::SendRequest, address_, tensor_id_, in_data[0].dptr_,
       in_data[0].shape_.Size() * sizeof(DType), ctx.async_on_complete};
     if (P2PNetDebugger::Get().Level() & P2PNetDebugger::kDebugNoCommunication) {
       ctx.async_on_complete();
