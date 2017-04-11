@@ -249,6 +249,11 @@ Graph AttachOpExecs(Graph g) {
   const auto& idx = g.indexed_graph();
   vector<shared_ptr<OpExecutor> > ret(idx.num_nodes());
 
+  const int no_comp_flag = dmlc::GetEnv("TOFU_NO_COMPUTATION", 0);
+  if (no_comp_flag) {
+    LOG(INFO) << "Enable No Computation Mode.";
+  }
+
   // initialize the nodes
   for (size_t i = 0; i < idx.num_nodes(); ++i) {
     const auto& inode = idx[i];
@@ -257,6 +262,10 @@ Graph AttachOpExecs(Graph g) {
       continue;
     }
     const nnvm::Op* op = CHECK_NOTNULL(inode.source->op());
+    if (no_comp_flag && !(op->name == "P2PNetRecv" || op->name == "P2PNetSend")) {
+      ret[i] = std::make_shared<FComputeExecutor>(DoNothingFCompute, inode.source->attrs);
+      continue;
+    }
     /*if (false
         || op->name == "Concat"
         || op->name == "_backward_Concat"
