@@ -11,9 +11,9 @@ void Do(int rank, int size, long buf_size, int level, int iterations) {
   bool send_dones[8192];
   bool recv_dones[8192];
   int flag, count;
+  MPI_Barrier(MPI_COMM_WORLD);
   auto begin = high_resolution_clock::now();
   auto begin_ms = duration_cast<milliseconds>(begin.time_since_epoch()).count();
-  MPI_Barrier(MPI_COMM_WORLD);
   for (int i = 0; i < iterations; i++) {
     count = (size - 1) * 2 * level;
     for (int l = 0; l < level; l++) {
@@ -34,7 +34,25 @@ void Do(int rank, int size, long buf_size, int level, int iterations) {
         int idx = j * level + l;
         MPI_Isend(&buf_send[idx * buf_size], (int)buf_size,  MPI_BYTE, j, l, MPI_COMM_WORLD, &sends[idx]);
         send_dones[idx] = false;
-        while (!send_dones[idx] || !recv_dones[idx]) {
+      }
+      int count = size * 2 - 2;
+      while (count > 0) {
+        for (int j = 0; j < size; j++) {
+          if (j == rank) {
+            continue;
+          }
+          int idx = j * level + l;
+    	  //for (int l = 0; l < level; l++) {
+          //int idx = j * level + l;
+          if (!recv_dones[idx]) {
+            MPI_Test(&recvs[idx], &flag, MPI_STATUS_IGNORE);
+            if (flag) {
+              MPI_Wait(&recvs[idx], MPI_STATUS_IGNORE);
+              count--;
+              recv_dones[idx] = true;
+            }
+          }
+          //}
           if (!send_dones[idx]) {
             MPI_Test(&sends[idx], &flag, MPI_STATUS_IGNORE);
             if (flag) {
@@ -43,27 +61,6 @@ void Do(int rank, int size, long buf_size, int level, int iterations) {
               send_dones[idx] = true;
             }
           }
-
-#if 0
-          for (int l = 0; l < level; l++) {
-            for (int j = 0; j < size; j++) {
-              if (j == rank) {
-                continue;
-              }
-              int idx = j * level + l;
-#endif
-              if (!recv_dones[idx]) {
-                MPI_Test(&recvs[idx], &flag, MPI_STATUS_IGNORE);
-                if (flag) {
-                  MPI_Wait(&recvs[idx], MPI_STATUS_IGNORE);
-                  count--;
-                  recv_dones[idx] = true;
-                }
-              }
-#if 0
-            }
-          }
-#endif
         }
       }
     }
@@ -95,6 +92,7 @@ void Do(int rank, int size, long buf_size, int level, int iterations) {
       }
     }
     */
+    MPI_Barrier(MPI_COMM_WORLD);
   }
 
   auto now = high_resolution_clock::now();
@@ -106,7 +104,6 @@ void Do(int rank, int size, long buf_size, int level, int iterations) {
 
 int main(int argc, char**argv) {
   int rank, size;
-
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
