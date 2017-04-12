@@ -133,7 +133,10 @@ class P2PNet {
   int mpi_rank_;
   std::vector<std::string> mpi_rank_to_host_;
   std::map<std::string, int> mpi_host_to_rank_;
-  std::list<struct Request*> mpi_request_queue_;
+  //std::list<struct Request*> mpi_request_queue_;
+  std::vector<struct Request*> mpi_request_queue_;
+  MPI_Request* mpi_request_array_;
+  int mpi_request_count_;
 #endif
 
   void* zmq_context_;
