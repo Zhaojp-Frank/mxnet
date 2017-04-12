@@ -10,12 +10,10 @@ void Do(int rank, int size, long buf_size, int level, int iterations) {
   MPI_Request sends[8192], recvs[8192];
   bool send_dones[8192];
   bool recv_dones[8192];
-  int flag, count;
   MPI_Barrier(MPI_COMM_WORLD);
   auto begin = high_resolution_clock::now();
   auto begin_ms = duration_cast<milliseconds>(begin.time_since_epoch()).count();
   for (int i = 0; i < iterations; i++) {
-    count = (size - 1) * 2 * level;
     for (int l = 0; l < level; l++) {
       for (int j = 0; j < size; j++) {
         if (j == rank) {
@@ -41,10 +39,10 @@ void Do(int rank, int size, long buf_size, int level, int iterations) {
           if (j == rank) {
             continue;
           }
-          int idx = j * level + l;
     	  //for (int l = 0; l < level; l++) {
-          //int idx = j * level + l;
+          int idx = j * level + l;
           if (!recv_dones[idx]) {
+            int flag;
             MPI_Test(&recvs[idx], &flag, MPI_STATUS_IGNORE);
             if (flag) {
               MPI_Wait(&recvs[idx], MPI_STATUS_IGNORE);
@@ -54,6 +52,7 @@ void Do(int rank, int size, long buf_size, int level, int iterations) {
           }
           //}
           if (!send_dones[idx]) {
+            int flag;
             MPI_Test(&sends[idx], &flag, MPI_STATUS_IGNORE);
             if (flag) {
               MPI_Wait(&sends[idx], MPI_STATUS_IGNORE);
@@ -64,34 +63,6 @@ void Do(int rank, int size, long buf_size, int level, int iterations) {
         }
       }
     }
-    /*
-    while (count > 0) {
-      for (int l = 0; l < level; l++) {
-        for (int j = 0; j < size; j++) {
-          if (j == rank) {
-            continue;
-          }
-          int idx = j * level + l;
-          if (!send_dones[idx]) {
-            MPI_Test(&sends[idx], &flag, MPI_STATUS_IGNORE);
-            if (flag) {
-              MPI_Wait(&sends[idx], MPI_STATUS_IGNORE);
-              count--;
-              send_dones[idx] = true;
-            }
-          }
-          if (!recv_dones[idx]) {
-            MPI_Test(&recvs[idx], &flag, MPI_STATUS_IGNORE);
-            if (flag) {
-              MPI_Wait(&recvs[idx], MPI_STATUS_IGNORE);
-              count--;
-              recv_dones[idx] = true;
-            }
-          }
-        }
-      }
-    }
-    */
     MPI_Barrier(MPI_COMM_WORLD);
   }
 
