@@ -262,7 +262,9 @@ Graph AttachOpExecs(Graph g) {
       continue;
     }
     const nnvm::Op* op = CHECK_NOTNULL(inode.source->op());
-    if (no_comp_flag && !(op->name == "P2PNetRecv" || op->name == "P2PNetSend")) {
+    if (no_comp_flag && op->name != "P2PNetRecv" && op->name != "P2PNetSend"
+        && op->name != "P2PNetInit" && op->name != "P2PNetSendSink") {
+	LOG(INFO) << "Ignore: " << op->name;
       ret[i] = std::make_shared<FComputeExecutor>(DoNothingFCompute, inode.source->attrs);
       continue;
     }
