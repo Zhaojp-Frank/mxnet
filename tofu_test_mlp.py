@@ -26,6 +26,7 @@ def get_symbol(args):
   return net
 
 def test_mlp():
+    has_mpi = False
     # print logging by default
     logging.basicConfig(level=logging.DEBUG)
 
@@ -53,6 +54,7 @@ def test_mlp():
     if args.worker_index is not None:
         worker_index = args.worker_index
     else:
+        has_mpi = True
         from mpi4py import MPI
         comm = MPI.COMM_WORLD
         worker_index = comm.Get_rank()
@@ -91,6 +93,11 @@ def test_mlp():
                         grad_req='write',
                         group2ctx=group2ctx)
 
+
+    all_time = []
+    if has_mpi:
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
     for i in range(num_loops):
         print('=> loop %d' % i);
         st_l = time.time()
@@ -105,12 +112,17 @@ def test_mlp():
         # We need make sure all send nodes have finished before the end of the iteration.
         if len(outputs) > 0:
             outputs[-1].wait_to_read()
+        if has_mpi and i < cold_skip - 1:
+           comm.Barrier()
         ed_l = time.time()
         print('=> loop duration %f' % float(ed_l - st_l))
+        if (i >= cold_skip):
+             all_time.append(float(ed_l - st_l))
     t1 = time.time()
 
     duration = t1 - t0
     print('duration %f, average %f' % (duration, float(duration) / (num_loops - cold_skip)))
+    print('std : %f' % np.asarray(all_time).std())
 
 
 if __name__ == "__main__":

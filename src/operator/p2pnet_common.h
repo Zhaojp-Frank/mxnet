@@ -165,7 +165,7 @@ class P2PNet {
   std::thread* main_thread_;
   ctpl::thread_pool *recv_thread_pool_;
 
-  //std::mutex internal_mtx; // mutex lock for request_queue_
+  std::mutex internal_mtx; // mutex lock for request_queue_
   SpinLock spin_lock_;  // spin lock for request queue
   std::vector<struct Request*> internal_request_queue_;
   //std::atomic<size_t> internal_request_queue_size_;
