@@ -1,7 +1,7 @@
 #/!bin/bash
 
 if [ `hostname` == $MASTER ]; then
-  $@  | tee $LOG_DIR/`hostname`.log
+  $@ 2>&1 | tee $LOG_DIR/`hostname`.log
 else
-  $@ > $LOG_DIR/`hostname`.log
+  $@ &> $LOG_DIR/`hostname`.log
 fi
