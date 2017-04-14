@@ -171,7 +171,7 @@ class ThreadedEnginePerDevice : public ThreadedEngine {
    */
   template<dmlc::ConcurrentQueueType type>
   inline void CPUWorker(ThreadWorkerBlock<type> *block) {
-    unsigned affinity = dmlc::GetEnv("MXNET_P2PNET_CPU_SCHED_AFFINITY", 3);
+    /*unsigned affinity = dmlc::GetEnv("MXNET_P2PNET_CPU_SCHED_AFFINITY", 3);
     LOG(INFO) << "CPU Worker thread affinity: " << affinity;
     if (affinity < 65536) {
 
@@ -185,7 +185,7 @@ class ThreadedEnginePerDevice : public ThreadedEngine {
         std::cerr << "Error calling pthread_setaffinity_np: " << rc << std::endl;
         CHECK(false);
       }
-    }
+    }*/
 
     auto* task_queue = &(block->task_queue);
     RunContext run_ctx;

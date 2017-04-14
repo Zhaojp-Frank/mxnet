@@ -76,6 +76,9 @@ class P2PNetDebugger {
 
 class SpinLock {
  public:
+  bool TryLock() {
+    return !lock_.test_and_set(std::memory_order_acquire);
+  }
   void Lock() {
     while (lock_.test_and_set(std::memory_order_acquire))
       ;  // spin

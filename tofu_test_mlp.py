@@ -8,7 +8,7 @@ import pickle as pickle
 import logging
 import argparse
 
-num_loops = 25
+num_loops = 55
 cold_skip = 5
 
 # symbol net

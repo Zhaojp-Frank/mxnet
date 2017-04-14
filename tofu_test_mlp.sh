@@ -1,21 +1,21 @@
 #!/bin/bash
 source ./mpi_env.sh
 
-export OMP_NUM_THREADS=1
+export OMP_NUM_THREADS=4
 export OMP_DYNAMIC=FALSE
 
 export MKL_DYNAMIC=FALSE
-export MKL_NUM_THREADS=1
+#export MKL_NUM_THREADS=8
 #export KMP_AFFINITY="explicit,granularity=fine,proclist=[0,1,2,3,4,5,6,7]"
+export KMP_AFFINITY="explicit,granularity=fine,proclist=[0,1,2,3]"
 
 export NNVM_EXEC_MATCH_RANGE=0
 export MXNET_P2PNET_HOST_PATH=/home/tofu/mxnet/host
-export MXNET_P2PNET_MAIN_AFFINITY=0
 export MXNET_P2PNET_ZMQ_IO_THREADS=0
 export MXNET_CPU_PRIORITY_NTHREADS=1
 export MXNET_P2PNET_DEBUG=0
-export MXNET_P2PNET_MPI_SLEEP_DURATION=0
-export MXNET_P2PNET_MAIN_AFFINITY=6
+#export MXNET_P2PNET_MPI_SLEEP_DURATION=1
+export MXNET_P2PNET_MAIN_AFFINITY=7
 export MXNET_P2PNET_MPI_TEST_METHOD=1
 
 NAME=$1  # name of the experiment
@@ -43,4 +43,5 @@ else
   export I_MPI_DEBUG_OUTPUT=$LOG_DIR/mpi_debug
   mpirun -np $NP -envall -f host -ppn 1 \
          ./mpi_wrapper.sh python tofu_test_mlp.py -f host --batch_size=$BATCH_SIZE --hidden_size=$HIDDEN_SIZE
+#--num_layers=50
 fi

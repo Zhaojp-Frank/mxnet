@@ -365,7 +365,6 @@ void P2PNet::MPI_DoInternalRequest(struct Request* request) {
 void P2PNet::MPI_Main() {
   auto begin = high_resolution_clock::now();
   int sleep_duration = dmlc::GetEnv("MXNET_P2PNET_MPI_SLEEP_DURATION", 0);
-  sleep_duration = 1;
   int test_method = dmlc::GetEnv("MXNET_P2PNET_MPI_TEST_METHOD", 0);
   bool debug = (P2PNetDebugger::Get().Level() &
                 P2PNetDebugger::kDebugPrintPending);
@@ -373,45 +372,19 @@ void P2PNet::MPI_Main() {
   mpi_request_array_ = new MPI_Request[8192];
   std::vector<struct Request*> requests;
   while (true) {
-    // First check the internal request zmq socket.
-    /*poll_items_ = new zmq_pollitem_t[1];
-    poll_items_[0] = {internal_server_, 0, ZMQ_POLLIN, 0};
-    int ret = zmq_poll(poll_items_, 1, sleep_duration);
-
-    if (ret > 0) {
-      if (mpi_request_queue_.size() == 0) {
-        mpi_request_count_ = 0;
-      }
-      std::string identity;
-      size_t index;
-      RecvWithIdentity(internal_server_, &identity, &index, sizeof(index));
-      SendWithIdentity(internal_server_, identity, &index, sizeof(index));
-      MPI_DoInternalRequest(index);
-    } else if (ret < 0) {
-      CHECK(errno == EAGAIN || errno == ETERM || errno == ENOTSOCK);
-      if (errno == ETERM || errno == ENOTSOCK) {
-        std::cout << "P2PNet_MPI says bye !!!!" << std::endl;
-        break;
-      }
-    }*/
-    {
-      spin_lock_.Lock();
-      //std::lock_guard<std::mutex> g(internal_mtx);
-      if (!internal_request_queue_.empty()) {
-        //LOG(INFO) << "Got " << internal_request_queue_.size() << " requests";
-        requests.swap(internal_request_queue_);
-      }
-      spin_lock_.UnLock();
+    spin_lock_.Lock();
+    if (!internal_request_queue_.empty()) {
+      //LOG(INFO) << "Got " << internal_request_queue_.size() << " requests";
+      requests.swap(internal_request_queue_);
     }
-
+    spin_lock_.UnLock();
     for (struct Request* req : requests) {
       MPI_DoInternalRequest(req);
     }
     requests.clear();
-
+    
     // Loop all MPI requests to see if any request is fulfilled.
-    if (test_method) {
-      for (int k = 0; k < 10; ++k) {
+    if (!mpi_request_queue_.empty()) {
       mpi_request_queue_.erase(
           std::remove_if (
             mpi_request_queue_.begin(), mpi_request_queue_.end(),
@@ -428,8 +401,12 @@ void P2PNet::MPI_Main() {
               return flag;
             }),
           mpi_request_queue_.end());
-      }
     } else {
+      std::this_thread::sleep_for(std::chrono::microseconds(1));
+    }
+    //}
+    //}
+    /*
       CHECK(false) << "Should not reach here";
       int index = 0, flag = 1;
       while (mpi_request_count_ > 0 && flag && index != MPI_UNDEFINED) {
@@ -443,9 +420,9 @@ void P2PNet::MPI_Main() {
           break;
         }
       }
-    }
+    */
 
-    if (debug) {
+    /*if (debug) {
       auto now = high_resolution_clock::now();
       if (now - begin > std::chrono::milliseconds(30000)) {
         std::cout << "mpi_request_queue_.size : " << mpi_request_queue_.size()
@@ -460,11 +437,12 @@ void P2PNet::MPI_Main() {
         }
         begin = high_resolution_clock::now();
        }
-    }
+    }*/
 
-    if (sleep_duration) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(sleep_duration));
-    }
+    //if (sleep_duration) {
+      //std::this_thread::sleep_for(std::chrono::milliseconds(sleep_duration));
+      //std::this_thread::sleep_for(std::chrono::microseconds(1));
+    //}
   }
 }
 #endif
@@ -532,7 +510,6 @@ void P2PNet::DoRequest(struct Request* request) {
   //ret = zmq_recv(request_socket, &index, sizeof(index), 0);
   //CHECK((ret == sizeof(index))) << "Ret = " << ret << " Errno = " << errno;
   spin_lock_.Lock();
-  //std::lock_guard<std::mutex> g(internal_mtx);
   //LOG(INFO) << "Post request type=" << request->type;
   internal_request_queue_.push_back(request);
   //LOG(INFO) << "Request queue size: " << internal_request_queue_.size();
