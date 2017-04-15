@@ -75,6 +75,7 @@ class GraphExecutor : public Executor {
                        const std::vector<NDArray>& in_args,
                        const std::vector<NDArray>& aux_states);
   Graph SplitDistributedGraph(Graph& g, const Context& default_ctx);
+  std::vector<int> CalcPriority();
   // initialize the cached operator
   void InitCachedOps();
   // initialize the resources in the graph

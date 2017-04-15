@@ -708,6 +708,21 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
   }
 }
 
+std::vector<int> GraphExecutor::CalcPriority() {
+  const auto& idx = graph_.indexed_graph();
+  std::vector<int> ret(idx.num_nodes(), 0);
+  DFSVisit(graph_.outputs, [&ret, &idx] (const nnvm::NodePtr& n) {
+      const uint32_t nid = idx.node_id(n.get());
+      int priority = 0;
+      for (const auto& in_ent : n->inputs) {
+        const uint32_t pnid = idx.node_id(in_ent.node.get());
+        priority = std::max(priority, ret[pnid]);
+      }
+      ret[nid] = priority + 1;
+      //LOG(INFO) << "Visit node #" << idx.node_id(n.get()) << " Priority=" << ret[nid];
+    });
+  return ret;
+}
 
 void GraphExecutor::InitCachedOps() {
   // get the graph
@@ -719,6 +734,9 @@ void GraphExecutor::InitCachedOps() {
   const auto& vctx = graph_.GetAttr<ContextVector>("context");
   const auto& addto_entry = graph_.GetAttr<std::vector<int> >("addto_entry");
   const auto& skip_plus_node = graph_.GetAttr<std::vector<int> >("skip_plus_node");
+  
+  // Get priorities.
+  const auto& node_priorities = CalcPriority();
 
   op_nodes_.resize(idx.num_nodes());
   // setup the array and requirements.
@@ -822,7 +840,7 @@ void GraphExecutor::InitCachedOps() {
     dedup(all_vars);
     Engine::Get()->PushSync([exec](RunContext rctx) {
         exec->Setup();
-      }, Context::CPU(), {}, all_vars, FnProperty::kNormal, 0,
+      }, Context::CPU(), {}, all_vars, FnProperty::kNormal, node_priorities[nid],
       PROFILER_MESSAGE("SetupExec"));
     auto& name = idx[nid].source->attrs.name;
     auto exec_fun = [exec, is_async, is_gpu, name] (
