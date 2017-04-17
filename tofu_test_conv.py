@@ -33,6 +33,7 @@ class Experiment:
         if (self.count > self.ignored_iterations):
             end = time.time()
             self.exps.append(end - self.begin)
+            print("Spent end %f  on this iteration " % (end - self.begin))
 
     def Summary(self):
         assert len(self.exps) == (self.iterations - self.ignored_iterations), len(self.exps)

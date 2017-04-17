@@ -16,7 +16,8 @@ def conv_factory(data, num_filter, kernel, stride=(1, 1), pad=(1, 1), with_bn=Fa
                              num_filter=num_filter,
                              kernel=kernel,
                              stride=stride,
-                             pad=pad)
+                             pad=pad,
+                             no_bias=True)
     if with_bn:
         net = mx.sym.BatchNorm(net, fix_gamma=False)
     net = mx.sym.Activation(net, act_type="relu")
@@ -37,19 +38,19 @@ def get_symbol(args):
     net = mx.sym.Pooling(net, kernel=(3, 3), stride=(2, 2), pool_type="max")
     # group 3
     net = mx.sym.Flatten(net)
-    net = mx.sym.Dropout(net, p=0.5)
+    #net = mx.sym.Dropout(net, p=0.5)
     net = mx.sym.FullyConnected(net, num_hidden=4096)
     net = mx.sym.Activation(net, act_type="relu")
     # group 4
-    net = mx.sym.Dropout(net, p=0.5)
+    #net = mx.sym.Dropout(net, p=0.5)
     net = mx.sym.FullyConnected(net, num_hidden=4096)
     net = mx.sym.Activation(net, act_type="relu")
     # group 5
     net = mx.sym.FullyConnected(net, num_hidden=1000)
 
-    # return net, [('data', (args.batch_size, 3, 224, 224))]
+    #return net, [('data', (args.batch_size, 3, 224, 224))]
     net = mx.sym.SoftmaxOutput(net, name='softmax')
-    return net, [('data', (args.batch_size, 3, 224, 224))], [('softmax_label', (args.batch_size,))]
+    return net, [('data', (args.batch_size, 3, 224, 224)), ('softmax_label', (args.batch_size,))]
 
 
 def test_net():

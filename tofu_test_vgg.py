@@ -57,7 +57,7 @@ def get_symbol(args, net_type='D'):
     net = mx.sym.Activation(net, act_type="relu")
     net._set_attr(mirror_stage='True')
     # group 5
-    net = mx.sym.FullyConnected(net, num_hidden=1000, attr={'num_gpus' : str(args.num_gpus)})
+    net = mx.sym.FullyConnected(net, num_hidden=1000)
     # return net, [('data', (args.batch_size, 3, 224, 224))]
     net = mx.sym.SoftmaxOutput(net, name="softmax")
     return net, [('data', (args.batch_size, 3, 224, 224))], [('softmax_label', (args.batch_size,))]

@@ -71,6 +71,7 @@ Operator *CreateOp<cpu>(PoolingParam param, int dtype) {
   return op;
 }
 
+template<>
 Operator* CreateBackwardOp<cpu>(
     const PoolingParam& param,
     int dtype,
