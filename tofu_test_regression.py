@@ -25,9 +25,9 @@ def test_net():
 
     print(sys.argv)
     parser = argparse.ArgumentParser("MLP single card code")
-    parser.add_argument('--batch_size', type=int, default=128, help='Batch size')
-    parser.add_argument('--feature_size', type=int, default=1024, help='Feature size')
-    parser.add_argument('--hidden_size', type=int, default=1024*1024*128, help='Hidden size')
+    parser.add_argument('--batch_size', type=int, default=64, help='Batch size')
+    parser.add_argument('--feature_size', type=int, default=512, help='Feature size')
+    parser.add_argument('--hidden_size', type=int, default=1024*1024*2, help='Hidden size')
     parser.add_argument('-a', '--addresses', type=str, help='Addresses of all workers.')
     parser.add_argument('-i', '--worker_index', type=int, 
                         help='Index of this worker in addresses')
