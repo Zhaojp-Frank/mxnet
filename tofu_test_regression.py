@@ -7,14 +7,14 @@ import os, sys,time
 import logging
 import argparse
 
-num_loops = 25
-cold_skip = 5
+num_loops = 13
+cold_skip = 3
 
 # symbol net
 
 def get_symbol(args):
     net = mx.sym.Variable("data")
-    net = mx.sym.FullyConnected(net, num_hidden=args.hidden_size)
+    net = mx.sym.FullyConnected(net, num_hidden=args.hidden_size, no_bias=True)
     net = mx.sym.SoftmaxOutput(net, name='softmax')
     return net, [('data', (args.batch_size, args.feature_size)), ('softmax_label', (args.batch_size,))]
 
@@ -26,8 +26,8 @@ def test_net():
     print(sys.argv)
     parser = argparse.ArgumentParser("MLP single card code")
     parser.add_argument('--batch_size', type=int, default=64, help='Batch size')
-    parser.add_argument('--feature_size', type=int, default=512, help='Feature size')
-    parser.add_argument('--hidden_size', type=int, default=1024*1024*2, help='Hidden size')
+    parser.add_argument('--feature_size', type=int, default=1024*1024*2, help='Feature size')
+    parser.add_argument('--hidden_size', type=int, default=1024, help='Hidden size')
     parser.add_argument('-a', '--addresses', type=str, help='Addresses of all workers.')
     parser.add_argument('-i', '--worker_index', type=int, 
                         help='Index of this worker in addresses')

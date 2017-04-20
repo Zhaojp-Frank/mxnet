@@ -8,8 +8,8 @@ import pickle as pickle
 import logging
 import argparse
 
-num_loops = 25
-cold_skip = 5
+num_loops = 13
+cold_skip = 3
 
 vgg_type = \
 {
@@ -47,20 +47,20 @@ def get_symbol(args, net_type='D'):
     net = vgg_body_factory(vgg_type[net_type])
     # group 3
     net = mx.sym.Flatten(net)
-    net = mx.sym.Dropout(net, p=0.5)
-    net = mx.sym.FullyConnected(net, num_hidden=4096)
+    #net = mx.sym.Dropout(net, p=0.5)
+    net = mx.sym.FullyConnected(net, num_hidden=4096, no_bias=True)
     net = mx.sym.Activation(net, act_type="relu")
     net._set_attr(mirror_stage='True')
     # group 4
-    net = mx.sym.Dropout(net, p=0.5)
-    net = mx.sym.FullyConnected(net, num_hidden=4096)
+    #net = mx.sym.Dropout(net, p=0.5)
+    net = mx.sym.FullyConnected(net, num_hidden=4096, no_bias=True)
     net = mx.sym.Activation(net, act_type="relu")
     net._set_attr(mirror_stage='True')
     # group 5
-    net = mx.sym.FullyConnected(net, num_hidden=1000)
+    net = mx.sym.FullyConnected(net, num_hidden=1024, no_bias=True)
     # return net, [('data', (args.batch_size, 3, 224, 224))]
     net = mx.sym.SoftmaxOutput(net, name="softmax")
-    return net, [('data', (args.batch_size, 3, 224, 224))], [('softmax_label', (args.batch_size,))]
+    return net, [('data', (args.batch_size, 3, 224, 224)), ('softmax_label', (args.batch_size,))]
 
 
 def test_net():
@@ -115,7 +115,7 @@ def test_net():
                  for name, shape, dtype in zip(net.list_arguments(), 
                                                arg_shapes, arg_types)
                  if name != 'data' and not name.endswith('label')}
-    print('Argument grads: ', grad_dict.keys())
+    print('Argument grads: ', args_grad.keys())
 
     executor = net.bind(ctx=default_ctx,
                         args=arg_arrays,
@@ -131,7 +131,7 @@ def test_net():
             t0 = time.time()
         outputs = executor.forward()
         executor.backward([outputs[0]])
-        for name, grad in grad_dict.items():
+        for name, grad in args_grad.items():
             grad.wait_to_read()
         if len(outputs) > 0:
             outputs[-1].wait_to_read()

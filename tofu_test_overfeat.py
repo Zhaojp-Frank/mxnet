@@ -7,8 +7,8 @@ import os, sys,time
 import logging
 import argparse
 
-num_loops = 5
-cold_skip = 2
+num_loops = 13
+cold_skip = 3
 
 # symbol net
 def conv_factory(data, num_filter, kernel, stride=(1, 1), pad=(1, 1), with_bn=False):
@@ -131,6 +131,7 @@ def test_net():
         print('=> loop duration %f' % float(ed_l - st_l))
         if (i >= cold_skip):
              all_time.append(float(ed_l - st_l))
+        #comm.Barrier()
     t1 = time.time()
     duration = t1 - t0
     print('duration %f, average %f' % (duration, 

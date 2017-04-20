@@ -227,7 +227,10 @@ inline bool ExistForwardNode(const nnvm::IndexedGraph::Node& inode) {
   // TODO(minjie): Currently, the first control dependency of a backward
   // node must be its corresponding forward node. A better way is to use
   // some graph attribute to specify that.
-  return inode.control_deps.size() > 0;
+  if (inode.source->attrs.dict.count("OriginalControlSize") > 0) {
+    return false;
+  } 
+  return inode.control_deps.size() > 0 ;
 }
 
 // pass to attach operator executors
@@ -268,7 +271,8 @@ Graph AttachOpExecs(Graph g) {
       ret[i] = std::make_shared<FComputeExecutor>(DoNothingFCompute, inode.source->attrs);
       continue;
     }
-    /*if (false
+#if 0
+    if (false
         || op->name == "Concat"
         || op->name == "_backward_Concat"
         || op->name == "ElementWiseSum"
@@ -278,7 +282,8 @@ Graph AttachOpExecs(Graph g) {
         ) {
       ret[i] = std::make_shared<FComputeExecutor>(DoNothingFCompute, inode.source->attrs);
       continue;
-    }*/
+    }
+#endif
     if (is_layer_forward.count(op) || is_layer_backward.count(op)) {
       // Layer operator.
       const OperatorProperty& prop = ParseOpProp(inode.source->attrs);
@@ -291,6 +296,7 @@ Graph AttachOpExecs(Graph g) {
         // Forward operator.
         shared_ptr<Operator> layer_fwd_op(OpPropCreateLayerOp(prop, vctx[i], ishape, itype));
         ret[i] = std::make_shared<ForwardOpExecutor>(layer_fwd_op, mutate_index);
+/*
       } else if (ExistForwardNode(inode)) {
         // Backward operator that has corresponding forward operator. Reuse the already created
         // forward OpExecutor.
@@ -306,6 +312,7 @@ Graph AttachOpExecs(Graph g) {
             std::dynamic_pointer_cast<ForwardOpExecutor>(ret[fwd_id])->op_,
             prop,
             mutate_index);
+*/
       } else {
         // Backward operator that has no corresponding forward operator. Try to create the OpExecutor
         // by its own.

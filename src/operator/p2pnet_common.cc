@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <unistd.h>
 #include "./p2pnet_common.h"
 #include "./ctpl_stl.h"
 
@@ -108,7 +109,7 @@ void DoSendOnComplete(void* data, void* hint) {
   (void) data;
   P2PNet::Request* request = reinterpret_cast<P2PNet::Request*>(hint);
   P2PNetDebugger::Get().PrintTime(
-      "DoSend of %u calls on_complete with %u bytes",
+      "DoSend of %u calls on_complete with %llu bytes",
       request->tensor_id, request->buffer_size);
   request->is_fulfilled = true;
   request->on_complete();
@@ -312,8 +313,15 @@ void P2PNet::Main() {
 void P2PNet::MPI_DoSend(struct Request* request) {
   MPI_Request *mpi_request = new MPI_Request();
   int rank = mpi_host_to_rank_[request->address];
-  MPI_Isend(request->buffer, request->buffer_size,  MPI_BYTE, rank,
-            request->tensor_id, MPI_COMM_WORLD, mpi_request);
+  if (request->buffer_size < 2147483648) {
+    MPI_Isend(request->buffer, request->buffer_size,  MPI_BYTE, rank,
+              request->tensor_id, MPI_COMM_WORLD, mpi_request);
+  } else {
+    int size;
+    MPI_Type_size(MPI_INT, &size);
+    MPI_Isend(request->buffer, request->buffer_size / size,  MPI_INT, rank,
+              request->tensor_id, MPI_COMM_WORLD, mpi_request);
+  }
   request->mpi_request = mpi_request;
   mpi_request_queue_.push_back(request);
   //mpi_request_array_[mpi_request_count_++] = *(mpi_request);
@@ -324,8 +332,15 @@ void P2PNet::MPI_DoSend(struct Request* request) {
 void P2PNet::MPI_DoRecv(struct Request* request) {
   MPI_Request *mpi_request = new MPI_Request();
   int rank = mpi_host_to_rank_[request->address];
-  MPI_Irecv(request->buffer, request->buffer_size,  MPI_BYTE, rank,
-            request->tensor_id, MPI_COMM_WORLD, mpi_request);
+  if (request->buffer_size < 2147483648) {
+    MPI_Irecv(request->buffer, request->buffer_size,  MPI_BYTE, rank,
+              request->tensor_id, MPI_COMM_WORLD, mpi_request);
+  } else {
+    int size;
+    MPI_Type_size(MPI_INT, &size);
+    MPI_Irecv(request->buffer, request->buffer_size / size,  MPI_INT, rank,
+              request->tensor_id, MPI_COMM_WORLD, mpi_request);
+  }
   request->mpi_request = mpi_request;
   mpi_request_queue_.push_back(request);
   //mpi_request_array_[mpi_request_count_++] = *(mpi_request);
@@ -334,8 +349,7 @@ void P2PNet::MPI_DoRecv(struct Request* request) {
 }
 
 void P2PNet::MPI_RequestOnComplete(struct Request* request) {
-  MPI_Status status;
-  MPI_Wait(request->mpi_request, &status);
+  MPI_Wait(request->mpi_request, MPI_STATUS_IGNORE);
   if (request->type == SendRequest) {
     P2PNetDebugger::Get().PrintTime("Send %u on_complete with %u bytes",
                                     request->tensor_id, request->buffer_size);
@@ -404,6 +418,8 @@ void P2PNet::MPI_Main() {
     } else {
       std::this_thread::sleep_for(std::chrono::microseconds(1));
     }
+      //std::this_thread::sleep_for(std::chrono::microseconds(1));
+    //usleep(100);
     //}
     //}
     /*
@@ -422,7 +438,7 @@ void P2PNet::MPI_Main() {
       }
     */
 
-    /*if (debug) {
+    if (debug) {
       auto now = high_resolution_clock::now();
       if (now - begin > std::chrono::milliseconds(30000)) {
         std::cout << "mpi_request_queue_.size : " << mpi_request_queue_.size()
@@ -437,7 +453,7 @@ void P2PNet::MPI_Main() {
         }
         begin = high_resolution_clock::now();
        }
-    }*/
+    }
 
     //if (sleep_duration) {
       //std::this_thread::sleep_for(std::chrono::milliseconds(sleep_duration));
@@ -487,6 +503,7 @@ void P2PNet::Start() {
     is_main_start_ = true;
     SetMainAffinity();
   }
+  //MPI_Barrier(MPI_COMM_WORLD);
 }
 
 void P2PNet::DoRequest(struct Request* request) {
