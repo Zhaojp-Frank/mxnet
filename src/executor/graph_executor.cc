@@ -838,10 +838,18 @@ void GraphExecutor::InitCachedOps() {
     }
     dedup(mutate_vars);
     dedup(all_vars);
-    Engine::Get()->PushSync([exec](RunContext rctx) {
-        exec->Setup();
+    const int oversharding = dmlc::GetEnv("TOFU_OVERSHARDING", 0);
+    if (oversharding) {
+      Engine::Get()->PushSync([exec](RunContext rctx) {
+          exec->Setup();
       }, Context::CPU(), {}, all_vars, FnProperty::kNormal, node_priorities[nid],
       PROFILER_MESSAGE("SetupExec"));
+    } else {
+      Engine::Get()->PushSync([exec](RunContext rctx) {
+          exec->Setup();
+      }, Context::CPU(), {}, all_vars, FnProperty::kNormal, 0,
+      PROFILER_MESSAGE("SetupExec"));
+    }
     auto& name = idx[nid].source->attrs.name;
     auto exec_fun = [exec, is_async, is_gpu, name] (
         RunContext ctx, Engine::CallbackOnComplete on_complete) {
