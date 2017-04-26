@@ -351,9 +351,11 @@ void P2PNet::MPI_DoRecv(struct Request* request) {
 void P2PNet::MPI_RequestOnComplete(struct Request* request) {
   MPI_Wait(request->mpi_request, MPI_STATUS_IGNORE);
   if (request->type == SendRequest) {
+    mpi_sent_bytes_ += request->buffer_size;
     P2PNetDebugger::Get().PrintTime("Send %u on_complete with %u bytes",
                                     request->tensor_id, request->buffer_size);
   } else if (request->type == RecvRequest) {
+    mpi_recv_bytes_ += request->buffer_size;
     P2PNetDebugger::Get().PrintTime("Recv %u on_complete with %u bytes",
                                     request->tensor_id, request->buffer_size);
   } else {
@@ -417,9 +419,8 @@ void P2PNet::MPI_Main() {
           mpi_request_queue_.end());
     } else {
       std::this_thread::sleep_for(std::chrono::microseconds(1));
-    }
-      //std::this_thread::sleep_for(std::chrono::microseconds(1));
-    //usleep(100);
+   }
+   //usleep(100);
     //}
     //}
     /*
@@ -472,6 +473,10 @@ bool P2PNet::Init(const std::string& address) {
   internal_request_queue_.clear();
 #ifdef P2PNET_MPI
   mpi_request_queue_.clear();
+  std::cout << "MPI has sent " << mpi_sent_bytes_ << " bytes." << std::endl;
+  std::cout << "MPI has received " << mpi_recv_bytes_ << " bytes." << std::endl;
+  mpi_sent_bytes_ = 0;
+  mpi_recv_bytes_ = 0;
 #endif
 
   if (!is_bind_) {

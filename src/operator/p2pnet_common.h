@@ -153,6 +153,8 @@ class P2PNet {
   std::vector<struct Request*> mpi_request_queue_;
   MPI_Request* mpi_request_array_;
   int mpi_request_count_;
+  size_t mpi_sent_bytes_;
+  size_t mpi_recv_bytes_;
 #endif
 
   void* zmq_context_;
