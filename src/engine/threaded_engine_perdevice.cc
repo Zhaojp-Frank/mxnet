@@ -30,6 +30,8 @@ class ThreadedEnginePerDevice : public ThreadedEngine {
   static auto constexpr kCopyQueue = kPriority;
   static auto constexpr kPriorityQueue = kPriority;
   static auto constexpr kWorkerQueue = kFIFO;
+  // Use this when doing TOFU_OVERSHARDING.
+  //static auto constexpr kWorkerQueue = kPriority;
 
   ThreadedEnginePerDevice() noexcept(false) {
     gpu_worker_nthreads_ = common::GetNumThreadPerGPU();
