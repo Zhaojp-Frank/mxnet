@@ -74,6 +74,22 @@ class P2PNetDebugger {
   int level_;
 };
 
+class SpinLock {
+ public:
+  bool TryLock() {
+    return !lock_.test_and_set(std::memory_order_acquire);
+  }
+  void Lock() {
+    while (lock_.test_and_set(std::memory_order_acquire))
+      ;  // spin
+  }
+  void UnLock() {
+    lock_.clear(std::memory_order_release);
+  }
+ private:
+  std::atomic_flag lock_ = ATOMIC_FLAG_INIT;
+};
+
 class P2PNet {
  public:
   static P2PNet& Get() {
@@ -125,7 +141,7 @@ class P2PNet {
 
 #ifdef P2PNET_MPI
   void MPI_Main();
-  void MPI_DoInternalRequest(size_t index);
+  void MPI_DoInternalRequest(struct Request* request);
   void MPI_DoSend(struct Request* request);
   void MPI_DoRecv(struct Request* request);
   void MPI_RequestOnComplete(struct Request* request);
@@ -137,6 +153,8 @@ class P2PNet {
   std::vector<struct Request*> mpi_request_queue_;
   MPI_Request* mpi_request_array_;
   int mpi_request_count_;
+  size_t mpi_sent_bytes_;
+  size_t mpi_recv_bytes_;
 #endif
 
   void* zmq_context_;
@@ -151,11 +169,14 @@ class P2PNet {
   size_t poll_items_count_;
   std::thread* main_thread_;
   ctpl::thread_pool *recv_thread_pool_;
+
+  std::mutex internal_mtx; // mutex lock for request_queue_
+  SpinLock spin_lock_;  // spin lock for request queue
   std::vector<struct Request*> internal_request_queue_;
-  std::atomic<size_t> internal_request_queue_size_;
+  //std::atomic<size_t> internal_request_queue_size_;
   std::vector<void*> per_thread_isocket_queue_;
   std::atomic<size_t> per_thread_isocket_queue_size_;
-  std::mutex internal_mtx; // mutex lock for request_queue_
+
   std::map<unsigned, std::string> tensor_to_receiver_map_;
   std::map<unsigned, size_t> tensor_to_send_request_map_;
   std::map<unsigned, size_t> tensor_to_recv_request_map_;

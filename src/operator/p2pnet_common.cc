@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <unistd.h>
 #include "./p2pnet_common.h"
 #include "./ctpl_stl.h"
 
@@ -20,7 +21,6 @@ namespace op {
 
 P2PNet::P2PNet() : zmq_context_(zmq_ctx_new()), is_main_start_(false),
                    is_bind_(false), main_thread_(nullptr),
-                   internal_request_queue_size_(0),
                    per_thread_isocket_queue_size_(0) {
   zmq_ctx_set(zmq_context_, ZMQ_IO_THREADS,
               dmlc::GetEnv("MXNET_P2PNET_ZMQ_IO_THREADS", 1));
@@ -35,7 +35,7 @@ P2PNet::P2PNet() : zmq_context_(zmq_ctx_new()), is_main_start_(false),
   value = 8192;
   zmq_setsockopt(internal_server_, ZMQ_BACKLOG, &value, sizeof(value));
   zmq_setsockopt(server_, ZMQ_BACKLOG, &value, sizeof(value));
-  internal_request_queue_.resize(kRequestQueueSize);
+  //internal_request_queue_.resize(kRequestQueueSize);
   per_thread_isocket_queue_.resize(128);
 
 #ifdef P2PNET_MPI
@@ -109,13 +109,14 @@ void DoSendOnComplete(void* data, void* hint) {
   (void) data;
   P2PNet::Request* request = reinterpret_cast<P2PNet::Request*>(hint);
   P2PNetDebugger::Get().PrintTime(
-      "DoSend of %u calls on_complete with %u bytes",
+      "DoSend of %u calls on_complete with %llu bytes",
       request->tensor_id, request->buffer_size);
   request->is_fulfilled = true;
   request->on_complete();
 }
 
 void P2PNet::DoSend(struct Request* request) {
+  CHECK(false) << "Should not reach here!";
   P2PNetDebugger::Get().PrintTime("DoSend of %u", request->tensor_id);
   std::string receiver_identity = tensor_to_receiver_map_[request->tensor_id];
   tensor_to_send_request_map_.erase(request->tensor_id);
@@ -133,6 +134,7 @@ void P2PNet::DoSend(struct Request* request) {
 }
 
 void P2PNet::DoRequestRecv(struct Request* request) {
+  CHECK(false) << "Should not reach here!";
   void* request_socket;
   auto it = recv_request_sockets_.find(request->address);
   if (it == recv_request_sockets_.end()) {
@@ -168,6 +170,7 @@ void P2PNet::DoRequestRecv(struct Request* request) {
 }
 
 void P2PNet::DoRecv(void* socket) {
+  CHECK(false) << "Should not reach here!";
   uint64_t tensor_id;
   zmq_recv(socket, &tensor_id, sizeof(tensor_id), 0);
   auto it = tensor_to_recv_request_map_.find(tensor_id);
@@ -207,6 +210,7 @@ void DoRecvOncomplete(int id, P2PNet::Request* request, void* socket) {
 
 
 void P2PNet::DoInternalRequest(size_t index) {
+  CHECK(false) << "Should not reach here!";
   struct Request* request = internal_request_queue_[index];
   request->is_fulfilled = false;
   if (request->type == SendRequest) {
@@ -226,6 +230,7 @@ void P2PNet::DoInternalRequest(size_t index) {
 }
 
 void P2PNet::DoExternalRequest() {
+  CHECK(false) << "Should not reach here!";
   std::string identity;
   uint64_t tensor_id = 0;
   RecvWithIdentity(server_, &identity, &tensor_id, sizeof(tensor_id));
@@ -254,6 +259,7 @@ void P2PNet::SetMainAffinity() {
 }
 
 void P2PNet::Main() {
+  CHECK(false) << "Should not reach here!";
   poll_items_count_ = 2;
   poll_items_ = new zmq_pollitem_t[poll_items_count_];
   poll_items_[0] = {internal_server_, 0, ZMQ_POLLIN, 0};
@@ -270,7 +276,7 @@ void P2PNet::Main() {
     }
     if (ret == 0) {
       CHECK(P2PNetDebugger::Get().Level() & P2PNetDebugger::kDebugPrintPending);
-      for (size_t i = 0; i < internal_request_queue_size_; i++) {
+      for (size_t i = 0; i < internal_request_queue_.size(); i++) {
         struct Request* request = internal_request_queue_[i];
         if (!request->is_fulfilled) {
           if (request->type == SendRequest) {
@@ -307,11 +313,18 @@ void P2PNet::Main() {
 void P2PNet::MPI_DoSend(struct Request* request) {
   MPI_Request *mpi_request = new MPI_Request();
   int rank = mpi_host_to_rank_[request->address];
-  MPI_Isend(request->buffer, request->buffer_size,  MPI_BYTE, rank,
-            request->tensor_id, MPI_COMM_WORLD, mpi_request);
+  if (request->buffer_size < 2147483648) {
+    MPI_Isend(request->buffer, request->buffer_size,  MPI_BYTE, rank,
+              request->tensor_id, MPI_COMM_WORLD, mpi_request);
+  } else {
+    int size;
+    MPI_Type_size(MPI_INT, &size);
+    MPI_Isend(request->buffer, request->buffer_size / size,  MPI_INT, rank,
+              request->tensor_id, MPI_COMM_WORLD, mpi_request);
+  }
   request->mpi_request = mpi_request;
   mpi_request_queue_.push_back(request);
-  mpi_request_array_[mpi_request_count_++] = *(mpi_request);
+  //mpi_request_array_[mpi_request_count_++] = *(mpi_request);
   P2PNetDebugger::Get().PrintTime("Sending %u from rank %d to rank %d, address = %s",
                                   request->tensor_id, mpi_rank_, rank, request->address.c_str());
 }
@@ -319,33 +332,40 @@ void P2PNet::MPI_DoSend(struct Request* request) {
 void P2PNet::MPI_DoRecv(struct Request* request) {
   MPI_Request *mpi_request = new MPI_Request();
   int rank = mpi_host_to_rank_[request->address];
-  MPI_Irecv(request->buffer, request->buffer_size,  MPI_BYTE, rank,
-            request->tensor_id, MPI_COMM_WORLD, mpi_request);
+  if (request->buffer_size < 2147483648) {
+    MPI_Irecv(request->buffer, request->buffer_size,  MPI_BYTE, rank,
+              request->tensor_id, MPI_COMM_WORLD, mpi_request);
+  } else {
+    int size;
+    MPI_Type_size(MPI_INT, &size);
+    MPI_Irecv(request->buffer, request->buffer_size / size,  MPI_INT, rank,
+              request->tensor_id, MPI_COMM_WORLD, mpi_request);
+  }
   request->mpi_request = mpi_request;
   mpi_request_queue_.push_back(request);
-  mpi_request_array_[mpi_request_count_++] = *(mpi_request);
+  //mpi_request_array_[mpi_request_count_++] = *(mpi_request);
   P2PNetDebugger::Get().PrintTime("Receiving %u from rank %d to rank %d, address = %s",
                                   request->tensor_id, rank, mpi_rank_, request->address.c_str());
 }
 
 void P2PNet::MPI_RequestOnComplete(struct Request* request) {
-  MPI_Status status;
-  MPI_Wait(request->mpi_request, &status);
+  MPI_Wait(request->mpi_request, MPI_STATUS_IGNORE);
   if (request->type == SendRequest) {
+    mpi_sent_bytes_ += request->buffer_size;
     P2PNetDebugger::Get().PrintTime("Send %u on_complete with %u bytes",
                                     request->tensor_id, request->buffer_size);
   } else if (request->type == RecvRequest) {
+    mpi_recv_bytes_ += request->buffer_size;
     P2PNetDebugger::Get().PrintTime("Recv %u on_complete with %u bytes",
                                     request->tensor_id, request->buffer_size);
   } else {
-    CHECK(false);
+    CHECK(false) << request->type;
   }
   request->is_fulfilled = true;
   request->on_complete();
 }
 
-void P2PNet::MPI_DoInternalRequest(size_t index) {
-  struct Request* request = internal_request_queue_[index];
+void P2PNet::MPI_DoInternalRequest(struct Request* request) {
   size_t idx = request->address.find_first_of(":");
   if (idx != request->address.npos) {
     request->address.resize(idx);
@@ -366,31 +386,21 @@ void P2PNet::MPI_Main() {
                 P2PNetDebugger::kDebugPrintPending);
 
   mpi_request_array_ = new MPI_Request[8192];
+  std::vector<struct Request*> requests;
   while (true) {
-    // First check the internal request zmq socket.
-    poll_items_ = new zmq_pollitem_t[1];
-    poll_items_[0] = {internal_server_, 0, ZMQ_POLLIN, 0};
-    int ret = zmq_poll(poll_items_, 1, sleep_duration);
-
-    if (ret > 0) {
-      if (mpi_request_queue_.size() == 0) {
-        mpi_request_count_ = 0;
-      }
-      std::string identity;
-      size_t index;
-      RecvWithIdentity(internal_server_, &identity, &index, sizeof(index));
-      SendWithIdentity(internal_server_, identity, &index, sizeof(index));
-      MPI_DoInternalRequest(index);
-    } else if (ret < 0) {
-      CHECK(errno == EAGAIN || errno == ETERM || errno == ENOTSOCK);
-      if (errno == ETERM || errno == ENOTSOCK) {
-        std::cout << "P2PNet_MPI says bye !!!!" << std::endl;
-        break;
-      }
+    spin_lock_.Lock();
+    if (!internal_request_queue_.empty()) {
+      //LOG(INFO) << "Got " << internal_request_queue_.size() << " requests";
+      requests.swap(internal_request_queue_);
     }
-
+    spin_lock_.UnLock();
+    for (struct Request* req : requests) {
+      MPI_DoInternalRequest(req);
+    }
+    requests.clear();
+    
     // Loop all MPI requests to see if any request is fulfilled.
-    if (test_method) {
+    if (!mpi_request_queue_.empty()) {
       mpi_request_queue_.erase(
           std::remove_if (
             mpi_request_queue_.begin(), mpi_request_queue_.end(),
@@ -408,6 +418,13 @@ void P2PNet::MPI_Main() {
             }),
           mpi_request_queue_.end());
     } else {
+      std::this_thread::sleep_for(std::chrono::microseconds(1));
+   }
+   //usleep(100);
+    //}
+    //}
+    /*
+      CHECK(false) << "Should not reach here";
       int index = 0, flag = 1;
       while (mpi_request_count_ > 0 && flag && index != MPI_UNDEFINED) {
         MPI_Testany(mpi_request_count_, mpi_request_array_, &index, &flag,
@@ -420,7 +437,7 @@ void P2PNet::MPI_Main() {
           break;
         }
       }
-    }
+    */
 
     if (debug) {
       auto now = high_resolution_clock::now();
@@ -441,20 +458,25 @@ void P2PNet::MPI_Main() {
 
     //if (sleep_duration) {
       //std::this_thread::sleep_for(std::chrono::milliseconds(sleep_duration));
+      //std::this_thread::sleep_for(std::chrono::microseconds(1));
     //}
   }
 }
 #endif
 
 bool P2PNet::Init(const std::string& address) {
-  for (unsigned i = 0; i < internal_request_queue_size_; i++) {
+  for (unsigned i = 0; i < internal_request_queue_.size(); i++) {
     CHECK(internal_request_queue_[i]->is_fulfilled);
     delete internal_request_queue_[i];
     internal_request_queue_[i] = nullptr;
   }
-  internal_request_queue_size_ = 0;
+  internal_request_queue_.clear();
 #ifdef P2PNET_MPI
   mpi_request_queue_.clear();
+  std::cout << "MPI has sent " << mpi_sent_bytes_ << " bytes." << std::endl;
+  std::cout << "MPI has received " << mpi_recv_bytes_ << " bytes." << std::endl;
+  mpi_sent_bytes_ = 0;
+  mpi_recv_bytes_ = 0;
 #endif
 
   if (!is_bind_) {
@@ -486,10 +508,11 @@ void P2PNet::Start() {
     is_main_start_ = true;
     SetMainAffinity();
   }
+  //MPI_Barrier(MPI_COMM_WORLD);
 }
 
 void P2PNet::DoRequest(struct Request* request) {
-  static thread_local void* request_socket = nullptr;
+  /*static thread_local void* request_socket = nullptr;
   if (request_socket == nullptr) {
     request_socket = zmq_socket(zmq_context_, ZMQ_REQ);
     size_t index = per_thread_isocket_queue_size_.fetch_add(1);
@@ -501,13 +524,18 @@ void P2PNet::DoRequest(struct Request* request) {
     zmq_setsockopt(request_socket, ZMQ_LINGER, &ret, sizeof(ret));
     ret = zmq_connect(request_socket, "inproc://mxnet_local_request");
     CHECK(ret == 0) << "Ret = " << ret << " Errno = " << errno;
-  }
-  size_t index = internal_request_queue_size_.fetch_add(1);
-  internal_request_queue_[index] = request;
-  int ret = zmq_send(request_socket, &index, sizeof(index), 0);
-  CHECK((ret == sizeof(index))) << "Ret = " << ret << " Errno = " << errno;
-  ret = zmq_recv(request_socket, &index, sizeof(index), 0);
-  CHECK((ret == sizeof(index))) << "Ret = " << ret << " Errno = " << errno;
+  }*/
+  //size_t index = internal_request_queue_size_.fetch_add(1);
+  //internal_request_queue_[index] = request;
+  //int ret = zmq_send(request_socket, &index, sizeof(index), 0);
+  //CHECK((ret == sizeof(index))) << "Ret = " << ret << " Errno = " << errno;
+  //ret = zmq_recv(request_socket, &index, sizeof(index), 0);
+  //CHECK((ret == sizeof(index))) << "Ret = " << ret << " Errno = " << errno;
+  spin_lock_.Lock();
+  //LOG(INFO) << "Post request type=" << request->type;
+  internal_request_queue_.push_back(request);
+  //LOG(INFO) << "Request queue size: " << internal_request_queue_.size();
+  spin_lock_.UnLock();
 }
 
 }  // namespace op

@@ -32,11 +32,12 @@ Graph AttachOpResources(Graph g) {
       const Context &ctx = vctx[nid];
       if (req.type == ResourceRequest::kTempSpace) {
         if (cached_temp.count(ctx) != 0) {
+          CHECK(false);
           requested.push_back(cached_temp.at(ctx));
         } else {
           Resource r = ResourceManager::Get()->Request(ctx, req);
           requested.push_back(r);
-          cached_temp[ctx] = r;
+          //cached_temp[ctx] = r;
         }
       } else if (req.type == ResourceRequest::kRandom) {
         requested.push_back(ResourceManager::Get()->Request(ctx, req));
