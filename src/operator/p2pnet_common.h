@@ -139,6 +139,12 @@ class P2PNet {
   void DoRecv(void* socket);
   void DoRequestRecv(struct Request* request);
 
+  unsigned impl_internal_polling_;
+  unsigned impl_commnication_method_;
+  unsigned impl_mpi_polling_time_;
+  unsigned impl_main_affinity_;
+  unsigned impl_use_mpi_barrier_;
+
 #ifdef P2PNET_MPI
   void MPI_Main();
   void MPI_DoInternalRequest(struct Request* request);
@@ -149,9 +155,7 @@ class P2PNet {
   int mpi_rank_;
   std::vector<std::string> mpi_rank_to_host_;
   std::map<std::string, int> mpi_host_to_rank_;
-  //std::list<struct Request*> mpi_request_queue_;
   std::vector<struct Request*> mpi_request_queue_;
-  MPI_Request* mpi_request_array_;
   int mpi_request_count_;
   size_t mpi_sent_bytes_;
   size_t mpi_recv_bytes_;
@@ -173,7 +177,7 @@ class P2PNet {
   std::mutex internal_mtx; // mutex lock for request_queue_
   SpinLock spin_lock_;  // spin lock for request queue
   std::vector<struct Request*> internal_request_queue_;
-  //std::atomic<size_t> internal_request_queue_size_;
+  std::atomic<size_t> internal_request_queue_size_;
   std::vector<void*> per_thread_isocket_queue_;
   std::atomic<size_t> per_thread_isocket_queue_size_;
 
