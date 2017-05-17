@@ -20,6 +20,52 @@
 
 namespace mxnet {
 namespace exec {
+namespace {
+void EnableP2P(const std::vector<Context>& devs) {
+#if MXNET_USE_CUDA
+  std::vector<int> gpus;
+  for (const auto& d : devs) {
+    if (d.dev_mask() == gpu::kDevMask) {
+      gpus.push_back(d.dev_id);
+    }
+  }
+  int n = static_cast<int>(gpus.size());
+  int enabled = 0;
+  std::vector<int> p2p(n*n);
+  for (int i = 0; i < n; ++i) {
+    cudaSetDevice(gpus[i]);
+    for (int j = 0; j < n; j++) {
+      int access;
+      cudaDeviceCanAccessPeer(&access, gpus[i], gpus[j]);
+      if (access) {
+        cudaError_t e = cudaDeviceEnablePeerAccess(gpus[j], 0);
+        if (e == cudaSuccess) {
+          ++enabled;
+          p2p[i*n+j] = 1;
+        }
+      }
+    }
+  }
+  if (enabled != n*(n-1)) {
+    // print warning info if not fully enabled
+    LOG(WARNING) << "only " << enabled <<  " out of "
+      << n*(n-1) << " GPU pairs are enabled direct access. "
+      << "It may affect the performance. "
+      << "You can set MXNET_ENABLE_GPU_P2P=0 to turn it off";
+  }
+  std::string access(n, '.');
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) {
+      int succ;
+      cudaDeviceCanAccessPeer(&succ, gpus[i], gpus[j]);
+      access[j] = succ ? 'v' : '.';
+    }
+    LOG(INFO) << access;
+  }
+#endif
+}
+}  // namespace
+
 GraphExecutor::~GraphExecutor() {
   for (auto& n : op_nodes_) {
     if (n.cached_opr != nullptr) {
@@ -388,6 +434,9 @@ Graph AssignContext(Graph g,
     }
     device_map[kv.first] = ctx2id.at(kv.second);
   }
+
+  // Enable P2P connection.
+  EnableP2P(ctx_list);
 
 #ifdef SPLIT_GRADIENT_TEST
   g = nnvm::pass::SplitGradientTest(g, "__ctx_group__", num_forward_outputs);
