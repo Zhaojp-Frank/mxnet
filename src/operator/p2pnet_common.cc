@@ -509,9 +509,11 @@ void P2PNet::Start() {
     is_main_start_ = true;
     SetMainAffinity();
   }
+#ifdef P2PNET_MPI
   if (impl_use_mpi_barrier_) {
     MPI_Barrier(MPI_COMM_WORLD);
   }
+#endif
 }
 
 void P2PNet::DoRequest(struct Request* request) {

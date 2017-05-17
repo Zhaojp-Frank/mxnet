@@ -342,7 +342,8 @@ Operator* CreateBackwardOp(
     const std::vector<TShape>& out_grad_shape,
     const std::vector<TShape>& in_data_shape,
     const std::vector<TShape>& out_data_shape,
-    const std::vector<TShape>& in_grad_shape);
+    const std::vector<TShape>& in_grad_shape,
+    const Context& ctx);
 
 #if DMLC_USE_CXX11
 class ConvolutionProp : public OperatorProperty {

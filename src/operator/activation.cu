@@ -49,8 +49,8 @@ Operator *CreateOp<gpu>(ActivationParam param, int dtype) {
 
 
 template<>
-Operator* CreateBackwardOp<cpu>(const ActivationParam& type, int dtype) {
-  return CreateOp<cpu>(type, dtype);
+Operator* CreateBackwardOp<gpu>(const ActivationParam& type, int dtype) {
+  return CreateOp<gpu>(type, dtype);
 }
 
 }  // namespace op

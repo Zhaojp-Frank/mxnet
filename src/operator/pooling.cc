@@ -79,7 +79,9 @@ Operator* CreateBackwardOp<cpu>(
     const std::vector<TShape>& in_data_shape,
     const std::vector<TShape>& out_data_shape,
     const std::vector<TShape>& in_grad_shape) {
+#if MXNET_USE_MKL2017 == 1
   CHECK(!UseMKLPooling(param)) << "MKL standalone backward pooling cannot be supported.";
+#endif
 
   Operator *op = NULL;
   MSHADOW_REAL_TYPE_SWITCH(dtype, DType, {

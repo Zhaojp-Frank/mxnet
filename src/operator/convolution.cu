@@ -44,7 +44,8 @@ Operator* CreateBackwardOp<gpu>(
     const std::vector<TShape>& out_grad_shape,
     const std::vector<TShape>& in_data_shape,
     const std::vector<TShape>& out_data_shape,
-    const std::vector<TShape>& in_grad_shape) {
+    const std::vector<TShape>& in_grad_shape,
+    const Context& ctx) {
   Operator *op = NULL;
 #if MXNET_USE_CUDNN == 1
   if (param.dilate.Size() == 1 && !param.cudnn_off) {
