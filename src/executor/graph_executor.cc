@@ -181,6 +181,7 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
   }
   std::set<std::string> address_set(address_vec.begin(), address_vec.end());
   if (address_set.size() == 1) {
+    LOG(INFO) << "Only one machine is involved. No need to split graph.";
     return g;
   }
   //std::cout << "==================== Original Graph ====================" << std::endl;
