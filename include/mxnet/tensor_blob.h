@@ -207,7 +207,8 @@ class TBlob {
   template<typename Device, int dim, typename DType>
   inline mshadow::Tensor<Device, dim, DType> get(mshadow::Stream<Device> *stream = NULL) const {
     CHECK(Device::kDevMask == dev_mask_)
-      << "TBlob.get: device type do not match specified type";
+      << "TBlob.get: device type do not match specified type"
+      << "Request device " << Device::kDevMask << " but created on " << dev_mask_;
     CHECK(mshadow::DataType<DType>::kFlag == type_flag_)
       << "TBlob.get_with_shape: data type do not match specified type."
       << "Expected: " << type_flag_ << " v.s. given " << mshadow::DataType<DType>::kFlag;

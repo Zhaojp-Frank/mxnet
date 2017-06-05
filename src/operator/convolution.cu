@@ -50,7 +50,7 @@ Operator* CreateBackwardOp<gpu>(
 #if MXNET_USE_CUDNN == 1
   if (param.dilate.Size() == 1 && !param.cudnn_off) {
     MSHADOW_REAL_TYPE_SWITCH(dtype, DType, {
-      op = new CuDNNConvolutionOp<DType>(param, in_data_shape, out_data_shape, ctx);
+      op = new CuDNNConvolutionOp<DType>(param, in_data_shape, out_grad_shape, ctx);
     })
   } else {
     MSHADOW_REAL_TYPE_SWITCH(dtype, DType, {

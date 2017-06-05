@@ -130,13 +130,14 @@ nnvm::NodeEntry AttrHint(nnvm::NodeEntry src, nnvm::NodeEntry like) {
   return src;
 }
 
-nnvm::NodeEntry AggregateGradient(std::vector<nnvm::NodeEntry>&& v) {
+nnvm::NodeEntry AggregateGradient(const std::vector<nnvm::NodeEntry>& vv) {
   using nnvm::Op;
   static size_t inplace_sum_cap = dmlc::GetEnv("MXNET_EXEC_INPLACE_GRAD_SUM_CAP", 8);
   static const Op* ewise_plus_op = Op::Get("_grad_add");
   static const Op* ewise_sum_op = Op::Get("ElementWiseSum");
   static const Op* identity_op = Op::Get("identity");
   static const Op* zeros_op = Op::Get("_zeros");
+  std::vector<nnvm::NodeEntry> v = vv; // copy the list.
   // remove zero in the sum.
   size_t begin = 0;
   for (size_t i = 0; i < v.size(); ++i) {
@@ -574,29 +575,24 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   nnvm::Graph g = InitFullGraph(symbol, grad_req_type, arg_grad_store);
   g = InferShapeType(g, in_args, aux_states);
   // Call partition pass here.
-  const int num_procs = ctx_map.size();
-  LOG(INFO) << "Num procedures: " << num_procs;
   bool need_grad = false;
   for (OpReqType req : grad_req_type) {
     if (req != kNullOp) need_grad = true;
   }
-  if (num_procs > 1 && need_grad) {
-    std::string default_group;
-    for (const auto& kv : ctx_map) {
-      if (kv.second == default_ctx) {
-        default_group = kv.first;
-        break;
-      }
-    }
-    CHECK(default_group != "") << "Default context does not appear in context map";
-    g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_procs);
-    g.attrs["default_group"] = std::make_shared<nnvm::any>(default_group);
-    g = nnvm::ApplyPass(g, "PartitionPass");
-  }
+  const int num_devices = ctx_map.size();
+  LOG(INFO) << "Num devices: " << num_devices;
   // TODO(minjie): Here has an implicit assumption.
   // The ctx_map is of form {"group:%d" % id : context object}
-  // assign contexts to the graph.
-  g = AssignContext(g, default_ctx, ctx_map,
+  // The default group name is "group:default".
+  std::map<std::string, Context> ctx_map_with_default = ctx_map;
+  ctx_map_with_default["group:default"] = default_ctx;
+  if (num_devices > 1 && need_grad) {
+    g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_devices);
+    g.attrs["default_group"] = std::make_shared<nnvm::any>(std::string("group:default"));
+    g = nnvm::ApplyPass(g, "PartitionPass");
+  }
+  // Assign contexts to the graph.
+  g = AssignContext(g, default_ctx, ctx_map_with_default,
                     in_args,
                     grad_store_,
                     aux_states,
@@ -671,6 +667,8 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
   std::vector<Context> data_context(idx.num_node_entries());
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     for (uint32_t i = 0; i < idx[nid].source->num_outputs(); ++i) {
+      //LOG(INFO) << "Node " << idx[nid].source->attrs.name << " output#" << i << ": "
+        //<< " entryid=" << idx.entry_id(nid, i) << " shape=" << vshape[idx.entry_id(nid, i)];
       data_context[idx.entry_id(nid, i)] = vctx[nid];
     }
   }
@@ -750,9 +748,9 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
     int storage_id = vstorage[i];
     CHECK_GE(storage_id, 0)
         << "Do not support runtime shape op yet. Node's name is"
-        << " " << idx[i].source->attrs.name << ". "
-        << i << " " << data_entry_.size() << std::endl
-        << "Shape is " << vshape[i] << std::endl;
+        << " " << idx[i].source->attrs.name << ". Entryid="
+        << i << " DataEntrySize=" << data_entry_.size()
+        << " Shape=" << vshape[i];
     const NDArray& src = data_pool_.at(storage_id);
     data_entry_[i] = src.AsArray(vshape[i], vdtype[i]);
   }

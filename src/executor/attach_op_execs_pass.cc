@@ -177,6 +177,22 @@ inline vector<uint32_t> OpPropMutateInputs(const OperatorProperty& prop) {
   return ret;
 }
 
+inline std::vector<uint32_t> OpPropBackMutateInputs(const OperatorProperty& prop) {
+  if (prop.ListAuxiliaryStates().size() == 0) {
+    return {};
+  }
+  std::vector<int> out_grad_index(prop.NumVisibleOutputs());
+  std::vector<int> in_data_index(prop.ListArguments().size());
+  std::vector<int> out_data_index(prop.ListOutputs().size());
+  size_t arg_size = prop.DeclareBackwardDependency(
+      out_grad_index, in_data_index, out_data_index).size();
+  std::vector<uint32_t> ret;
+  for (uint32_t i = 0; i < prop.ListAuxiliaryStates().size(); ++i) {
+    ret.push_back(static_cast<uint32_t>(i + arg_size));
+  }
+  return ret;
+}
+
 inline Operator* OpPropCreateLayerOp(
     const OperatorProperty& prop,
     const Context& ctx,
@@ -287,13 +303,13 @@ Graph AttachOpExecs(Graph g) {
     if (is_layer_forward.count(op) || is_layer_backward.count(op)) {
       // Layer operator.
       const OperatorProperty& prop = ParseOpProp(inode.source->attrs);
-      const vector<uint32_t>& mutate_index = OpPropMutateInputs(prop);
       const vector<TShape>& ishape = ParseInAttrs(idx, vshape, inode);
       const vector<int>& itype = ParseInAttrs(idx, vdtype, inode);
       const vector<TShape>& oshape = ParseOutAttrs(idx, vshape, inode);
       const vector<int>& otype = ParseOutAttrs(idx, vdtype, inode);
       if (is_layer_forward.count(op)) {
         // Forward operator.
+        const vector<uint32_t>& mutate_index = OpPropMutateInputs(prop);
         shared_ptr<Operator> layer_fwd_op(OpPropCreateLayerOp(prop, vctx[i], ishape, itype));
         ret[i] = std::make_shared<ForwardOpExecutor>(layer_fwd_op, mutate_index);
 /*
@@ -303,6 +319,7 @@ Graph AttachOpExecs(Graph g) {
         // TODO(minjie): Currently, the first control dependency of a backward
         // node must be its corresponding forward node. A better way is to use
         // some graph attribute to specify that.
+        const vector<uint32_t>& mutate_index = OpPropBackMutateInputs(prop);
         const uint32_t fwd_id = inode.control_deps[0];
         CHECK(vctx[fwd_id] == vctx[i])
           << "Stateful backward node requires to have the same device context with the forward node.";
@@ -316,6 +333,7 @@ Graph AttachOpExecs(Graph g) {
       } else {
         // Backward operator that has no corresponding forward operator. Try to create the OpExecutor
         // by its own.
+        const vector<uint32_t>& mutate_index = OpPropBackMutateInputs(prop);
         shared_ptr<Operator> layer_bwd_op(OpPropCreateBackwardLayerOp(
             prop, vctx[i], ishape, itype, oshape, otype));
         CHECK(layer_bwd_op != nullptr)

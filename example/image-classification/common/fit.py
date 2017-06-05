@@ -171,7 +171,7 @@ def fit(args, network, data_loader, **kwargs):
         num_epoch          = args.num_epochs,
         eval_data          = val,
         eval_metric        = eval_metrics,
-        kvstore            = kv,
+        kvstore            = None,
         optimizer          = args.optimizer,
         optimizer_params   = optimizer_params,
         initializer        = initializer,

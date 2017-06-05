@@ -59,30 +59,7 @@ class CuDNNBatchNormOp : public Operator {
     CHECK_LE(in_data[cudnnbatchnorm::kData].ndim(), 4);
 
     if (!init_cudnn_) {
-      for (int i = 0; i < 4; ++i) {
-        if (i < in_data[cudnnbatchnorm::kData].ndim()) {
-          shape_[i] = in_data[cudnnbatchnorm::kData].shape_[i];
-        } else {
-          shape_[i] = 1;
-        }
-      }
-      CHECK_EQ(cudnnCreateTensorDescriptor(&io_desc_), CUDNN_STATUS_SUCCESS);
-      CHECK_EQ(cudnnCreateTensorDescriptor(&mean_desc_), CUDNN_STATUS_SUCCESS);
-      CHECK_EQ(cudnnSetTensor4dDescriptor(io_desc_,
-                                          CUDNN_TENSOR_NCHW,
-                                          dtype_,
-                                          shape_[0],
-                                          shape_[1],
-                                          shape_[2],
-                                          shape_[3]), CUDNN_STATUS_SUCCESS);
-      CHECK_EQ(cudnnSetTensor4dDescriptor(mean_desc_,
-                                          CUDNN_TENSOR_NCHW,
-                                          dtype_,
-                                          1,
-                                          shape_[1],
-                                          1,
-                                          1), CUDNN_STATUS_SUCCESS);
-      init_cudnn_  = true;
+      InitCudnn(in_data[cudnnbatchnorm::kData].shape_);
     }
 
     Stream<gpu> *s = ctx.get_stream<gpu>();
@@ -157,6 +134,10 @@ class CuDNNBatchNormOp : public Operator {
     CHECK(ctx.is_train && !param_.use_global_stats)
         << "use global statistics is not yet supported in CuDNNBatchNorm";
 
+    if (!init_cudnn_) {
+      InitCudnn(in_data[cudnnbatchnorm::kData].shape_);
+    }
+
     Stream<gpu> *s = ctx.get_stream<gpu>();
     Tensor<gpu, 4> x = in_data[cudnnbatchnorm::kData].get_with_shape<gpu, 4, real_t>(shape_, s);
     Tensor<gpu, 4> dx = in_grad[cudnnbatchnorm::kData].get_with_shape<gpu, 4, real_t>(shape_, s);
@@ -221,6 +202,34 @@ class CuDNNBatchNormOp : public Operator {
   }
 
  private:
+  void InitCudnn(const TShape& data_shape) {
+    CHECK(!init_cudnn_);
+    for (int i = 0; i < 4; ++i) {
+      if (i < data_shape.ndim()) {
+        shape_[i] = data_shape[i];
+      } else {
+        shape_[i] = 1;
+      }
+    }
+    CHECK_EQ(cudnnCreateTensorDescriptor(&io_desc_), CUDNN_STATUS_SUCCESS);
+    CHECK_EQ(cudnnCreateTensorDescriptor(&mean_desc_), CUDNN_STATUS_SUCCESS);
+    CHECK_EQ(cudnnSetTensor4dDescriptor(io_desc_,
+                                        CUDNN_TENSOR_NCHW,
+                                        dtype_,
+                                        shape_[0],
+                                        shape_[1],
+                                        shape_[2],
+                                        shape_[3]), CUDNN_STATUS_SUCCESS);
+    CHECK_EQ(cudnnSetTensor4dDescriptor(mean_desc_,
+                                        CUDNN_TENSOR_NCHW,
+                                        dtype_,
+                                        1,
+                                        shape_[1],
+                                        1,
+                                        1), CUDNN_STATUS_SUCCESS);
+    init_cudnn_  = true;
+  }
+
   bool init_cudnn_;
   cudnnDataType_t dtype_;
   cudnnTensorDescriptor_t io_desc_, mean_desc_;

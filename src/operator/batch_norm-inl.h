@@ -219,6 +219,8 @@ class BatchNormOp : public Operator {
 template<typename xpu>
 Operator *CreateOp(BatchNormParam param, int dtype);
 
+template<typename xpu>
+Operator* CreateBackwardOp(const BatchNormParam& param, int dtype);
 
 #if DMLC_USE_CXX11
 class BatchNormProp : public OperatorProperty {
@@ -308,6 +310,13 @@ class BatchNormProp : public OperatorProperty {
 
   Operator* CreateOperatorEx(Context ctx, std::vector<TShape> *in_shape,
       std::vector<int> *in_type) const override;
+
+  Operator* CreateBackwardOperatorEx(
+      const Context& ctx,
+      const std::vector<TShape>& in_shape,
+      const std::vector<int>& in_type,
+      const std::vector<TShape>& out_shape,
+      const std::vector<int>& out_type) const override;
 
  private:
   BatchNormParam param_;

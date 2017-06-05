@@ -248,6 +248,7 @@ class FCForwardPartitioner1 : public ForwardOpPartitioner<FullyConnectedParam> {
     CHECK_EQ(in_data_shapes[fullc::kData].ndim(), 2);
     CHECK_EQ(in_data_shapes[fullc::kWeight].ndim(), 2);
     CHECK_EQ(out_data_shapes[fullc::kOut].ndim(), 2);
+    CHECK(param.no_bias) << "Bias is not supported.";
     if (param.no_bias) {
       CHECK_EQ(in_data_shapes.size(), 2);
     } else {
@@ -277,6 +278,7 @@ class FCForwardPartitioner2 : public ForwardOpPartitioner<FullyConnectedParam> {
     CHECK_EQ(in_data_shapes[fullc::kData].ndim(), 2);
     CHECK_EQ(in_data_shapes[fullc::kWeight].ndim(), 2);
     CHECK_EQ(out_data_shapes[fullc::kOut].ndim(), 2);
+    CHECK(param.no_bias) << "Bias is not supported.";
     if (param.no_bias) {
       CHECK_EQ(in_data_shapes.size(), 2);
     } else {
@@ -307,6 +309,7 @@ class FCForwardPartitioner3 : public ForwardOpPartitioner<FullyConnectedParam> {
     CHECK_EQ(in_data_shapes[fullc::kData].ndim(), 2);
     CHECK_EQ(in_data_shapes[fullc::kWeight].ndim(), 2);
     CHECK_EQ(out_data_shapes[fullc::kOut].ndim(), 2);
+    CHECK(param.no_bias) << "Bias is not supported.";
     if (param.no_bias) {
       CHECK_EQ(in_data_shapes.size(), 2);
     } else {
@@ -345,6 +348,7 @@ class FCBackwardPartitioner1 : public BackwardOpPartitioner<FullyConnectedParam>
       const vector<Scheme*>& in_data_schemes,
       const vector<Scheme*>& out_data_schemes,
       const vector<Scheme*>& in_grad_schemes) {
+    CHECK(param.no_bias) << "Bias is not supported.";
     *out_grad_schemes[fullc::kOut] = Scheme::Cut(1);   // dy: C
     *in_data_schemes[fullc::kData] = Scheme::Rep();    // x: r
     *in_grad_schemes[fullc::kWeight] = Scheme::Cut(0); // dw: R
@@ -373,6 +377,7 @@ class FCBackwardPartitioner2 : public BackwardOpPartitioner<FullyConnectedParam>
       const vector<Scheme*>& in_data_schemes,
       const vector<Scheme*>& out_data_schemes,
       const vector<Scheme*>& in_grad_schemes) {
+    CHECK(param.no_bias) << "Bias is not supported.";
     *out_grad_schemes[fullc::kOut] = Scheme::Rep();    // dy: r
     *in_data_schemes[fullc::kData] = Scheme::Cut(1);   // x: C
     *in_grad_schemes[fullc::kWeight] = Scheme::Cut(1); // dw: C
@@ -400,6 +405,7 @@ class FCBackwardPartitioner3 : public BackwardOpPartitioner<FullyConnectedParam>
       const vector<Scheme*>& in_data_schemes,
       const vector<Scheme*>& out_data_schemes,
       const vector<Scheme*>& in_grad_schemes) {
+    CHECK(param.no_bias) << "Bias is not supported.";
     *out_grad_schemes[fullc::kOut] = Scheme::Cut(0);  // dy: R
     *in_data_schemes[fullc::kData] = Scheme::Cut(0);  // x: R
     *in_grad_schemes[fullc::kWeight] = Scheme::Red(); // dw: red
@@ -437,6 +443,7 @@ class ConvForwardPartitioner1 : public ForwardOpPartitioner<ConvolutionParam> {
       const vector<TShape>& out_data_shapes,
       const vector<Scheme*>& in_data_schemes,
       const vector<Scheme*>& out_data_schemes) override {
+    CHECK(param.no_bias) << "Bias is not supported.";
     *in_data_schemes[conv::kData] = Scheme::Cut(0);  // x: R
     *in_data_schemes[conv::kWeight] = Scheme::Rep(); // w: r
     *out_data_schemes[conv::kOut] = Scheme::Cut(0);  // y: R
@@ -459,6 +466,7 @@ class ConvForwardPartitioner2 : public ForwardOpPartitioner<ConvolutionParam> {
       const vector<TShape>& out_data_shapes,
       const vector<Scheme*>& in_data_schemes,
       const vector<Scheme*>& out_data_schemes) override {
+    CHECK(param.no_bias) << "Bias is not supported.";
     *in_data_schemes[conv::kData] = Scheme::Rep();    // x: r
     *in_data_schemes[conv::kWeight] = Scheme::Cut(0); // w: R
     *out_data_schemes[conv::kOut] = Scheme::Cut(1);   // y: C
@@ -482,6 +490,7 @@ class ConvForwardPartitioner3 : public ForwardOpPartitioner<ConvolutionParam> {
       const vector<TShape>& out_data_shapes,
       const vector<Scheme*>& in_data_schemes,
       const vector<Scheme*>& out_data_schemes) override {
+    CHECK(param.no_bias) << "Bias is not supported.";
     *in_data_schemes[conv::kData] = Scheme::Cut(1);   // x: C
     *in_data_schemes[conv::kWeight] = Scheme::Cut(1); // w: C
     *out_data_schemes[conv::kOut] = Scheme::Red();    // y: red
@@ -518,6 +527,7 @@ class ConvBackwardPartitioner1 : public BackwardOpPartitioner<ConvolutionParam> 
       const vector<Scheme*>& in_data_schemes,
       const vector<Scheme*>& out_data_schemes,
       const vector<Scheme*>& in_grad_schemes) {
+    CHECK(param.no_bias) << "Bias is not supported.";
     *out_grad_schemes[conv::kOut] = Scheme::Cut(1);   // dy: C
     *in_data_schemes[conv::kData] = Scheme::Rep();    // x: r
     *in_grad_schemes[conv::kWeight] = Scheme::Cut(0); // dw: R
@@ -547,6 +557,7 @@ class ConvBackwardPartitioner2 : public BackwardOpPartitioner<ConvolutionParam> 
       const vector<Scheme*>& in_data_schemes,
       const vector<Scheme*>& out_data_schemes,
       const vector<Scheme*>& in_grad_schemes) {
+    CHECK(param.no_bias) << "Bias is not supported.";
     *out_grad_schemes[conv::kOut] = Scheme::Rep();    // dy: r
     *in_data_schemes[conv::kData] = Scheme::Cut(1);   // x: C
     *in_grad_schemes[conv::kWeight] = Scheme::Cut(1); // dw: C
@@ -574,6 +585,7 @@ class ConvBackwardPartitioner3 : public BackwardOpPartitioner<ConvolutionParam> 
       const vector<Scheme*>& in_data_schemes,
       const vector<Scheme*>& out_data_schemes,
       const vector<Scheme*>& in_grad_schemes) {
+    CHECK(param.no_bias) << "Bias is not supported.";
     *out_grad_schemes[conv::kOut] = Scheme::Cut(0);  // dy: R
     *in_data_schemes[conv::kData] = Scheme::Cut(0);  // x: R
     *in_grad_schemes[conv::kWeight] = Scheme::Red(); // dw: red

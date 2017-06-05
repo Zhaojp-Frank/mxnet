@@ -109,13 +109,15 @@ class DataParallelExecutorGroup(object):
     """
     def __init__(self, symbol, contexts, workload, data_shapes, label_shapes, param_names,
                  for_training, inputs_need_grad, shared_group=None,
-                 logger=logging, fixed_param_names=None, grad_req='write'):
+                 logger=logging, fixed_param_names=None, grad_req='write',
+                 group2ctx=None):
         self.param_names = param_names
         self.arg_names = symbol.list_arguments()
         self.aux_names = symbol.list_auxiliary_states()
 
         self.symbol = symbol
         self.contexts = contexts
+        self.group2ctx = group2ctx
         self.workload = workload
 
         self.for_training = for_training
@@ -265,6 +267,7 @@ class DataParallelExecutorGroup(object):
             self.label_layouts = self.decide_slices(label_shapes)
 
         for i in range(len(self.contexts)):
+            print('Create %d^th executor' % i)
             data_shapes_i = self._sliced_shape(data_shapes, i, self.data_layouts)
             if label_shapes is not None:
                 label_shapes_i = self._sliced_shape(label_shapes, i, self.label_layouts)
@@ -557,7 +560,8 @@ class DataParallelExecutorGroup(object):
 
         executor = self.symbol.bind(ctx=context, args=arg_arrays,
                                     args_grad=grad_arrays, aux_states=aux_arrays,
-                                    grad_req=self.grad_req, shared_exec=shared_exec)
+                                    grad_req=self.grad_req, shared_exec=shared_exec,
+                                    group2ctx=self.group2ctx)
         return executor
 
     def _sliced_shape(self, shapes, i, major_axis):
