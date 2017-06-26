@@ -17,6 +17,7 @@ namespace op {
 template<>
 Operator *CreateOp<cpu>(ActivationParam param, int dtype) {
   Operator *op = NULL;
+#if 0
 #if MXNET_USE_MKL2017 == 1
   if (param.act_type == activation::kReLU) {
       switch (dtype) {
@@ -30,6 +31,7 @@ Operator *CreateOp<cpu>(ActivationParam param, int dtype) {
   }
   if (enableMKLWarnGenerated())
     LOG(INFO) << MKLReluOp<cpu, float>::getName() << " Skip MKL optimization";
+#endif
 #endif
   MSHADOW_REAL_TYPE_SWITCH(dtype, DType, {
     switch (param.act_type) {

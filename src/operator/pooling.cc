@@ -71,6 +71,40 @@ Operator *CreateOp<cpu>(PoolingParam param, int dtype) {
   return op;
 }
 
+template<>
+Operator* CreateBackwardOp<cpu>(
+    const PoolingParam& param,
+    int dtype,
+    const std::vector<TShape>& out_grad_shape,
+    const std::vector<TShape>& in_data_shape,
+    const std::vector<TShape>& out_data_shape,
+    const std::vector<TShape>& in_grad_shape) {
+#if MXNET_USE_MKL2017 == 1
+  CHECK(!UseMKLPooling(param)) << "MKL standalone backward pooling cannot be supported.";
+#endif
+
+  Operator *op = NULL;
+  MSHADOW_REAL_TYPE_SWITCH(dtype, DType, {
+    switch (param.pool_type) {
+      case pool_enum::kMaxPooling:
+        op = new PoolingOp<cpu, mshadow::red::maximum, DType>(param);
+        break;
+      case pool_enum::kAvgPooling:
+        op = new PoolingOp<cpu, mshadow::red::sum, DType>(param);
+        break;
+      case pool_enum::kSumPooling:
+        op = new PoolingOp<cpu, mshadow::red::sum, DType>(param);
+        break;
+      default:
+        LOG(FATAL) << "unknown pooling type";
+        return NULL;
+    }
+  })
+
+  return op;
+}
+
+
 // DO_BIND_DISPATCH comes from operator_common.h
 Operator* PoolingProp::CreateOperatorEx(Context ctx, std::vector<TShape> *in_shape,
                                      std::vector<int> *in_type) const {
@@ -79,6 +113,18 @@ Operator* PoolingProp::CreateOperatorEx(Context ctx, std::vector<TShape> *in_sha
   CHECK(InferType(in_type, &out_type, &aux_type));
   CHECK(InferShape(in_shape, &out_shape, &aux_shape));
   DO_BIND_DISPATCH(CreateOp, param_, (*in_type)[0]);
+}
+
+Operator* PoolingProp::CreateBackwardOperatorEx(
+    const Context& ctx,
+    const std::vector<TShape>& in_shape,
+    const std::vector<int>& in_type,
+    const std::vector<TShape>& out_shape,
+    const std::vector<int>& out_type) const {
+  std::vector<TShape> out_grad_shape, in_data_shape, out_data_shape;
+  ParseBackwardInputs(*this, in_shape, &out_grad_shape, &in_data_shape, &out_data_shape);
+  DO_BIND_DISPATCH(CreateBackwardOp, param_, in_type[0],
+                   out_grad_shape, in_data_shape, out_data_shape, out_shape);
 }
 
 DMLC_REGISTER_PARAMETER(PoolingParam);

@@ -55,13 +55,13 @@ class CuDNNPoolingOp : public Operator {
     CHECK_EQ(s->dnn_handle_ownership_, mshadow::Stream<gpu>::OwnHandle);
     typename DataType<DType>::ScaleType alpha = 1.0f;
     typename DataType<DType>::ScaleType beta = 0.0f;
+    if (!init_cudnn_) {
+      this->Init(in_data[pool_enum::kData].shape_, out_data[pool_enum::kOut].shape_);
+    }
     if (param_.kernel.ndim() == 2) {
       // 2d pool
       Tensor<gpu, 4, DType> data = in_data[pool_enum::kData].get<gpu, 4, DType>(s);
       Tensor<gpu, 4, DType> out = out_data[pool_enum::kOut].get<gpu, 4, DType>(s);
-      if (!init_cudnn_) {
-        this->Init(s, in_data, out_data);
-      }
       CHECK_EQ(data.CheckContiguous(), true);
       CHECK_EQ(out.CheckContiguous(), true);
       CHECK_EQ(cudnnPoolingForward(s->dnn_handle_,
@@ -76,9 +76,6 @@ class CuDNNPoolingOp : public Operator {
       // 3d pool
       Tensor<gpu, 5, DType> data = in_data[pool_enum::kData].get<gpu, 5, DType>(s);
       Tensor<gpu, 5, DType> out = out_data[pool_enum::kOut].get<gpu, 5, DType>(s);
-      if (!init_cudnn_) {
-        this->Init(s, in_data, out_data);
-      }
       CHECK_EQ(data.CheckContiguous(), true);
       CHECK_EQ(out.CheckContiguous(), true);
       CHECK_EQ(cudnnPoolingForward(s->dnn_handle_,
@@ -113,6 +110,9 @@ class CuDNNPoolingOp : public Operator {
     CHECK_EQ(s->dnn_handle_ownership_, mshadow::Stream<gpu>::OwnHandle);
     typename DataType<DType>::ScaleType alpha = 1.0f;
     typename DataType<DType>::ScaleType beta = 0.0f;
+    if (!init_cudnn_) {
+      this->Init(in_data[pool_enum::kData].shape_, out_data[pool_enum::kOut].shape_);
+    }
     if (param_.kernel.ndim() == 2) {
       // 2d pool
       Tensor<gpu, 4, DType> m_out_grad = out_grad[pool_enum::kOut].get<gpu, 4, DType>(s);
@@ -155,129 +155,125 @@ class CuDNNPoolingOp : public Operator {
   }
 
  private:
-  inline void Init(mshadow::Stream<gpu> *s,
-                   const std::vector<TBlob> &in_data,
-                   const std::vector<TBlob> &out_data) {
+  inline void Init(const TShape& data_shape,
+                   const TShape& out_shape) {
     using namespace mshadow;
     #if CUDNN_MAJOR == 5
     nan_prop_ = CUDNN_NOT_PROPAGATE_NAN;
     #endif
-    CHECK_EQ(in_data.size(), 1);
-    CHECK_EQ(out_data.size(), 1);
-    if (!init_cudnn_) {
-      init_cudnn_ = true;
-      if (param_.kernel.ndim() == 2) {
-        // 2d conv
-        Tensor<gpu, 4, DType> data = in_data[pool_enum::kData].get<gpu, 4, DType>(s);
-        Tensor<gpu, 4, DType> out = out_data[pool_enum::kOut].get<gpu, 4, DType>(s);
-        mshadow::Shape<4> dshape = data.shape_;
-        CHECK_EQ(cudnnCreatePoolingDescriptor(&pooling_desc_), CUDNN_STATUS_SUCCESS);
-        CHECK_EQ(cudnnCreateTensorDescriptor(&in_desc_), CUDNN_STATUS_SUCCESS);
-        CHECK_EQ(cudnnCreateTensorDescriptor(&out_desc_), CUDNN_STATUS_SUCCESS);
-        CHECK_EQ(cudnnSetTensor4dDescriptor(in_desc_,
-                                            CUDNN_TENSOR_NCHW,
-                                            dtype_,
-                                            data.shape_[0],
-                                            data.shape_[1],
-                                            data.shape_[2],
-                                            data.shape_[3]), CUDNN_STATUS_SUCCESS);
-        CHECK_EQ(cudnnSetTensor4dDescriptor(out_desc_,
-                                            CUDNN_TENSOR_NCHW,
-                                            dtype_,
-                                            out.shape_[0],
-                                            out.shape_[1],
-                                            out.shape_[2],
-                                            out.shape_[3]), CUDNN_STATUS_SUCCESS);
-        #if CUDNN_MAJOR == 5
-          CHECK_EQ(cudnnSetPooling2dDescriptor(pooling_desc_,
-                                               mode_,
-                                               nan_prop_,
-                                               param_.global_pool ? dshape[2] : param_.kernel[0],
-                                               param_.global_pool ? dshape[3] : param_.kernel[1],
-                                               param_.pad[0],
-                                               param_.pad[1],
-                                               param_.global_pool ? 1 : param_.stride[0],
-                                               param_.global_pool ? 1 :param_.stride[1]),
-                                               CUDNN_STATUS_SUCCESS);
-        #else
-          CHECK_EQ(cudnnSetPooling2dDescriptor(pooling_desc_,
-                                               mode_,
-                                               param_.global_pool ? dshape[2] : param_.kernel[0],
-                                               param_.global_pool ? dshape[3] : param_.kernel[1],
-                                               param_.pad[0],
-                                               param_.pad[1],
-                                               param_.global_pool ? 1 : param_.stride[0],
-                                               param_.global_pool ? 1 : param_.stride[1]),
-                                               CUDNN_STATUS_SUCCESS);
-        #endif
-      } else {
-        Tensor<gpu, 5, DType> data = in_data[pool_enum::kData].get<gpu, 5, DType>(s);
-        Tensor<gpu, 5, DType> out = out_data[pool_enum::kOut].get<gpu, 5, DType>(s);
-        CHECK_EQ(cudnnCreatePoolingDescriptor(&pooling_desc_), CUDNN_STATUS_SUCCESS);
-        CHECK_EQ(cudnnCreateTensorDescriptor(&in_desc_), CUDNN_STATUS_SUCCESS);
-        CHECK_EQ(cudnnCreateTensorDescriptor(&out_desc_), CUDNN_STATUS_SUCCESS);
-        std::vector<int> ishape = {static_cast<int>(data.shape_[0]),
-                                   static_cast<int>(data.shape_[1]),
-                                   static_cast<int>(data.shape_[2]),
-                                   static_cast<int>(data.shape_[3]),
-                                   static_cast<int>(data.shape_[4])};
-
-        std::vector<int> istride = {static_cast<int>(ishape[1] * ishape[2] * ishape[3] * ishape[4]),
-                                    static_cast<int>(ishape[2] * ishape[3] * ishape[4]),
-                                    static_cast<int>(ishape[3] * ishape[4]),
-                                    static_cast<int>(ishape[4]),
-                                    1};
-
-        std::vector<int> oshape = {static_cast<int>(out.shape_[0]),
-                                   static_cast<int>(out.shape_[1]),
-                                   static_cast<int>(out.shape_[2]),
-                                   static_cast<int>(out.shape_[3]),
-                                   static_cast<int>(out.shape_[4])};
-
-        std::vector<int> ostride = {static_cast<int>(oshape[1] * oshape[2] * oshape[3] * oshape[4]),
-                                    static_cast<int>(oshape[2] * oshape[3] * oshape[4]),
-                                    static_cast<int>(oshape[3] * oshape[4]),
-                                    static_cast<int>(oshape[4]),
-                                    1};
-
-        std::vector<int> kernel_vec = {param_.global_pool ? ishape[2] :
-                                                            static_cast<int>(param_.kernel[0]),
-                                       param_.global_pool ? ishape[3] :
-                                                            static_cast<int>(param_.kernel[1]),
-                                       param_.global_pool ? ishape[4] :
-                                                            static_cast<int>(param_.kernel[2])};
-
-        std::vector<int> pad_vec = {param_.global_pool ? 0 : static_cast<int>(param_.pad[0]),
-                                    param_.global_pool ? 0 : static_cast<int>(param_.pad[1]),
-                                    param_.global_pool ? 0 : static_cast<int>(param_.pad[2])};
-
-        std::vector<int> stride_vec = {param_.global_pool ? 1 : static_cast<int>(param_.stride[0]),
-                                       param_.global_pool ? 1 : static_cast<int>(param_.stride[1]),
-                                       param_.global_pool ? 1 : static_cast<int>(param_.stride[2])};
-
-        CHECK_EQ(cudnnSetTensorNdDescriptor(in_desc_,
-                                            dtype_,
-                                            static_cast<int>(ishape.size()),
-                                            &ishape[0],
-                                            &istride[0]), CUDNN_STATUS_SUCCESS);
-        CHECK_EQ(cudnnSetTensorNdDescriptor(out_desc_,
-                                            dtype_,
-                                            static_cast<int>(oshape.size()),
-                                            &oshape[0],
-                                            &ostride[0]), CUDNN_STATUS_SUCCESS);
-        #if CUDNN_MAJOR == 5
-        CHECK_EQ(cudnnSetPoolingNdDescriptor(pooling_desc_,
+    CHECK(!init_cudnn_);
+    if (param_.kernel.ndim() == 2) {
+      // 2d pooling
+      CHECK_EQ(data_shape.ndim(), 4);
+      CHECK_EQ(out_shape.ndim(), 4);
+      CHECK_EQ(cudnnCreatePoolingDescriptor(&pooling_desc_), CUDNN_STATUS_SUCCESS);
+      CHECK_EQ(cudnnCreateTensorDescriptor(&in_desc_), CUDNN_STATUS_SUCCESS);
+      CHECK_EQ(cudnnCreateTensorDescriptor(&out_desc_), CUDNN_STATUS_SUCCESS);
+      CHECK_EQ(cudnnSetTensor4dDescriptor(in_desc_,
+                                          CUDNN_TENSOR_NCHW,
+                                          dtype_,
+                                          data_shape[0],
+                                          data_shape[1],
+                                          data_shape[2],
+                                          data_shape[3]), CUDNN_STATUS_SUCCESS);
+      CHECK_EQ(cudnnSetTensor4dDescriptor(out_desc_,
+                                          CUDNN_TENSOR_NCHW,
+                                          dtype_,
+                                          out_shape[0],
+                                          out_shape[1],
+                                          out_shape[2],
+                                          out_shape[3]), CUDNN_STATUS_SUCCESS);
+      #if CUDNN_MAJOR == 5
+        CHECK_EQ(cudnnSetPooling2dDescriptor(pooling_desc_,
                                              mode_,
                                              nan_prop_,
-                                             static_cast<int>(kernel_vec.size()),
-                                             &(kernel_vec[0]),
-                                             &(pad_vec[0]),
-                                             &(stride_vec[0])), CUDNN_STATUS_SUCCESS);
-        #else
-        LOG(FATAL) << "3D pooling only support CUDNN v5 and abouve";
-        #endif
-      }
+                                             param_.global_pool ? data_shape[2] : param_.kernel[0],
+                                             param_.global_pool ? data_shape[3] : param_.kernel[1],
+                                             param_.pad[0],
+                                             param_.pad[1],
+                                             param_.global_pool ? 1 : param_.stride[0],
+                                             param_.global_pool ? 1 :param_.stride[1]),
+                                             CUDNN_STATUS_SUCCESS);
+      #else
+        CHECK_EQ(cudnnSetPooling2dDescriptor(pooling_desc_,
+                                             mode_,
+                                             param_.global_pool ? data_shape[2] : param_.kernel[0],
+                                             param_.global_pool ? data_shape[3] : param_.kernel[1],
+                                             param_.pad[0],
+                                             param_.pad[1],
+                                             param_.global_pool ? 1 : param_.stride[0],
+                                             param_.global_pool ? 1 : param_.stride[1]),
+                                             CUDNN_STATUS_SUCCESS);
+      #endif
+    } else {
+      // 3d pooling
+      CHECK_EQ(data_shape.ndim(), 5);
+      CHECK_EQ(out_shape.ndim(), 5);
+      CHECK_EQ(cudnnCreatePoolingDescriptor(&pooling_desc_), CUDNN_STATUS_SUCCESS);
+      CHECK_EQ(cudnnCreateTensorDescriptor(&in_desc_), CUDNN_STATUS_SUCCESS);
+      CHECK_EQ(cudnnCreateTensorDescriptor(&out_desc_), CUDNN_STATUS_SUCCESS);
+      std::vector<int> ishape = {static_cast<int>(data_shape[0]),
+                                 static_cast<int>(data_shape[1]),
+                                 static_cast<int>(data_shape[2]),
+                                 static_cast<int>(data_shape[3]),
+                                 static_cast<int>(data_shape[4])};
+
+      std::vector<int> istride = {static_cast<int>(ishape[1] * ishape[2] * ishape[3] * ishape[4]),
+                                  static_cast<int>(ishape[2] * ishape[3] * ishape[4]),
+                                  static_cast<int>(ishape[3] * ishape[4]),
+                                  static_cast<int>(ishape[4]),
+                                  1};
+
+      std::vector<int> oshape = {static_cast<int>(out_shape[0]),
+                                 static_cast<int>(out_shape[1]),
+                                 static_cast<int>(out_shape[2]),
+                                 static_cast<int>(out_shape[3]),
+                                 static_cast<int>(out_shape[4])};
+
+      std::vector<int> ostride = {static_cast<int>(oshape[1] * oshape[2] * oshape[3] * oshape[4]),
+                                  static_cast<int>(oshape[2] * oshape[3] * oshape[4]),
+                                  static_cast<int>(oshape[3] * oshape[4]),
+                                  static_cast<int>(oshape[4]),
+                                  1};
+
+      std::vector<int> kernel_vec = {param_.global_pool ? ishape[2] :
+                                                          static_cast<int>(param_.kernel[0]),
+                                     param_.global_pool ? ishape[3] :
+                                                          static_cast<int>(param_.kernel[1]),
+                                     param_.global_pool ? ishape[4] :
+                                                          static_cast<int>(param_.kernel[2])};
+
+      std::vector<int> pad_vec = {param_.global_pool ? 0 : static_cast<int>(param_.pad[0]),
+                                  param_.global_pool ? 0 : static_cast<int>(param_.pad[1]),
+                                  param_.global_pool ? 0 : static_cast<int>(param_.pad[2])};
+
+      std::vector<int> stride_vec = {param_.global_pool ? 1 : static_cast<int>(param_.stride[0]),
+                                     param_.global_pool ? 1 : static_cast<int>(param_.stride[1]),
+                                     param_.global_pool ? 1 : static_cast<int>(param_.stride[2])};
+
+      CHECK_EQ(cudnnSetTensorNdDescriptor(in_desc_,
+                                          dtype_,
+                                          static_cast<int>(ishape.size()),
+                                          &ishape[0],
+                                          &istride[0]), CUDNN_STATUS_SUCCESS);
+      CHECK_EQ(cudnnSetTensorNdDescriptor(out_desc_,
+                                          dtype_,
+                                          static_cast<int>(oshape.size()),
+                                          &oshape[0],
+                                          &ostride[0]), CUDNN_STATUS_SUCCESS);
+      #if CUDNN_MAJOR == 5
+      CHECK_EQ(cudnnSetPoolingNdDescriptor(pooling_desc_,
+                                           mode_,
+                                           nan_prop_,
+                                           static_cast<int>(kernel_vec.size()),
+                                           &(kernel_vec[0]),
+                                           &(pad_vec[0]),
+                                           &(stride_vec[0])), CUDNN_STATUS_SUCCESS);
+      #else
+      LOG(FATAL) << "3D pooling only support CUDNN v5 and abouve";
+      #endif
     }
+    init_cudnn_ = true;
   }
   bool init_cudnn_;
   cudnnDataType_t dtype_;

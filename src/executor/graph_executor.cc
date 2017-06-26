@@ -20,6 +20,52 @@
 
 namespace mxnet {
 namespace exec {
+namespace {
+void EnableP2P(const std::vector<Context>& devs) {
+#if MXNET_USE_CUDA
+  std::vector<int> gpus;
+  for (const auto& d : devs) {
+    if (d.dev_mask() == gpu::kDevMask) {
+      gpus.push_back(d.dev_id);
+    }
+  }
+  int n = static_cast<int>(gpus.size());
+  int enabled = 0;
+  std::vector<int> p2p(n*n);
+  for (int i = 0; i < n; ++i) {
+    cudaSetDevice(gpus[i]);
+    for (int j = 0; j < n; j++) {
+      int access;
+      cudaDeviceCanAccessPeer(&access, gpus[i], gpus[j]);
+      if (access) {
+        cudaError_t e = cudaDeviceEnablePeerAccess(gpus[j], 0);
+        if (e == cudaSuccess) {
+          ++enabled;
+          p2p[i*n+j] = 1;
+        }
+      }
+    }
+  }
+  if (enabled != n*(n-1)) {
+    // print warning info if not fully enabled
+    LOG(WARNING) << "only " << enabled <<  " out of "
+      << n*(n-1) << " GPU pairs are enabled direct access. "
+      << "It may affect the performance. "
+      << "You can set MXNET_ENABLE_GPU_P2P=0 to turn it off";
+  }
+  std::string access(n, '.');
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) {
+      int succ;
+      cudaDeviceCanAccessPeer(&succ, gpus[i], gpus[j]);
+      access[j] = succ ? 'v' : '.';
+    }
+    LOG(INFO) << access;
+  }
+#endif
+}
+}  // namespace
+
 GraphExecutor::~GraphExecutor() {
   for (auto& n : op_nodes_) {
     if (n.cached_opr != nullptr) {
@@ -84,13 +130,14 @@ nnvm::NodeEntry AttrHint(nnvm::NodeEntry src, nnvm::NodeEntry like) {
   return src;
 }
 
-nnvm::NodeEntry AggregateGradient(std::vector<nnvm::NodeEntry>&& v) {
+nnvm::NodeEntry AggregateGradient(const std::vector<nnvm::NodeEntry>& vv) {
   using nnvm::Op;
   static size_t inplace_sum_cap = dmlc::GetEnv("MXNET_EXEC_INPLACE_GRAD_SUM_CAP", 8);
   static const Op* ewise_plus_op = Op::Get("_grad_add");
   static const Op* ewise_sum_op = Op::Get("ElementWiseSum");
   static const Op* identity_op = Op::Get("identity");
   static const Op* zeros_op = Op::Get("_zeros");
+  std::vector<nnvm::NodeEntry> v = vv; // copy the list.
   // remove zero in the sum.
   size_t begin = 0;
   for (size_t i = 0; i < v.size(); ++i) {
@@ -181,6 +228,7 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
   }
   std::set<std::string> address_set(address_vec.begin(), address_vec.end());
   if (address_set.size() == 1) {
+    LOG(INFO) << "Only one machine is involved. No need to split graph.";
     return g;
   }
   //std::cout << "==================== Original Graph ====================" << std::endl;
@@ -388,6 +436,9 @@ Graph AssignContext(Graph g,
     device_map[kv.first] = ctx2id.at(kv.second);
   }
 
+  // Enable P2P connection.
+  EnableP2P(ctx_list);
+
 #ifdef SPLIT_GRADIENT_TEST
   g = nnvm::pass::SplitGradientTest(g, "__ctx_group__", num_forward_outputs);
 #endif
@@ -524,29 +575,24 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   nnvm::Graph g = InitFullGraph(symbol, grad_req_type, arg_grad_store);
   g = InferShapeType(g, in_args, aux_states);
   // Call partition pass here.
-  const int num_procs = ctx_map.size();
-  LOG(INFO) << "Num procedures: " << num_procs;
   bool need_grad = false;
   for (OpReqType req : grad_req_type) {
     if (req != kNullOp) need_grad = true;
   }
-  if (num_procs > 1 && need_grad) {
-    std::string default_group;
-    for (const auto& kv : ctx_map) {
-      if (kv.second == default_ctx) {
-        default_group = kv.first;
-        break;
-      }
-    }
-    CHECK(default_group != "") << "Default context does not appear in context map";
-    g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_procs);
-    g.attrs["default_group"] = std::make_shared<nnvm::any>(default_group);
-    g = nnvm::ApplyPass(g, "PartitionPass");
-  }
+  const int num_devices = ctx_map.size();
+  LOG(INFO) << "Num devices: " << num_devices;
   // TODO(minjie): Here has an implicit assumption.
   // The ctx_map is of form {"group:%d" % id : context object}
-  // assign contexts to the graph.
-  g = AssignContext(g, default_ctx, ctx_map,
+  // The default group name is "group:default".
+  std::map<std::string, Context> ctx_map_with_default = ctx_map;
+  ctx_map_with_default["group:default"] = default_ctx;
+  if (num_devices > 1 && need_grad) {
+    g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_devices);
+    g.attrs["default_group"] = std::make_shared<nnvm::any>(std::string("group:default"));
+    g = nnvm::ApplyPass(g, "PartitionPass");
+  }
+  // Assign contexts to the graph.
+  g = AssignContext(g, default_ctx, ctx_map_with_default,
                     in_args,
                     grad_store_,
                     aux_states,
@@ -621,6 +667,8 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
   std::vector<Context> data_context(idx.num_node_entries());
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     for (uint32_t i = 0; i < idx[nid].source->num_outputs(); ++i) {
+      //LOG(INFO) << "Node " << idx[nid].source->attrs.name << " output#" << i << ": "
+        //<< " entryid=" << idx.entry_id(nid, i) << " shape=" << vshape[idx.entry_id(nid, i)];
       data_context[idx.entry_id(nid, i)] = vctx[nid];
     }
   }
@@ -700,14 +748,29 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
     int storage_id = vstorage[i];
     CHECK_GE(storage_id, 0)
         << "Do not support runtime shape op yet. Node's name is"
-        << " " << idx[i].source->attrs.name << ". "
-        << i << " " << data_entry_.size() << std::endl
-        << "Shape is " << vshape[i] << std::endl;
+        << " " << idx[i].source->attrs.name << ". Entryid="
+        << i << " DataEntrySize=" << data_entry_.size()
+        << " Shape=" << vshape[i];
     const NDArray& src = data_pool_.at(storage_id);
     data_entry_[i] = src.AsArray(vshape[i], vdtype[i]);
   }
 }
 
+std::vector<int> GraphExecutor::CalcPriority() {
+  const auto& idx = graph_.indexed_graph();
+  std::vector<int> ret(idx.num_nodes(), 0);
+  DFSVisit(graph_.outputs, [&ret, &idx] (const nnvm::NodePtr& n) {
+      const uint32_t nid = idx.node_id(n.get());
+      int priority = 0;
+      for (const auto& in_ent : n->inputs) {
+        const uint32_t pnid = idx.node_id(in_ent.node.get());
+        priority = std::max(priority, ret[pnid]);
+      }
+      ret[nid] = priority + 1;
+      //LOG(INFO) << "Visit node #" << idx.node_id(n.get()) << " Priority=" << ret[nid];
+    });
+  return ret;
+}
 
 void GraphExecutor::InitCachedOps() {
   // get the graph
@@ -719,6 +782,9 @@ void GraphExecutor::InitCachedOps() {
   const auto& vctx = graph_.GetAttr<ContextVector>("context");
   const auto& addto_entry = graph_.GetAttr<std::vector<int> >("addto_entry");
   const auto& skip_plus_node = graph_.GetAttr<std::vector<int> >("skip_plus_node");
+  
+  // Get priorities.
+  const auto& node_priorities = CalcPriority();
 
   op_nodes_.resize(idx.num_nodes());
   // setup the array and requirements.
@@ -820,10 +886,18 @@ void GraphExecutor::InitCachedOps() {
     }
     dedup(mutate_vars);
     dedup(all_vars);
-    Engine::Get()->PushSync([exec](RunContext rctx) {
-        exec->Setup();
+    const int oversharding = dmlc::GetEnv("TOFU_OVERSHARDING", 0);
+    if (oversharding) {
+      Engine::Get()->PushSync([exec](RunContext rctx) {
+          exec->Setup();
+      }, Context::CPU(), {}, all_vars, FnProperty::kNormal, node_priorities[nid],
+      PROFILER_MESSAGE("SetupExec"));
+    } else {
+      Engine::Get()->PushSync([exec](RunContext rctx) {
+          exec->Setup();
       }, Context::CPU(), {}, all_vars, FnProperty::kNormal, 0,
       PROFILER_MESSAGE("SetupExec"));
+    }
     auto& name = idx[nid].source->attrs.name;
     auto exec_fun = [exec, is_async, is_gpu, name] (
         RunContext ctx, Engine::CallbackOnComplete on_complete) {

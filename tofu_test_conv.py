@@ -9,11 +9,11 @@ import time
 BATCH_SIZE = 512
 IN_CHANNEL = 1024
 NUM_FILTER = 1024
-HEIGHT = 24
-WEIGHT = 24
+HEIGHT = 12
+WEIGHT = 12
 NUM_LAYERS = 5
-NUM_ITERATIONS = 25
-NUM_IGNORED_ITERATIONS = 5
+NUM_ITERATIONS = 13
+NUM_IGNORED_ITERATIONS = 3
 EXPERIMENT_NAME = ""
 
 class Experiment:
@@ -33,6 +33,7 @@ class Experiment:
         if (self.count > self.ignored_iterations):
             end = time.time()
             self.exps.append(end - self.begin)
+            print("Spent end %f  on this iteration " % (end - self.begin))
 
     def Summary(self):
         assert len(self.exps) == (self.iterations - self.ignored_iterations), len(self.exps)

@@ -44,12 +44,13 @@ Operator* CreateBackwardOp<gpu>(
     const std::vector<TShape>& out_grad_shape,
     const std::vector<TShape>& in_data_shape,
     const std::vector<TShape>& out_data_shape,
-    const std::vector<TShape>& in_grad_shape) {
+    const std::vector<TShape>& in_grad_shape,
+    const Context& ctx) {
   Operator *op = NULL;
 #if MXNET_USE_CUDNN == 1
   if (param.dilate.Size() == 1 && !param.cudnn_off) {
     MSHADOW_REAL_TYPE_SWITCH(dtype, DType, {
-      op = new CuDNNConvolutionOp<DType>(param, in_data_shape, out_data_shape, ctx);
+      op = new CuDNNConvolutionOp<DType>(param, in_data_shape, out_grad_shape, ctx);
     })
   } else {
     MSHADOW_REAL_TYPE_SWITCH(dtype, DType, {

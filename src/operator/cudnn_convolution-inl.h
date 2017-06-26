@@ -213,6 +213,7 @@ class CuDNNConvolutionOp : public Operator {
                         const std::vector<TBlob> &aux_args) {
     using namespace mshadow;
     using namespace mshadow::expr;
+
     size_t expected = param_.no_bias == 0 ? 3 : 2;
     DType *grad_ptr = NULL;
     DType *wmat_ptr = NULL;
@@ -222,6 +223,7 @@ class CuDNNConvolutionOp : public Operator {
     CHECK_EQ(out_grad.size(), 1);
     CHECK(in_data.size() == expected && in_grad.size() == expected);
     Stream<gpu> *s = ctx.get_stream<gpu>();
+    GetTempSize(ctx);
     if (param_.kernel.ndim() == 2) {
       Tensor<gpu, 4, DType> grad = out_grad[conv::kOut].get<gpu, 4, DType>(s);
       Tensor<gpu, 4, DType> wmat = in_data[conv::kWeight].get<gpu, 4, DType>(s);

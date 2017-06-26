@@ -45,7 +45,12 @@ class Module(BaseModule):
 
         if isinstance(context, ctx.Context):
             context = [context]
-        self._context = context
+        if len(context) == 1:
+            self._context = [context[0]]
+        else:
+            self._context = [ctx.cpu()]
+        self._group2ctx = {'group:%d' % i : context[i] for i in range(len(context))}
+
         if work_load_list is None:
             work_load_list = [1] * len(self._context)
         assert len(work_load_list) == len(self._context)
@@ -229,14 +234,14 @@ class Module(BaseModule):
 
         if self._arg_params is None:
             param_arrays = [
-                nd.zeros(x[0].shape, dtype=x[0].dtype)
+                nd.zeros(x[0].shape, dtype=x[0].dtype, ctx=self._context[0])
                 for x in self._exec_group.param_arrays
             ]
             self._arg_params = {name:arr for name, arr in zip(self._param_names, param_arrays)}
 
         if self._aux_params is None:
             aux_arrays = [
-                nd.zeros(x[0].shape, dtype=x[0].dtype)
+                nd.zeros(x[0].shape, dtype=x[0].dtype, ctx=self._context[0])
                 for x in self._exec_group.aux_arrays
             ]
             self._aux_params = {name:arr for name, arr in zip(self._aux_names, aux_arrays)}
@@ -336,13 +341,17 @@ class Module(BaseModule):
         else:
             shared_group = None
 
+        print(self._group2ctx, self._context)
+        assert shared_group is None, 'Shared module is not supported'
+        
         self._exec_group = DataParallelExecutorGroup(self._symbol, self._context,
                                                      self._work_load_list, self._data_shapes,
                                                      self._label_shapes, self._param_names,
                                                      for_training, inputs_need_grad,
                                                      shared_group, logger=self.logger,
                                                      fixed_param_names=self._fixed_param_names,
-                                                     grad_req=grad_req)
+                                                     grad_req=grad_req,
+                                                     group2ctx=self._group2ctx)
         if shared_module is not None:
             self.params_initialized = True
             self._arg_params = shared_module._arg_params

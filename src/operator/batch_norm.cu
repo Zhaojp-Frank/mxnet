@@ -23,6 +23,11 @@ Operator *CreateOp<gpu>(BatchNormParam param, int dtype) {
 #endif
 }
 
+template<>
+Operator* CreateBackwardOp<gpu>(const BatchNormParam& param, int dtype) {
+  return CreateOp<gpu>(param, dtype);
+}
+
 }  // namespace op
 }  // namespace mxnet
 

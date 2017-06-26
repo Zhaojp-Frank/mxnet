@@ -68,7 +68,8 @@ Operator* CreateBackwardOp<cpu>(
     const std::vector<TShape>& out_grad_shape,
     const std::vector<TShape>& in_data_shape,
     const std::vector<TShape>& out_data_shape,
-    const std::vector<TShape>& in_grad_shape) {
+    const std::vector<TShape>& in_grad_shape,
+    const Context& ctx) {
 #if MXNET_USE_MKL2017 == 1
   if ((param.dilate[0] == 1 && param.dilate[1] == 1)
       && param.kernel.ndim() == 2) {
@@ -113,7 +114,7 @@ Operator* ConvolutionProp::CreateBackwardOperatorEx(
   std::vector<TShape> out_grad_shape, in_data_shape, out_data_shape;
   ParseBackwardInputs(*this, in_shape, &out_grad_shape, &in_data_shape, &out_data_shape);
   DO_BIND_DISPATCH(CreateBackwardOp, param_, in_type[0],
-                   out_grad_shape, in_data_shape, out_data_shape, out_shape);
+                   out_grad_shape, in_data_shape, out_data_shape, out_shape, ctx);
 }
 
 MXNET_REGISTER_OP_PROPERTY(Convolution, ConvolutionProp)

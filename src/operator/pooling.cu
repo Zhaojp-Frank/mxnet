@@ -54,6 +54,17 @@ Operator *CreateOp<gpu>(PoolingParam param, int dtype) {
   return op;
 }
 
+template<>
+Operator* CreateBackwardOp<gpu>(
+    const PoolingParam& param,
+    int dtype,
+    const std::vector<TShape>& out_grad_shape,
+    const std::vector<TShape>& in_data_shape,
+    const std::vector<TShape>& out_data_shape,
+    const std::vector<TShape>& in_grad_shape) {
+  return CreateOp<gpu>(param, dtype);
+}
+
 }  // namespace op
 }  // namespace mxnet
 

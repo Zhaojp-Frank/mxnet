@@ -74,6 +74,22 @@ class P2PNetDebugger {
   int level_;
 };
 
+class SpinLock {
+ public:
+  bool TryLock() {
+    return !lock_.test_and_set(std::memory_order_acquire);
+  }
+  void Lock() {
+    while (lock_.test_and_set(std::memory_order_acquire))
+      ;  // spin
+  }
+  void UnLock() {
+    lock_.clear(std::memory_order_release);
+  }
+ private:
+  std::atomic_flag lock_ = ATOMIC_FLAG_INIT;
+};
+
 class P2PNet {
  public:
   static P2PNet& Get() {
@@ -123,9 +139,15 @@ class P2PNet {
   void DoRecv(void* socket);
   void DoRequestRecv(struct Request* request);
 
+  unsigned impl_internal_polling_;
+  unsigned impl_commnication_method_;
+  unsigned impl_mpi_polling_time_;
+  unsigned impl_main_affinity_;
+  unsigned impl_use_mpi_barrier_;
+
 #ifdef P2PNET_MPI
   void MPI_Main();
-  void MPI_DoInternalRequest(size_t index);
+  void MPI_DoInternalRequest(struct Request* request);
   void MPI_DoSend(struct Request* request);
   void MPI_DoRecv(struct Request* request);
   void MPI_RequestOnComplete(struct Request* request);
@@ -133,10 +155,10 @@ class P2PNet {
   int mpi_rank_;
   std::vector<std::string> mpi_rank_to_host_;
   std::map<std::string, int> mpi_host_to_rank_;
-  //std::list<struct Request*> mpi_request_queue_;
   std::vector<struct Request*> mpi_request_queue_;
-  MPI_Request* mpi_request_array_;
   int mpi_request_count_;
+  size_t mpi_sent_bytes_;
+  size_t mpi_recv_bytes_;
 #endif
 
   void* zmq_context_;
@@ -151,11 +173,14 @@ class P2PNet {
   size_t poll_items_count_;
   std::thread* main_thread_;
   ctpl::thread_pool *recv_thread_pool_;
+
+  std::mutex internal_mtx; // mutex lock for request_queue_
+  SpinLock spin_lock_;  // spin lock for request queue
   std::vector<struct Request*> internal_request_queue_;
   std::atomic<size_t> internal_request_queue_size_;
   std::vector<void*> per_thread_isocket_queue_;
   std::atomic<size_t> per_thread_isocket_queue_size_;
-  std::mutex internal_mtx; // mutex lock for request_queue_
+
   std::map<unsigned, std::string> tensor_to_receiver_map_;
   std::map<unsigned, size_t> tensor_to_send_request_map_;
   std::map<unsigned, size_t> tensor_to_recv_request_map_;

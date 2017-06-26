@@ -178,6 +178,14 @@ class PoolingOp : public Operator {
 template<typename xpu>
 Operator* CreateOp(PoolingParam param, int dtype);
 
+template<typename xpu>
+Operator* CreateBackwardOp(
+    const PoolingParam& param,
+    int dtype,
+    const std::vector<TShape>& out_grad_shape,
+    const std::vector<TShape>& in_data_shape,
+    const std::vector<TShape>& out_data_shape,
+    const std::vector<TShape>& in_grad_shape);
 
 #if DMLC_USE_CXX11
 class PoolingProp : public OperatorProperty {
@@ -316,6 +324,12 @@ class PoolingProp : public OperatorProperty {
   Operator* CreateOperatorEx(Context ctx, std::vector<TShape> *in_shape,
                              std::vector<int> *in_type) const override;
 
+  Operator* CreateBackwardOperatorEx(
+      const Context& ctx,
+      const std::vector<TShape>& in_shape,
+      const std::vector<int>& in_type,
+      const std::vector<TShape>& out_shape,
+      const std::vector<int>& out_type) const override;
  private:
   PoolingParam param_;
 };  // class PoolingProp

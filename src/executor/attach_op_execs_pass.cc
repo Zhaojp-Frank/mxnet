@@ -177,6 +177,22 @@ inline vector<uint32_t> OpPropMutateInputs(const OperatorProperty& prop) {
   return ret;
 }
 
+inline std::vector<uint32_t> OpPropBackMutateInputs(const OperatorProperty& prop) {
+  if (prop.ListAuxiliaryStates().size() == 0) {
+    return {};
+  }
+  std::vector<int> out_grad_index(prop.NumVisibleOutputs());
+  std::vector<int> in_data_index(prop.ListArguments().size());
+  std::vector<int> out_data_index(prop.ListOutputs().size());
+  size_t arg_size = prop.DeclareBackwardDependency(
+      out_grad_index, in_data_index, out_data_index).size();
+  std::vector<uint32_t> ret;
+  for (uint32_t i = 0; i < prop.ListAuxiliaryStates().size(); ++i) {
+    ret.push_back(static_cast<uint32_t>(i + arg_size));
+  }
+  return ret;
+}
+
 inline Operator* OpPropCreateLayerOp(
     const OperatorProperty& prop,
     const Context& ctx,
@@ -227,7 +243,10 @@ inline bool ExistForwardNode(const nnvm::IndexedGraph::Node& inode) {
   // TODO(minjie): Currently, the first control dependency of a backward
   // node must be its corresponding forward node. A better way is to use
   // some graph attribute to specify that.
-  return inode.control_deps.size() > 0;
+  if (inode.source->attrs.dict.count("OriginalControlSize") > 0) {
+    return false;
+  } 
+  return inode.control_deps.size() > 0 ;
 }
 
 // pass to attach operator executors
@@ -268,7 +287,8 @@ Graph AttachOpExecs(Graph g) {
       ret[i] = std::make_shared<FComputeExecutor>(DoNothingFCompute, inode.source->attrs);
       continue;
     }
-    /*if (false
+#if 0
+    if (false
         || op->name == "Concat"
         || op->name == "_backward_Concat"
         || op->name == "ElementWiseSum"
@@ -278,25 +298,28 @@ Graph AttachOpExecs(Graph g) {
         ) {
       ret[i] = std::make_shared<FComputeExecutor>(DoNothingFCompute, inode.source->attrs);
       continue;
-    }*/
+    }
+#endif
     if (is_layer_forward.count(op) || is_layer_backward.count(op)) {
       // Layer operator.
       const OperatorProperty& prop = ParseOpProp(inode.source->attrs);
-      const vector<uint32_t>& mutate_index = OpPropMutateInputs(prop);
       const vector<TShape>& ishape = ParseInAttrs(idx, vshape, inode);
       const vector<int>& itype = ParseInAttrs(idx, vdtype, inode);
       const vector<TShape>& oshape = ParseOutAttrs(idx, vshape, inode);
       const vector<int>& otype = ParseOutAttrs(idx, vdtype, inode);
       if (is_layer_forward.count(op)) {
         // Forward operator.
+        const vector<uint32_t>& mutate_index = OpPropMutateInputs(prop);
         shared_ptr<Operator> layer_fwd_op(OpPropCreateLayerOp(prop, vctx[i], ishape, itype));
         ret[i] = std::make_shared<ForwardOpExecutor>(layer_fwd_op, mutate_index);
+/*
       } else if (ExistForwardNode(inode)) {
         // Backward operator that has corresponding forward operator. Reuse the already created
         // forward OpExecutor.
         // TODO(minjie): Currently, the first control dependency of a backward
         // node must be its corresponding forward node. A better way is to use
         // some graph attribute to specify that.
+        const vector<uint32_t>& mutate_index = OpPropBackMutateInputs(prop);
         const uint32_t fwd_id = inode.control_deps[0];
         CHECK(vctx[fwd_id] == vctx[i])
           << "Stateful backward node requires to have the same device context with the forward node.";
@@ -306,9 +329,11 @@ Graph AttachOpExecs(Graph g) {
             std::dynamic_pointer_cast<ForwardOpExecutor>(ret[fwd_id])->op_,
             prop,
             mutate_index);
+*/
       } else {
         // Backward operator that has no corresponding forward operator. Try to create the OpExecutor
         // by its own.
+        const vector<uint32_t>& mutate_index = OpPropBackMutateInputs(prop);
         shared_ptr<Operator> layer_bwd_op(OpPropCreateBackwardLayerOp(
             prop, vctx[i], ishape, itype, oshape, otype));
         CHECK(layer_bwd_op != nullptr)
