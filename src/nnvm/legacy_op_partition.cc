@@ -689,7 +689,7 @@ void RegisterOpAlignedSchemes() {
         || name == "_backward_power" || name == "_backward_power_scalar") {
       op.set_attr<AType>(kAttrName, CutAllDimsSchemes);
     } else if (name == "Pooling" || name == "_backward_Pooling"
-        || name == "Flatten" || name == "_backward_Flatten") {
+        || name == "Flatten" || name == "_backward_Flatten" || name == "_backward_copy") {
       op.set_attr<AType>(kAttrName, CutFirstKDimsSchemes<2>);
     } else if (name == "SoftmaxOutput" || name == "_backward_SoftmaxOutput") {
       op.set_attr<AType>(kAttrName, CutFirstKDimsSchemes<1>);
