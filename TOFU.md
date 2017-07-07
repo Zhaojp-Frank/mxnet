@@ -19,7 +19,7 @@ USE_MKL2017 = 1
 USE_BLAS = mkl
 USE_DIST_KVSTORE = 1
 ```
-    - The paths of `USE_INTEL_PATH` and `MKLML_ROOT` specified above are only work on NEWS cluster. Change them accordingly.
+  - The paths of `USE_INTEL_PATH` and `MKLML_ROOT` specified above are only work on NEWS cluster. Change them accordingly.
 6. Build it! `make -j 8`
 
 Execution
@@ -32,14 +32,14 @@ Execution
   export LD_LIBRARY_PATH=/home/fegin/intel/lib/intel64:$LD_LIBRARY_PATH
   export PYTHONPATH=/home/fegin/workspace/mxnet/python
 ```
-    - The path of `LD_LIBRARY_PATH` only work on NEWS cluster. Change it accordingly.
-    - Please change `PYTHONPATH` to match your own working path.
+  - The path of `LD_LIBRARY_PATH` only work on NEWS cluster. Change it accordingly.
+  - Please change `PYTHONPATH` to match your own working path.
 2. Create a file called **host** and fill in all worker's IPs, one IP per line.
 3. That's run a script to test if everything is done.    
 ```
 mpirun -outfile-pattern output_stdout -errfile-pattern output_stderr -l -np 2 -ppn 1 -hostfile host -print-rank-map -genv MXNET_P2PNET_MPI_SLEEP_DURATION=1 -genv MXNET_P2PNET_DEBUG=1 -genv MXNET_P2PNET_HOST_PATH=/home/fegin/workspace/mxnet/host -genv MXNET_P2PNET_MAIN_AFFINITY=3 -genv MXNET_P2PNET_ZMQ_IO_THREADS=0 -genv KMP_AFFINITY="explicit,granularity=fine,proclist=[0,1,2,3,12,13,14,15]" python tofu_test_mlp.py -f host --batch_size=8
 ```
-    - Remember to change **MXNET_P2PNET_HOST_PATH** accordingly.
+  - Remember to change **MXNET_P2PNET_HOST_PATH** accordingly.
 
 Using ZeroMQ
 ------------
