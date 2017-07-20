@@ -71,7 +71,7 @@ class SyntheticDataIter(DataIter):
         return [('data',self.data.shape)]
     @property
     def provide_label(self):
-        return [('softmax_label',(self.batch_size,))]
+        return [('softmax/label',(self.batch_size,))]
     def next(self):
         self.cur_iter += 1
         if self.cur_iter <= self.max_iter:
@@ -106,7 +106,7 @@ def get_rec_iter(args, kv=None):
         mean_g              = rgb_mean[1],
         mean_b              = rgb_mean[2],
         data_name           = 'data',
-        label_name          = 'softmax_label',
+        label_name          = 'softmax/label',
         data_shape          = image_shape,
         batch_size          = args.batch_size,
         rand_crop           = args.random_crop,
@@ -134,7 +134,7 @@ def get_rec_iter(args, kv=None):
         mean_g              = rgb_mean[1],
         mean_b              = rgb_mean[2],
         data_name           = 'data',
-        label_name          = 'softmax_label',
+        label_name          = 'softmax/label',
         batch_size          = args.batch_size,
         data_shape          = image_shape,
         preprocess_threads  = args.data_nthreads,

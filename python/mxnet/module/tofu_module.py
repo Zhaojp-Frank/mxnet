@@ -13,7 +13,7 @@ from ..initializer import Uniform, InitDesc
 from ..io import DataDesc
 
 class TofuModule(BaseModule):
-    def __init__(self, symbol, data_names=('data',), label_names=('softmax_label',),
+    def __init__(self, symbol, data_names=('data',), label_names=('softmax/label',),
                  logger=logging, context=ctx.cpu()):
         super(TofuModule, self).__init__(logger=logger)
         if isinstance(context, ctx.Context):

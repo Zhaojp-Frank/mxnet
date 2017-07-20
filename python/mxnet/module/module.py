@@ -28,7 +28,7 @@ class Module(BaseModule):
     data_names : list of str
         Default is `('data')` for a typical model used in image classification.
     label_names : list of str
-        Default is `('softmax_label')` for a typical model used in image
+        Default is `('softmax/label')` for a typical model used in image
         classification.
     logger : Logger
         Default is `logging`.
@@ -39,7 +39,7 @@ class Module(BaseModule):
     fixed_param_names: list of str
         Default `None`, indicating no network parameters are fixed.
     """
-    def __init__(self, symbol, data_names=('data',), label_names=('softmax_label',),
+    def __init__(self, symbol, data_names=('data',), label_names=('softmax/label',),
                  logger=logging, context=ctx.cpu(), work_load_list=None, fixed_param_names=None):
         super(Module, self).__init__(logger=logger)
 
@@ -104,7 +104,7 @@ class Module(BaseModule):
         data_names : list of str
             Default is `('data')` for a typical model used in image classification.
         label_names : list of str
-            Default is `('softmax_label')` for a typical model used in image
+            Default is `('softmax/label')` for a typical model used in image
             classification.
         logger : Logger
             Default is `logging`.

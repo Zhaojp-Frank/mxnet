@@ -413,7 +413,7 @@ class NDArrayIter(DataIter):
     for training and can cause problems if used for prediction.
     """
     def __init__(self, data, label=None, batch_size=1, shuffle=False,
-                 last_batch_handle='pad', label_name='softmax_label'):
+                 last_batch_handle='pad', label_name='softmax/label'):
         # pylint: disable=W0201
 
         super(NDArrayIter, self).__init__()
@@ -517,7 +517,7 @@ class MXDataIter(DataIter):
     handle : DataIterHandle
         the handle to the underlying C++ Data Iterator
     """
-    def __init__(self, handle, data_name='data', label_name='softmax_label', **_):
+    def __init__(self, handle, data_name='data', label_name='softmax/label', **_):
         super(MXDataIter, self).__init__()
         self.handle = handle
         # debug option, used to test the speed with io effect eliminated

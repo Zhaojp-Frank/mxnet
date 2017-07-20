@@ -7,6 +7,7 @@
 #include <nnvm/scheme.h>
 #include "../operator/convolution-inl.h"
 #include "../operator/fully_connected-inl.h"
+#include "../operator/batch_norm-inl.h"
 #include "./legacy_op_util.h"
 
 using namespace std;
@@ -43,8 +44,8 @@ void SplitBackwardInputs(const NodeAttrs& attrs,
   }
   vector<T*> arg_ptr = prop.ptr->BackwardInputs(
       ogs_ptr, ids_ptr, ods_ptr);
-  CHECK_EQ(arg_ptr.size(), inputs.size());
-  for (size_t i = 0; i < inputs.size(); ++i) {
+  CHECK_LE(arg_ptr.size(), inputs.size());  // Inputs may contain auxililary variables.
+  for (size_t i = 0; i < arg_ptr.size(); ++i) {
     *arg_ptr[i] = inputs[i];
   }
 }
@@ -600,6 +601,113 @@ class ConvBackwardPartitioner3 : public BackwardOpPartitioner<ConvolutionParam> 
   }
 };
 
+///////////////////////////////////////////////////////////////////////////////////
+// BatchNorm op
+class BatchNormForwardPartitioner1 : public ForwardOpPartitioner<BatchNormParam> {
+ public:
+  BatchNormForwardPartitioner1(const NodeAttrs& attrs):
+    ForwardOpPartitioner<BatchNormParam>(attrs) {
+    CHECK(!param_.use_global_stats);
+  }
+  void AlignedScheme(
+      const BatchNormParam& param,
+      const vector<TShape>& in_data_shapes,
+      const vector<TShape>& out_data_shapes,
+      const vector<Scheme*>& in_data_schemes,
+      const vector<Scheme*>& out_data_schemes) override {
+    // TODO(minjie): This is not an accurate batch norm. The correct version
+    // requires reduction across the batch. But it is typically being used
+    // in data parallelism right now so we put it here.
+    *in_data_schemes[batchnorm::kData] = Scheme::Cut(0);  // data: R
+    *in_data_schemes[batchnorm::kGamma] = Scheme::Rep(); // gamma: r
+    *in_data_schemes[batchnorm::kBeta] = Scheme::Rep();  // beta: r
+    *out_data_schemes[batchnorm::kOut] = Scheme::Cut(0);
+    *out_data_schemes[batchnorm::kMean] = Scheme::Rep();
+    *out_data_schemes[batchnorm::kVar] = Scheme::Rep();
+  }
+  void Partition(size_t num_partitions) override {
+    // Do nothing.
+  }
+};
+class BatchNormForwardPartitioner2 : public ForwardOpPartitioner<BatchNormParam> {
+ public:
+  BatchNormForwardPartitioner2(const NodeAttrs& attrs):
+    ForwardOpPartitioner<BatchNormParam>(attrs) {
+    CHECK(!param_.use_global_stats);
+  }
+  void AlignedScheme(
+      const BatchNormParam& param,
+      const vector<TShape>& in_data_shapes,
+      const vector<TShape>& out_data_shapes,
+      const vector<Scheme*>& in_data_schemes,
+      const vector<Scheme*>& out_data_schemes) override {
+    *in_data_schemes[batchnorm::kData] = Scheme::Cut(1);  // data: C
+    *in_data_schemes[batchnorm::kGamma] = Scheme::Cut(0); // gamma: R
+    *in_data_schemes[batchnorm::kBeta] = Scheme::Cut(0);  // beta: R
+    *out_data_schemes[batchnorm::kOut] = Scheme::Cut(1);  // out: C
+    *out_data_schemes[batchnorm::kMean] = Scheme::Cut(0);
+    *out_data_schemes[batchnorm::kVar] = Scheme::Cut(0);
+  }
+  void Partition(size_t num_partitions) override {
+    // Do nothing.
+  }
+};
+class BatchNormBackwardPartitioner1 : public BackwardOpPartitioner<BatchNormParam> {
+ public:
+  BatchNormBackwardPartitioner1(const NodeAttrs& attrs):
+    BackwardOpPartitioner<BatchNormParam>(attrs) {}
+  void AlignedScheme(
+      const BatchNormParam& param,
+      const vector<TShape>& out_grad_shapes,
+      const vector<TShape>& in_data_shapes,
+      const vector<TShape>& out_data_shapes,
+      const vector<TShape>& in_grad_shapes,
+      const vector<Scheme*>& out_grad_schemes,
+      const vector<Scheme*>& in_data_schemes,
+      const vector<Scheme*>& out_data_schemes,
+      const vector<Scheme*>& in_grad_schemes) {
+    // TODO(minjie): This is not an accurate batch norm. The correct version
+    // requires reduction across the batch. But it is typically being used
+    // in data parallelism right now so we put it here.
+    *out_grad_schemes[batchnorm::kOut] = Scheme::Cut(0);
+    *in_data_schemes[batchnorm::kData] = Scheme::Cut(0);
+    *in_data_schemes[batchnorm::kGamma] = Scheme::Rep();
+    *out_data_schemes[batchnorm::kMean] = Scheme::Rep();
+    *out_data_schemes[batchnorm::kVar] = Scheme::Rep();
+    *in_grad_schemes[batchnorm::kData] = Scheme::Cut(0);
+    *in_grad_schemes[batchnorm::kGamma] = Scheme::Rep();
+    *in_grad_schemes[batchnorm::kBeta] = Scheme::Rep();
+  }
+  void Partition(size_t num_partitions) {
+  }
+};
+class BatchNormBackwardPartitioner2 : public BackwardOpPartitioner<BatchNormParam> {
+ public:
+  BatchNormBackwardPartitioner2(const NodeAttrs& attrs):
+    BackwardOpPartitioner<BatchNormParam>(attrs) {}
+  void AlignedScheme(
+      const BatchNormParam& param,
+      const vector<TShape>& out_grad_shapes,
+      const vector<TShape>& in_data_shapes,
+      const vector<TShape>& out_data_shapes,
+      const vector<TShape>& in_grad_shapes,
+      const vector<Scheme*>& out_grad_schemes,
+      const vector<Scheme*>& in_data_schemes,
+      const vector<Scheme*>& out_data_schemes,
+      const vector<Scheme*>& in_grad_schemes) {
+    *out_grad_schemes[batchnorm::kOut] = Scheme::Cut(1);
+    *in_data_schemes[batchnorm::kData] = Scheme::Cut(1);
+    *in_data_schemes[batchnorm::kGamma] = Scheme::Cut(0);
+    *out_data_schemes[batchnorm::kMean] = Scheme::Cut(0);
+    *out_data_schemes[batchnorm::kVar] = Scheme::Cut(0);
+    *in_grad_schemes[batchnorm::kData] = Scheme::Cut(1);
+    *in_grad_schemes[batchnorm::kGamma] = Scheme::Cut(0);
+    *in_grad_schemes[batchnorm::kBeta] = Scheme::Cut(0);
+  }
+  void Partition(size_t num_partitions) {
+  }
+};
+
 ////////////////////////////////////////////////////////////////////////////
 vector<SchemeRequest> MakeSchemeRequest(
     const vector<TShape>& input_shapes,
@@ -608,8 +716,9 @@ vector<SchemeRequest> MakeSchemeRequest(
   vector<SchemeRequest> ret;
   for (auto pttn : pttns) {
     SchemeRequest req;
-    req.input_schemes.resize(input_shapes.size());
-    req.output_schemes.resize(output_shapes.size());
+    // Schemes are initialized to be replicated. This is used for auxiliary inputs.
+    req.input_schemes.resize(input_shapes.size(), Scheme::Rep());
+    req.output_schemes.resize(output_shapes.size(), Scheme::Rep());
     vector<Scheme*> is_ptr(input_shapes.size()), os_ptr(output_shapes.size());
     for (size_t i = 0; i < input_shapes.size(); ++i) {
       is_ptr[i] = &req.input_schemes[i];
@@ -622,6 +731,8 @@ vector<SchemeRequest> MakeSchemeRequest(
       pttn->AttrsPartition(attrs, n);
       return pttn->attrs();
     };
+    CHECK(!std::all_of(req.input_schemes.begin(), req.input_schemes.end(), [] (const Scheme& sch) { return sch.type == Scheme::kRep; }));
+    CHECK(!std::all_of(req.output_schemes.begin(), req.output_schemes.end(), [] (const Scheme& sch) { return sch.type == Scheme::kRep; }));
     ret.push_back(std::move(req));
   }
   return ret;
@@ -641,6 +752,10 @@ vector<SchemeRequest> OpForwardAlignedSchemes(
     shared_ptr<OpPartitioner> pttn2(new ConvForwardPartitioner2(attrs));
     shared_ptr<OpPartitioner> pttn3(new ConvForwardPartitioner3(attrs));
     return MakeSchemeRequest(input_shapes, output_shapes, {pttn1, pttn2, pttn3});
+  } else if (attrs.op->name == "BatchNorm") {
+    shared_ptr<OpPartitioner> pttn1(new BatchNormForwardPartitioner1(attrs));
+    shared_ptr<OpPartitioner> pttn2(new BatchNormForwardPartitioner2(attrs));
+    return MakeSchemeRequest(input_shapes, output_shapes, {pttn1, pttn2});
   } else {
     LOG(FATAL) << "No aligned scheme defined for operator: " << attrs.op->name;
   }
@@ -661,6 +776,10 @@ vector<SchemeRequest> OpBackwardAlignedSchemes(
     shared_ptr<OpPartitioner> pttn2(new ConvBackwardPartitioner2(attrs));
     shared_ptr<OpPartitioner> pttn3(new ConvBackwardPartitioner3(attrs));
     return MakeSchemeRequest(input_shapes, output_shapes, {pttn1, pttn2, pttn3});
+  } else if (attrs.op->name == "_backward_BatchNorm") {
+    shared_ptr<OpPartitioner> pttn1(new BatchNormBackwardPartitioner1(attrs));
+    shared_ptr<OpPartitioner> pttn2(new BatchNormBackwardPartitioner2(attrs));
+    return MakeSchemeRequest(input_shapes, output_shapes, {pttn1, pttn2});
   } else {
     LOG(FATAL) << "No aligned scheme defined for operator: " << attrs.op->name;
   }
@@ -677,13 +796,15 @@ void RegisterOpAlignedSchemes() {
       // Already registered.
       continue;
     }
-    if (name == "FullyConnected" || name == "Convolution") {
+    if (name == "FullyConnected" || name == "Convolution" || name == "BatchNorm") {
       op.set_attr<AType>(kAttrName, OpForwardAlignedSchemes);
-    } else if (name == "_backward_FullyConnected" || name == "_backward_Convolution") {
+    } else if (name == "_backward_FullyConnected" || name == "_backward_Convolution"
+        || name == "_backward_BatchNorm") {
       op.set_attr<AType>(kAttrName, OpBackwardAlignedSchemes);
     } else if (name == "Activation" || name == "_backward_Activation"
         || name == "Dropout" || name == "_backward_Dropout"
         || name == "LeakyReLU" || name == "_backward_LeadkyReLU"
+        || name == "add" || name == "_backward_add"
         || name == "ElementWiseSum"
         || name == "_plus" || name == "_plus_scalar"
         || name == "_backward_plus" || name == "_backward_plus_scalar"
@@ -698,7 +819,8 @@ void RegisterOpAlignedSchemes() {
         || name == "_minimum" || name == "_minimum_scalar"
         || name == "_backward_minimum" || name == "_backward_minimum_scalar"
         || name == "_power" || name == "_power_scalar"
-        || name == "_backward_power" || name == "_backward_power_scalar") {
+        || name == "_backward_power" || name == "_backward_power_scalar"
+        || name == "_copy") {
       op.set_attr<AType>(kAttrName, CutAllDimsSchemes);
     } else if (name == "Pooling" || name == "_backward_Pooling"
         || name == "Flatten" || name == "_backward_Flatten"

@@ -77,11 +77,11 @@ class BucketSentenceIter(DataIter):
         size of data buckets. Automatically generated if None.
     data_name : str, default 'data'
         name of data
-    label_name : str, default 'softmax_label'
+    label_name : str, default 'softmax/label'
         name of label
     """
     def __init__(self, sentences, batch_size, invalid_label=-1, dtype='float32',
-                 buckets=None, data_name='data', label_name='softmax_label'):
+                 buckets=None, data_name='data', label_name='softmax/label'):
         super(BucketSentenceIter, self).__init__()
         if not buckets:
             buckets = [i for i, j in enumerate(np.bincount([len(s) for s in sentences]))

@@ -228,7 +228,7 @@ class PythonLossModule(PythonModule):
         Default `['data']`. Names of the data expected by this module.
         Should be a list of only one name.
     label_names : list of str
-        Default `['softmax_label']`. Names of the labels expected by the module.
+        Default `['softmax/label']`. Names of the labels expected by the module.
         Should be a list of only one name.
     grad_func : function
         Optional. If not `None`, should be a function that takes `scores`
@@ -236,7 +236,7 @@ class PythonLossModule(PythonModule):
         respect to the scores according to this loss function. The return
         value could be a numpy array or an `NDArray`.
     """
-    def __init__(self, name='pyloss', data_names=('data',), label_names=('softmax_label',),
+    def __init__(self, name='pyloss', data_names=('data',), label_names=('softmax/label',),
                  logger=logging, grad_func=None):
         super(PythonLossModule, self).__init__(data_names, label_names,
                                                [name + '_output'], logger=logger)

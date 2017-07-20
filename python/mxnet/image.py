@@ -366,9 +366,9 @@ class ImageIter(io.DataIter):
         assert len(data_shape) == 3 and data_shape[0] == 3
         self.provide_data = [('data', (batch_size,) + data_shape)]
         if label_width > 1:
-            self.provide_label = [('softmax_label', (batch_size, label_width))]
+            self.provide_label = [('softmax/label', (batch_size, label_width))]
         else:
-            self.provide_label = [('softmax_label', (batch_size,))]
+            self.provide_label = [('softmax/label', (batch_size,))]
         self.batch_size = batch_size
         self.data_shape = data_shape
         self.label_width = label_width
