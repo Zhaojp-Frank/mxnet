@@ -1,3 +1,4 @@
+#export I_MPI_FABRICS=tcp
 export I_MPI_FABRICS=shm:dapl
 export I_MPI_DAPL_PROVIDER=ofa-v2-ib0
 export I_MPI_DYNAMIC_CONNECTION=0

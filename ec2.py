@@ -58,7 +58,7 @@ def DoIndexedRun(script, master, all_ips, log_path):
 
 def DoMount(master, all_ips, log_path):
     threads = []
-    command = "sudo mount -rw %s:/home/tofu/mxnet /home/tofu/mxnet" % master
+    command = "cd /home && sudo mount -rw %s:/home/tofu /home/tofu" % master
     for ip in all_ips:
         if ip != master:
             threads.append(DoSSH(ip, command, log_path))
