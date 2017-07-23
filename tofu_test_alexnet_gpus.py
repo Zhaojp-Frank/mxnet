@@ -40,17 +40,15 @@ def get_symbol(args):
     # group 3
     net = mx.sym.Flatten(net)
     #net = mx.sym.Dropout(net, p=0.5)
-    net = mx.sym.FullyConnected(net, num_hidden=4096, no_bias=True)
-    net = mx.sym.Activation(net, act_type="relu")
+    net = mx.sym.FullyConnected(net, num_hidden=4096, no_bias=True, name="&mp&fc0")
+    net = mx.sym.Activation(net, act_type="relu", name="&mp&relu0")
     # group 4
     #net = mx.sym.Dropout(net, p=0.5)
-    net = mx.sym.FullyConnected(net, num_hidden=4096, no_bias=True)
-    net = mx.sym.Activation(net, act_type="relu")
+    net = mx.sym.FullyConnected(net, num_hidden=4096, no_bias=True, name="&mp&fc1")
+    net = mx.sym.Activation(net, act_type="relu", name="&mp&relu1")
     # group 5
-    net = mx.sym.FullyConnected(net, num_hidden=1024, no_bias=True)
-
-    #return net, [('data', (args.batch_size, 3, 224, 224))]
-    net = mx.sym.SoftmaxOutput(net, name='softmax')
+    net = mx.sym.FullyConnected(net, num_hidden=1024, no_bias=True, name="&mp&fc2")
+    net = mx.sym.SoftmaxOutput(net, name="softmax")
     return net
 
 def feed_args(net, arg_arrays):
