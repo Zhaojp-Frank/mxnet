@@ -8,6 +8,7 @@
 #include "../operator/convolution-inl.h"
 #include "../operator/fully_connected-inl.h"
 #include "../operator/batch_norm-inl.h"
+#include "../operator/concat-inl.h"
 #include "./legacy_op_util.h"
 
 using namespace std;
@@ -228,6 +229,37 @@ vector<SchemeRequest> CutAllDimsSchemes(
   }
   return reqs;
 }
+
+vector<SchemeRequest> ConcatSchemes(
+    const NodeAttrs& attrs,
+    const vector<TShape>& input_shapes,
+    const vector<TShape>& output_shapes) {
+  vector<pair<string, string> > kwargs(attrs.dict.begin(), attrs.dict.end());
+  ConcatParam param;
+  param.Init(kwargs);
+  vector<SchemeRequest> reqs;
+  CHECK_GT(input_shapes.size(), 0);
+  for (size_t i = 0; i < input_shapes[0].ndim(); ++i) {
+    if (i == param.dim) {
+      continue;
+    }
+    SchemeRequest req;
+    for (size_t j = 0; j < input_shapes.size(); ++j) {
+      CHECK_LT(i, input_shapes[j].ndim());
+      req.input_schemes.push_back(Scheme::Cut(i));
+    }
+    for (size_t j = 0; j < output_shapes.size(); ++j) {
+      CHECK_LT(i, output_shapes[j].ndim());
+      req.output_schemes.push_back(Scheme::Cut(i));
+    }
+    // Attribute partitioner.
+    req.partitioner = &IdenticalPartition;
+    reqs.push_back(req);
+  }
+  return reqs;
+}
+
+
 ///////////////////////////////////////////////////////////////////////////////////
 // FullyConnectedOp
 // One matmult in the forward propagation:
@@ -796,9 +828,12 @@ void RegisterOpAlignedSchemes() {
       // Already registered.
       continue;
     }
-    if (name == "FullyConnected" || name == "Convolution" || name == "BatchNorm") {
+    if (name == "FullyConnected"
+        || name == "Convolution"
+        || name == "BatchNorm") {
       op.set_attr<AType>(kAttrName, OpForwardAlignedSchemes);
-    } else if (name == "_backward_FullyConnected" || name == "_backward_Convolution"
+    } else if (name == "_backward_FullyConnected"
+        || name == "_backward_Convolution"
         || name == "_backward_BatchNorm") {
       op.set_attr<AType>(kAttrName, OpBackwardAlignedSchemes);
     } else if (name == "Activation" || name == "_backward_Activation"
@@ -828,6 +863,8 @@ void RegisterOpAlignedSchemes() {
       op.set_attr<AType>(kAttrName, CutFirstKDimsSchemes<2>);
     } else if (name == "SoftmaxOutput" || name == "_backward_SoftmaxOutput") {
       op.set_attr<AType>(kAttrName, CutFirstKDimsSchemes<1>);
+    } else if (name == "Concat" || name == "_backward_Concat") {
+      op.set_attr<AType>(kAttrName, ConcatSchemes);
     }
   }
 }
