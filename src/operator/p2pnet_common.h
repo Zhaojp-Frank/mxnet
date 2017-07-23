@@ -140,9 +140,9 @@ class P2PNet {
   void DoRequestRecv(struct Request* request);
 
   unsigned impl_internal_polling_;
-  unsigned impl_commnication_method_;
+  std::string impl_communication_method_;
   unsigned impl_mpi_polling_time_;
-  unsigned impl_main_affinity_;
+  unsigned impl_main_thread_affinity_;
   unsigned impl_use_mpi_barrier_;
 
 #ifdef P2PNET_MPI

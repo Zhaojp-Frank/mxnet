@@ -24,12 +24,12 @@ P2PNet::P2PNet() : zmq_context_(zmq_ctx_new()), is_main_start_(false),
                    per_thread_isocket_queue_size_(0) {
   impl_internal_polling_ =
     dmlc::GetEnv<unsigned>("MXNET_P2PNET_INTERNAL_POLLING", 0);
-  impl_commnication_method_ =
-    dmlc::GetEnv<unsigned>("MXNET_P2PNET_COMMUNICATION_METHOD", 0);
+  impl_communication_method_ =
+    dmlc::GetEnv<std::string>("MXNET_P2PNET_COMMUNICATION_METHOD", "MPI");
   impl_mpi_polling_time_ =
     dmlc::GetEnv<unsigned>("MXNET_P2PNET_MPI_POLLING_TIME", 1000);
-  impl_main_affinity_ =
-    dmlc::GetEnv<unsigned>("MXNET_P2PNET_MAIN_AFFINITY", 65536);
+  impl_main_thread_affinity_ =
+    dmlc::GetEnv<unsigned>("MXNET_P2PNET_MAIN_THREAD_AFFINITY", 65536);
   impl_use_mpi_barrier_ =
     dmlc::GetEnv<unsigned>("MXNET_P2PNET_USE_MPI_BARRIER", 0);
 
@@ -251,10 +251,11 @@ void P2PNet::DoExternalRequest() {
 }
 
 void P2PNet::SetMainAffinity() {
-  if (impl_main_affinity_ < 65536) {
+  if (impl_main_thread_affinity_ < 8192) { 
+    // Unless the worker has more than 8192 cores, the condition should be fine.
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
-    CPU_SET(impl_main_affinity_, &cpuset);
+    CPU_SET(impl_main_thread_affinity_, &cpuset);
     int rc = pthread_setaffinity_np(main_thread_->native_handle(),
                                     sizeof(cpu_set_t), &cpuset);
     if (rc != 0) {
@@ -463,9 +464,11 @@ void P2PNet::MPI_Main() {
 
 bool P2PNet::Init(const std::string& address) {
   for (unsigned i = 0; i < internal_request_queue_.size(); i++) {
-    CHECK(internal_request_queue_[i]->is_fulfilled);
-    delete internal_request_queue_[i];
-    internal_request_queue_[i] = nullptr;
+    if (internal_request_queue_[i]) {
+      CHECK(internal_request_queue_[i]->is_fulfilled);
+      delete internal_request_queue_[i];
+      internal_request_queue_[i] = nullptr;
+    }
   }
   internal_request_queue_.clear();
 #ifdef P2PNET_MPI
@@ -497,14 +500,16 @@ bool P2PNet::Init(const std::string& address) {
 
 void P2PNet::Start() {
   if (!is_main_start_) {
-    if (impl_commnication_method_ == 0) {
+    if (impl_communication_method_ == "ZEROMQ") {
       main_thread_ = new std::thread(&P2PNet::Main, this);
-    } else {
+    } else if (impl_communication_method_ == "MPI") {
 #ifdef P2PNET_MPI
       main_thread_ = new std::thread(&P2PNet::MPI_Main, this);
 #else
       CHECK(false);
 #endif
+    } else {
+      CHECK(false);
     }
     is_main_start_ = true;
     SetMainAffinity();
