@@ -21,7 +21,7 @@ def Activation(data, **kwargs):
     else:
         return data
 
-expand_shortcut = True
+expand_shortcut = False
 def Expand(data, num_skips):
     if expand_shortcut:
         for i in range(num_skips):
