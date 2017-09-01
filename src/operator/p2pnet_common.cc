@@ -259,6 +259,7 @@ void P2PNet::SetMainAffinity() {
       std::cerr << "Error calling pthread_setaffinity_np: " << rc << std::endl;
       CHECK(false);
     }
+    std::cout << "Set affinity to impl_main_thread_affinity_ " << std::endl;
   }
 }
 
@@ -383,8 +384,6 @@ void P2PNet::MPI_DoInternalRequest(struct Request* request) {
 
 void P2PNet::MPI_Main() {
   auto begin = high_resolution_clock::now();
-  int sleep_duration = dmlc::GetEnv("MXNET_P2PNET_MPI_SLEEP_DURATION", 0);
-  int test_method = dmlc::GetEnv("MXNET_P2PNET_MPI_TEST_METHOD", 0);
   bool debug = (P2PNetDebugger::Get().Level() &
                 P2PNetDebugger::kDebugPrintPending);
 
