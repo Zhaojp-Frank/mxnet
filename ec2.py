@@ -56,9 +56,9 @@ def DoIndexedRun(script, master, all_ips, log_path):
     return threads
 
 
-def DoMount(master, all_ips, log_path):
+def DoMount(master, all_ips, mount_path, log_path):
     threads = []
-    command = "sudo mount -rw %s:/home/tofu/mxnet /home/tofu/mxnet" % master
+    command = "cd /home && sudo mount -rw %s:%s %s" % (master, mount_path, mount_path)
     for ip in all_ips:
         if ip != master:
             threads.append(DoSSH(ip, command, log_path))
@@ -98,19 +98,21 @@ def main():
                         help='Log path')
     parser.add_argument('--mount', action='store_true',
                         help='Whether to do mount or not.')
+    parser.add_argument('--mount_path', type=str,
+                        help='The path to do nfs mount.')
     parser.add_argument('--run', type=str, help='Run command.')
     parser.add_argument('--run_indexed', type=str,
                         help='Run command (must contains %%d) with index ' +
                              'which will be assigned by this Python program.')
-    parser.add_argument('--test', type=str,
-                        help='Fake ips without ec2.')
+    parser.add_argument('--host', type=str,
+                        help='Hosts.')
     args = parser.parse_args()
 
-    if args.test:
+    if args.host:
         all_ips = []
-        print (args.test)
+        print (args.host)
         master = '127.0.0.1'
-        with open(args.test) as fp:
+        with open(args.host) as fp:
             for line in fp:
                 loc = line.find(':')
                 if loc != -1:
@@ -123,7 +125,7 @@ def main():
         assert args.master
         all_ips = GetAllIPs(args.master)
     if args.mount:
-        DoMount(args.master, all_ips, args.log_path)
+        DoMount(args.master, all_ips, args.mount_path, args.log_path)
     if args.run:
         DoRun(args.run, args.master, all_ips, args.log_path)
     if args.run_indexed:

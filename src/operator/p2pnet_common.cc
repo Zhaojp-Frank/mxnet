@@ -25,9 +25,9 @@ P2PNet::P2PNet() : zmq_context_(zmq_ctx_new()), is_main_start_(false),
   impl_internal_polling_ =
     dmlc::GetEnv<unsigned>("MXNET_P2PNET_INTERNAL_POLLING", 0);
   impl_communication_method_ =
-    dmlc::GetEnv<std::string>("MXNET_P2PNET_COMMUNICATION_METHOD", "MPI");
+    dmlc::GetEnv<std::string>("MXNET_P2PNET_COMMUNICATION_METHOD", "ZEROMQ");
   impl_mpi_polling_time_ =
-    dmlc::GetEnv<unsigned>("MXNET_P2PNET_MPI_POLLING_TIME", 1000);
+    dmlc::GetEnv<unsigned>("MXNET_P2PNET_MPI_POLLING_TIME", 100);
   impl_main_thread_affinity_ =
     dmlc::GetEnv<unsigned>("MXNET_P2PNET_MAIN_THREAD_AFFINITY", 65536);
   impl_use_mpi_barrier_ =
@@ -50,17 +50,19 @@ P2PNet::P2PNet() : zmq_context_(zmq_ctx_new()), is_main_start_(false),
   per_thread_isocket_queue_.resize(128);
 
 #ifdef P2PNET_MPI
-  std::string host_path = dmlc::GetEnv<std::string>("MXNET_P2PNET_HOST_PATH",
-                                                    "");
-  CHECK(host_path != "") << "Current implementation requires explicitly export "
-                         << "host_path (MXNET_P2PNET_HOST_PATH) for P2PNET_MPI.";
-  std::ifstream host_file;
-  host_file.open(host_path);
-  std::string host;
-  for (int rank = 0; std::getline(host_file, host); rank++) {
-    mpi_rank_to_host_.push_back(host);
-    mpi_host_to_rank_[host] = rank;
-    std::cout << "Rank : " << rank << " " << host << std::endl;
+  if (impl_communication_method_ == "MPI") {
+    std::string host_path = dmlc::GetEnv<std::string>("MXNET_P2PNET_HOST_PATH",
+                                                      "");
+    CHECK(host_path != "") << "Current implementation requires explicitly export "
+                           << "host_path (MXNET_P2PNET_HOST_PATH) for P2PNET_MPI.";
+    std::ifstream host_file;
+    host_file.open(host_path);
+    std::string host;
+    for (int rank = 0; std::getline(host_file, host); rank++) {
+      mpi_rank_to_host_.push_back(host);
+      mpi_host_to_rank_[host] = rank;
+      std::cout << "Rank : " << rank << " " << host << std::endl;
+    }
   }
 #endif
 }
@@ -127,7 +129,6 @@ void DoSendOnComplete(void* data, void* hint) {
 }
 
 void P2PNet::DoSend(struct Request* request) {
-  CHECK(false) << "Should not reach here!";
   P2PNetDebugger::Get().PrintTime("DoSend of %u", request->tensor_id);
   std::string receiver_identity = tensor_to_receiver_map_[request->tensor_id];
   tensor_to_send_request_map_.erase(request->tensor_id);
@@ -145,7 +146,6 @@ void P2PNet::DoSend(struct Request* request) {
 }
 
 void P2PNet::DoRequestRecv(struct Request* request) {
-  CHECK(false) << "Should not reach here!";
   void* request_socket;
   auto it = recv_request_sockets_.find(request->address);
   if (it == recv_request_sockets_.end()) {
@@ -180,7 +180,6 @@ void P2PNet::DoRequestRecv(struct Request* request) {
 }
 
 void P2PNet::DoRecv(void* socket) {
-  CHECK(false) << "Should not reach here!";
   uint64_t tensor_id;
   zmq_recv(socket, &tensor_id, sizeof(tensor_id), 0);
   auto it = tensor_to_recv_request_map_.find(tensor_id);
@@ -217,7 +216,6 @@ void DoRecvOncomplete(int id, P2PNet::Request* request, void* socket) {
 
 
 void P2PNet::DoInternalRequest(size_t index) {
-  CHECK(false) << "Should not reach here!";
   struct Request* request = internal_request_queue_[index];
   request->is_fulfilled = false;
   if (request->type == SendRequest) {
@@ -237,7 +235,6 @@ void P2PNet::DoInternalRequest(size_t index) {
 }
 
 void P2PNet::DoExternalRequest() {
-  CHECK(false) << "Should not reach here!";
   std::string identity;
   uint64_t tensor_id = 0;
   RecvWithIdentity(server_, &identity, &tensor_id, sizeof(tensor_id));
@@ -262,6 +259,7 @@ void P2PNet::SetMainAffinity() {
       std::cerr << "Error calling pthread_setaffinity_np: " << rc << std::endl;
       CHECK(false);
     }
+    std::cout << "Set affinity to impl_main_thread_affinity_ " << std::endl;
   }
 }
 
@@ -331,8 +329,8 @@ void P2PNet::MPI_DoSend(struct Request* request) {
   request->mpi_request = mpi_request;
   mpi_request_queue_.push_back(request);
   P2PNetDebugger::Get().PrintTime(
-      "Sending %u from rank %d to rank %d, address = %s",
-      request->tensor_id, mpi_rank_, rank, request->address.c_str());
+      "Sending %u from rank %d to rank %d, address = %s, buffer_size= %u",
+      request->tensor_id, mpi_rank_, rank, request->address.c_str(), request->buffer_size);
 }
 
 void P2PNet::MPI_DoRecv(struct Request* request) {
@@ -386,8 +384,6 @@ void P2PNet::MPI_DoInternalRequest(struct Request* request) {
 
 void P2PNet::MPI_Main() {
   auto begin = high_resolution_clock::now();
-  int sleep_duration = dmlc::GetEnv("MXNET_P2PNET_MPI_SLEEP_DURATION", 0);
-  int test_method = dmlc::GetEnv("MXNET_P2PNET_MPI_TEST_METHOD", 0);
   bool debug = (P2PNetDebugger::Get().Level() &
                 P2PNetDebugger::kDebugPrintPending);
 
@@ -440,8 +436,10 @@ void P2PNet::MPI_Main() {
             }),
           mpi_request_queue_.end());
     } else {
-      usleep(impl_mpi_polling_time_);
+      //usleep(impl_mpi_polling_time_);
     }
+    if (impl_mpi_polling_time_)
+    	usleep(impl_mpi_polling_time_);
     if (debug) {
       auto now = high_resolution_clock::now();
       if (now - begin > std::chrono::milliseconds(30000)) {
@@ -471,29 +469,38 @@ bool P2PNet::Init(const std::string& address) {
     }
   }
   internal_request_queue_.clear();
+  if (impl_communication_method_ == "MPI") {
 #ifdef P2PNET_MPI
-  mpi_request_queue_.clear();
-  std::cout << "MPI has sent " << mpi_sent_bytes_ << " bytes." << std::endl;
-  std::cout << "MPI has received " << mpi_recv_bytes_ << " bytes." << std::endl;
-  mpi_sent_bytes_ = 0;
-  mpi_recv_bytes_ = 0;
+    mpi_request_queue_.clear();
+    std::cout << "MPI has sent " << mpi_sent_bytes_ << " bytes." << std::endl;
+    std::cout << "MPI has received " << mpi_recv_bytes_ << " bytes." << std::endl;
+    mpi_sent_bytes_ = 0;
+    mpi_recv_bytes_ = 0;
+#else
+    CHECK(false);
 #endif
+  }
 
   if (!is_bind_) {
     is_bind_ = true;
     srand(time(nullptr));
     (void) address;
     zmq_bind(internal_server_, "inproc://mxnet_local_request");
+    if (impl_communication_method_ == "ZEROMQ") {
+      std::ostringstream address_with_proto;
+      address_with_proto << "tcp://" << address;
+      std::cout << "Address : " << address_with_proto.str() << std::endl;
+      int ret = zmq_bind(server_, address_with_proto.str().c_str());
+      CHECK(ret == 0);
+      std::cout << "Successfully bound to " << address_with_proto.str()
+                << std::endl;
+    } else if (impl_communication_method_ == "MPI") {
 #ifdef P2PNET_MPI
-    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank_);
+      MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank_);
 #else
-    std::ostringstream address_with_proto;
-    address_with_proto << "tcp://" << address;
-    int ret = zmq_bind(server_, address_with_proto.str().c_str());
-    CHECK(ret == 0);
-    std::cout << "Successfully bound to " << address_with_proto.str()
-              << std::endl;
+      CHECK(false);
 #endif
+    }
   }
   return true;
 };

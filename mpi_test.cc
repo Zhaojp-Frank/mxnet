@@ -82,7 +82,7 @@ void DoTOFU(int rank, int size, long buf_size, int level, int iterations, int sl
   auto now_ms = duration_cast<milliseconds>(now.time_since_epoch()).count();
   float rate = buf_size * 8.0 * (size - 1) * size * level * iterations / 
                     ((now_ms - begin_ms) / 1000.0) / 1024.0 / 1024.0 / 1024.0;
-  std::cout << rate << std::endl;
+  std::cout << rate << "Gps" << std::endl;
 }
 
 
@@ -149,14 +149,18 @@ void DoDP(int rank, int size, long buf_size, int level, int iterations, int slee
   auto now_ms = duration_cast<milliseconds>(now.time_since_epoch()).count();
   float rate = buf_size * 8.0 * (size - 1) * size * level * iterations / 
                     ((now_ms - begin_ms) / 1000.0) / 1024.0 / 1024.0 / 1024.0;
-  std::cout << rate << std::endl;
+  std::cout << rate << "Gbps" << std::endl;
 }
 
 int main(int argc, char**argv) {
   int rank, size;
+  std::cout << "1" << std::endl;
   MPI_Init(&argc, &argv);
+  std::cout << "2" << std::endl;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  std::cout << "3" << std::endl;
   MPI_Comm_size(MPI_COMM_WORLD, &size);
+  std::cout << "4 " << rank << std::endl;
   if (atoi(argv[5]) == 0) {
     std::cout << "TOFU" << std::endl;
     DoTOFU(rank, size, atol(argv[1]), atoi(argv[2]), atoi(argv[3]), atoi(argv[4]));
@@ -164,5 +168,9 @@ int main(int argc, char**argv) {
     std::cout << "DP" << std::endl;
     DoDP(rank, size, atol(argv[1]), atoi(argv[2]), atoi(argv[3]), atoi(argv[4]));
   }
+  std::cout << "Finalize" << std::endl;
+  std::this_thread::sleep_for(milliseconds(1000));
   MPI_Finalize();
+  std::cout << "After Finalize" << std::endl;
+  std::this_thread::sleep_for(milliseconds(1000));
 }
