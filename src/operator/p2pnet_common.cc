@@ -329,8 +329,8 @@ void P2PNet::MPI_DoSend(struct Request* request) {
   request->mpi_request = mpi_request;
   mpi_request_queue_.push_back(request);
   P2PNetDebugger::Get().PrintTime(
-      "Sending %u from rank %d to rank %d, address = %s",
-      request->tensor_id, mpi_rank_, rank, request->address.c_str());
+      "Sending %u from rank %d to rank %d, address = %s, buffer_size= %u",
+      request->tensor_id, mpi_rank_, rank, request->address.c_str(), request->buffer_size);
 }
 
 void P2PNet::MPI_DoRecv(struct Request* request) {
@@ -436,8 +436,10 @@ void P2PNet::MPI_Main() {
             }),
           mpi_request_queue_.end());
     } else {
-      usleep(impl_mpi_polling_time_);
+      //usleep(impl_mpi_polling_time_);
     }
+    if (impl_mpi_polling_time_)
+    	usleep(impl_mpi_polling_time_);
     if (debug) {
       auto now = high_resolution_clock::now();
       if (now - begin > std::chrono::milliseconds(30000)) {
