@@ -29,7 +29,7 @@ CMD="python tofu_test_vgg.py --batch_size=${B} "
 
 echo "Doing $NP $B $H single"
 #mpirun $OPTIONS -output-filename log_vgg_single -x MXNET_P2PNET_DEBUG=0 /local/mxnet/env.sh
-mpirun $OPTIONS -output-filename log_vgg_single -x MXNET_P2PNET_DEBUG=0 $CMD --address=127.0.0.1 -i 0
+#mpirun $OPTIONS -output-filename log_vgg_single -x MXNET_P2PNET_DEBUG=0 $CMD --address=127.0.0.1 -i 0
 
 echo "Doing $NP $B $H without communication"
 mpirun $OPTIONS -output-filename log_vgg_without_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=2 -x TOFU_TILING_TYPE=kcuts $CMD -f $HOST 
