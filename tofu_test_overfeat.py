@@ -52,7 +52,7 @@ def get_symbol(args):
     net = mx.sym.Activation(net, act_type="relu")
 
     net = mx.sym.SoftmaxOutput(net, name='softmax')
-    return net, [('data', (args.batch_size, 3, 221, 221)), ('softmax_label', (args.batch_size,))]
+    return net, [('data', (args.batch_size, 3, 221, 221)), ('softmax/label', (args.batch_size,))]
 
 
 def test_net():
