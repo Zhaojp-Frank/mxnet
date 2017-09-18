@@ -9,6 +9,7 @@
 #include <nnvm/graph_attr_types.h>
 #include "./exec_pass.h"
 #include "../nnvm/legacy_op_util.h"
+#include "../operator/p2pnet_common.h"
 
 using namespace std;
 
@@ -287,11 +288,23 @@ Graph AttachOpExecs(Graph g) {
       ret[i] = std::make_shared<FComputeExecutor>(DoNothingFCompute, inode.source->attrs);
       continue;
     }
-#if 0
+    if (mxnet::op::P2PNetDebugger::Get().Level() & mxnet::op::P2PNetDebugger::kDebugNoCommunication) {
+        if (false
+            || op->name == "P2PNetRecv"
+            || op->name == "P2PNetSend"
+            || op->name == "P2PNetInit"
+            || op->name == "P2PNetSendSink"
+        ) {
+            ret[i] = std::make_shared<FComputeExecutor>(DoNothingFCompute, inode.source->attrs);
+            continue;
+        }
+    }
     if (false
-        || op->name == "Concat"
-        || op->name == "_backward_Concat"
-        || op->name == "ElementWiseSum"
+   //     || op->name == "Concat"
+    //    || op->name == "_backward_Concat"
+     //   || op->name == "ElementWiseSum"
+        //|| op->name == "_backward_Convolution"
+        //|| op->name == "Convolution"
         //|| op->name == "_backward_FullyConnected"
         //|| op->name == "SoftmaxOutput"
         //|| op->name == "_backward_SoftmaxOutput"
@@ -299,7 +312,7 @@ Graph AttachOpExecs(Graph g) {
       ret[i] = std::make_shared<FComputeExecutor>(DoNothingFCompute, inode.source->attrs);
       continue;
     }
-#endif
+
     if (is_layer_forward.count(op) || is_layer_backward.count(op)) {
       // Layer operator.
       const OperatorProperty& prop = ParseOpProp(inode.source->attrs);
