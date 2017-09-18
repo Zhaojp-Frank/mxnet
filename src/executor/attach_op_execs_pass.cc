@@ -9,7 +9,6 @@
 #include <nnvm/graph_attr_types.h>
 #include "./exec_pass.h"
 #include "../nnvm/legacy_op_util.h"
-#include "../operator/p2pnet_common.h"
 
 using namespace std;
 
@@ -17,13 +16,17 @@ namespace mxnet {
 namespace exec {
 
 namespace {
-  void DoNothingFCompute(const nnvm::NodeAttrs& attrs,
-      const OpContext& ctx,
-      const std::vector<TBlob>& inputs,
-      const std::vector<OpReqType>& req,
-      const std::vector<TBlob>& outputs) {
-    // DO nothing.
-  }
+void DoNothingFCompute(const nnvm::NodeAttrs& attrs,
+    const OpContext& ctx,
+    const std::vector<TBlob>& inputs,
+    const std::vector<OpReqType>& req,
+    const std::vector<TBlob>& outputs) {
+  // DO nothing.
+}
+inline bool StartsWith(const string& value, const string& starting) {
+  if (starting.size() > value.size()) return false;
+  return std::equal(starting.begin(), starting.end(), value.begin());
+}
 }
 
 // forward executor
@@ -284,11 +287,12 @@ Graph AttachOpExecs(Graph g) {
     const nnvm::Op* op = CHECK_NOTNULL(inode.source->op());
     if (no_comp_flag && op->name != "P2PNetRecv" && op->name != "P2PNetSend"
         && op->name != "P2PNetInit" && op->name != "P2PNetSendSink") {
-	LOG(INFO) << "Ignore: " << op->name;
+	    LOG(INFO) << "Ignore: " << op->name;
       ret[i] = std::make_shared<FComputeExecutor>(DoNothingFCompute, inode.source->attrs);
       continue;
     }
-    if (mxnet::op::P2PNetDebugger::Get().Level() & mxnet::op::P2PNetDebugger::kDebugNoCommunication) {
+
+    if (dmlc::GetEnv("MXNET_P2PNET_DEBUG", 0) & 2) {
         if (false
             || op->name == "P2PNetRecv"
             || op->name == "P2PNetSend"
@@ -299,12 +303,28 @@ Graph AttachOpExecs(Graph g) {
             continue;
         }
     }
+
+    FCompute f_zero_compute = FComputeExecutor::GetFCompute(
+        nnvm::Op::Get("_zeros"), vctx[i]);
+    if (dmlc::GetEnv("TOFU_IGNORE_GPU_COMM", 0)) {
+      if (op->name == "_CrossDeviceCopy") {
+        ret[i] = std::make_shared<FComputeExecutor>(
+            f_zero_compute, inode.source->attrs);
+        continue;
+      }
+    }
+    if (dmlc::GetEnv("TOFU_IGNORE_CONVERSION", 0)) {
+      if (StartsWith(inode.source->attrs.name, "_TOFU")) {
+        ret[i] = std::make_shared<FComputeExecutor>(
+            f_zero_compute, inode.source->attrs);
+        continue;
+      }
+    }
     if (false
-   //     || op->name == "Concat"
-    //    || op->name == "_backward_Concat"
-     //   || op->name == "ElementWiseSum"
-        //|| op->name == "_backward_Convolution"
-        //|| op->name == "Convolution"
+        //|| op->name == "_CrossDeviceCopy"
+        //|| op->name == "Concat"
+        //|| op->name == "_backward_Concat"
+        //|| op->name == "ElementWiseSum"
         //|| op->name == "_backward_FullyConnected"
         //|| op->name == "SoftmaxOutput"
         //|| op->name == "_backward_SoftmaxOutput"

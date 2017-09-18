@@ -8,48 +8,7 @@ import pickle as pickle
 import logging
 import argparse
 
-num_loops = 30
-cold_skip = 5
-
 rng = np.random.RandomState(seed=32)
-
-# symbol net
-def conv_factory(data, num_filter, kernel, stride=(1, 1), pad=(1, 1), with_bn=False):
-    net = mx.sym.Convolution(data,
-                             num_filter=num_filter,
-                             kernel=kernel,
-                             stride=stride,
-                             pad=pad,
-                             no_bias=True)
-    net = mx.sym.Activation(net, act_type="relu")
-    return net
-
-def get_symbol(args):
-    net = mx.sym.Variable("data")
-    # group 0
-    net = conv_factory(net, num_filter=64, kernel=(11, 11), stride=(4, 4), pad=(2, 2))
-    net = mx.sym.Pooling(net, kernel=(3, 3), stride=(2, 2), pool_type="max")
-    # group 1
-    net = conv_factory(net, num_filter=192, kernel=(5, 5), stride=(1, 1), pad=(2, 2))
-    net = mx.sym.Pooling(net, kernel=(3, 3), stride=(2, 2), pool_type="max")
-    # group 2
-    net = conv_factory(net, num_filter=384, kernel=(3, 3), stride=(1, 1), pad=(1, 1))
-    net = conv_factory(net, num_filter=256, kernel=(3, 3), stride=(1, 1), pad=(1, 1))
-    net = conv_factory(net, num_filter=256, kernel=(3, 3), stride=(1, 1), pad=(1, 1))
-    net = mx.sym.Pooling(net, kernel=(3, 3), stride=(2, 2), pool_type="max")
-    # group 3
-    net = mx.sym.Flatten(net)
-    #net = mx.sym.Dropout(net, p=0.5)
-    net = mx.sym.FullyConnected(net, num_hidden=4096, no_bias=True, name="&mp&fc0")
-    net = mx.sym.Activation(net, act_type="relu", name="&mp&relu0")
-    # group 4
-    #net = mx.sym.Dropout(net, p=0.5)
-    net = mx.sym.FullyConnected(net, num_hidden=4096, no_bias=True, name="&mp&fc1")
-    net = mx.sym.Activation(net, act_type="relu", name="&mp&relu1")
-    # group 5
-    net = mx.sym.FullyConnected(net, num_hidden=1024, no_bias=True, name="&mp&fc2")
-    net = mx.sym.SoftmaxOutput(net, name="softmax")
-    return net
 
 def feed_args(net, arg_arrays):
     names = net.list_arguments()
@@ -58,28 +17,40 @@ def feed_args(net, arg_arrays):
             # create random data
             arr[:] = 0.1 * rng.randn(*(arr.shape))
 
-def test_mlp():
+def test():
     has_mpi = False
     # print logging by default
     logging.basicConfig(level=logging.DEBUG)
 
     print(sys.argv)
-    parser = argparse.ArgumentParser("Tofu MLP test code")
+    parser = argparse.ArgumentParser("Tofu GPU test")
+    parser.add_argument('model', type=str, help='The model to bested.')
     parser.add_argument('--batch_size', type=int, help='Batch size', default=128)
     parser.add_argument('--num_gpus', type=int, default=1, help='Number of GPUs')
+    parser.add_argument('--num_loops', type=int, default=30, help='Number of benchmarking loops.')
+    parser.add_argument('--cold_skip', type=int, default=5, help='Number of loops skipped for warm up.')
     parser.add_argument('-f', '--host_file', type=str,
                         help='Host file that contains addresses of all workers.')
 
+    args, _ = parser.parse_known_args()
+
+    # load network
+    print('Testing model:', args.model)
+    from importlib import import_module
+    net_module = import_module(args.model)
+    net_module.add_args(parser)
     args = parser.parse_args()
+
     group2ctx = {'group:%d' % i : mx.gpu(i) for i in range(args.num_gpus)}
     if args.num_gpus == 1:
       default_ctx = mx.gpu(0)
     else:
       default_ctx = mx.cpu(0)
 
-    image_shape = (3, 224, 224)
-    num_classes = 1000
-    net = get_symbol(args)
+    num_loops = args.num_loops
+    cold_skip = args.cold_skip
+
+    net, image_shape, num_classes = net_module.get_symbol(args)
 
     print(net.list_arguments())
     print(net.list_outputs())
@@ -109,17 +80,20 @@ def test_mlp():
                         args_grad=args_grad,
                         grad_req='write',
                         group2ctx=group2ctx)
-    return
 
     feed_args(net, arg_arrays)
     all_time = []
     for i in range(num_loops):
         print('=> loop %d' % i);
         st_l = time.time()
-        if i == cold_skip:
+        if i == cold_skip + 1:
             t0 = time.time()
         outputs = executor.forward()
-        executor.backward()
+        if num_classes is None:
+          # The last layer is not a loss layer.
+          executor.backward(outputs[0])
+        else:
+          executor.backward()
         for name, grad in args_grad.items():
             #print(name, grad.asnumpy())
             grad.wait_to_read()
@@ -135,10 +109,11 @@ def test_mlp():
     t1 = time.time()
 
     duration = t1 - t0
-    print('duration %f, average %f' % (duration, float(duration) / (num_loops - cold_skip)))
-    print('std : %f' % np.asarray(all_time).std())
+    print('duration %f, average %f, std %f' % \
+        (duration, float(duration) / (num_loops - cold_skip), np.asarray(all_time).std()))
 
 
 if __name__ == "__main__":
     print('================ Test Begin ====================')
-    test_mlp()
+    test()
+    print('================ Test Finished ====================')
