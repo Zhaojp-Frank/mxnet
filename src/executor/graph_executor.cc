@@ -95,7 +95,9 @@ void GraphExecutor::Backward(const std::vector<NDArray>& head_grads) {
         CHECK(i < head_grads.size() && !head_grads[i].is_none())
             << "Because the last operator is not Loss function, "
             << "head_gradient is required in calling backward.";
-        CopyFromTo(head_grads[i], &(head_grad_array_[i]));
+        LOG(INFO) << "[WARNING!!!] Copy is turned off for header grad";
+        // TODO: hack
+        //CopyFromTo(head_grads[i], &(head_grad_array_[i]));
       }
     }
   }
@@ -526,6 +528,8 @@ void GraphExecutor::Init(nnvm::Symbol symbol,
       if (it != head_grad_map_.end()) {
         uint32_t oid = it->second;
         head_grad_array_[oid] = data_entry_[idx.entry_id(nid, 0)];
+        LOG(INFO) << "[WARNING!!!] Fake data for header grad: " << idx[nid].source->attrs.name;
+        SampleGaussian(0.0, 0.001, &(head_grad_array_[oid]));
       }
     }
   }

@@ -121,10 +121,12 @@ void FillCompute(const nnvm::NodeAttrs& attrs,
   using namespace mshadow;
   using namespace mshadow::expr;
   Stream<xpu> *s = ctx.get_stream<xpu>();
-  MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
-    Tensor<xpu, 1, DType> out = outputs[0].FlatTo1D<xpu, DType>(s);
-    ASSIGN_DISPATCH(out, req[0], scalar<DType>(value));
-  });
+  for (size_t i = 0; i < outputs.size(); ++i) {
+    MSHADOW_TYPE_SWITCH(outputs[i].type_flag_, DType, {
+      Tensor<xpu, 1, DType> out = outputs[i].FlatTo1D<xpu, DType>(s);
+      ASSIGN_DISPATCH(out, req[i], scalar<DType>(value));
+    });
+  }
 }
 
 
