@@ -1,7 +1,7 @@
 import mxnet as mx
 
 def add_args(parser):
-  parser.add_argument('--num_layers', type=int, default=50, help='Number of resnet layers')
+    parser.add_argument('--num_layers', type=int, default=50, help='Number of resnet layers')
 
 has_activation = True
 def Activation(data, **kwargs):
@@ -144,6 +144,7 @@ def get_symbol(args, conv_workspace=256):
     else:
         if num_layers >= 50:
             filter_list = [64, 256, 512, 1024, 2048]
+            #filter_list = [i * 2 for i in filter_list]
             bottle_neck = True
         else:
             filter_list = [64, 64, 128, 256, 512]

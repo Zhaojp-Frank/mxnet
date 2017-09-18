@@ -86,10 +86,14 @@ def test():
     for i in range(num_loops):
         print('=> loop %d' % i);
         st_l = time.time()
-        if i == cold_skip:
+        if i == cold_skip + 1:
             t0 = time.time()
         outputs = executor.forward()
-        executor.backward()
+        if num_classes is None:
+          # The last layer is not a loss layer.
+          executor.backward(outputs[0])
+        else:
+          executor.backward()
         for name, grad in args_grad.items():
             #print(name, grad.asnumpy())
             grad.wait_to_read()
@@ -105,8 +109,8 @@ def test():
     t1 = time.time()
 
     duration = t1 - t0
-    print('duration %f, average %f' % (duration, float(duration) / (num_loops - cold_skip)))
-    print('std : %f' % np.asarray(all_time).std())
+    print('duration %f, average %f, std %f' % \
+        (duration, float(duration) / (num_loops - cold_skip), np.asarray(all_time).std()))
 
 
 if __name__ == "__main__":
