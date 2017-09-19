@@ -115,6 +115,11 @@ class FullyConnectedOp : public Operator {
 #endif
     //  backprop
     CHECK_NE(req[fullc::kWeight], kWriteInplace) << "cannot write weight inplace";
+
+    //grad = 0.0f;
+    //data = 0.0f;
+    //wmat = 0.0f;
+
     // gradient of weight
     Tensor<xpu, 2, DType> gwmat = in_grad[fullc::kWeight].get<xpu, 2, DType>(s);
     Assign(gwmat, req[fullc::kWeight], dot(grad.T(), data));

@@ -515,6 +515,8 @@ void SampleUniform(real_t begin, real_t end, NDArray *out);
  * \param out output NDArray.
  */
 void SampleGaussian(real_t mu, real_t sigma, NDArray *out);
+
+void SetValueOp(const real_t &rhs, NDArray *out);
 //--------------------------------------------------------------
 // The following part are API Registration of NDArray functions.
 //--------------------------------------------------------------

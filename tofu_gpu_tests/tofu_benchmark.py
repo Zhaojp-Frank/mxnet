@@ -14,8 +14,7 @@ def feed_args(net, arg_arrays):
     names = net.list_arguments()
     for name, arr in zip(names, arg_arrays):
         if not name.endswith('label'):
-            # create random data
-            arr[:] = 0.1 * rng.randn(*(arr.shape))
+            arr[:] = 0.0
 
 def test():
     has_mpi = False

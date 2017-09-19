@@ -10,6 +10,7 @@
 #include <queue>
 #include <algorithm>
 #include <iostream>
+#include <sys/time.h>
 
 #include "./exec_pass.h"
 #include "./graph_executor.h"
@@ -528,8 +529,6 @@ void GraphExecutor::Init(nnvm::Symbol symbol,
       if (it != head_grad_map_.end()) {
         uint32_t oid = it->second;
         head_grad_array_[oid] = data_entry_[idx.entry_id(nid, 0)];
-        LOG(INFO) << "[WARNING!!!] Fake data for header grad: " << idx[nid].source->attrs.name;
-        SampleGaussian(0.0, 0.001, &(head_grad_array_[oid]));
       }
     }
   }
@@ -744,6 +743,7 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
     }
   }
   CHECK_EQ(data_pool_.size(), pool_info.size());
+
   // assign the data entries
   for (size_t i = 0; i < data_entry_.size(); ++i) {
     // avoid pre-allocated arrays
@@ -758,6 +758,12 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
     const NDArray& src = data_pool_.at(storage_id);
     data_entry_[i] = src.AsArray(vshape[i], vdtype[i]);
   }
+
+  LOG(INFO) << "[WARNING!!!] Init fake data for all entries (for more stable benchmark).";
+  for (size_t i = 0; i < data_entry_.size(); ++i) {
+    SetValueOp(0.0, &(data_entry_[i]));
+  }
+
 }
 
 std::vector<int> GraphExecutor::CalcPriority() {
@@ -903,12 +909,14 @@ void GraphExecutor::InitCachedOps() {
       PROFILER_MESSAGE("SetupExec"));
     }
     auto& name = idx[nid].source->attrs.name;
-    auto exec_fun = [exec, is_async, is_gpu, name] (
+    auto exec_fun = [exec, is_async, is_gpu, name, this] (
         RunContext ctx, Engine::CallbackOnComplete on_complete) {
       if (is_async) {
         exec->op_ctx.async_on_complete = on_complete;
       }
       op::P2PNetDebugger::Get().PrintTime("Begin executing %s", name.c_str());
+      //timeval st, ed;
+      //gettimeofday(&st, NULL);
       exec->Run(ctx);
       op::P2PNetDebugger::Get().PrintTime("Finish executing %s", name.c_str());
       // call on complete only if it is async op
@@ -921,6 +929,11 @@ void GraphExecutor::InitCachedOps() {
           LOG(FATAL) << MXNET_GPU_NOT_ENABLED_ERROR;
         #endif
         }
+        //gettimeofday(&ed, NULL);
+        //{
+          //std::lock_guard<std::mutex> guard(time_mutex_);
+          //LOG(INFO) << "Node: " << name << " time: " << ((ed.tv_sec - st.tv_sec) * 1000.0 + (ed.tv_usec - st.tv_usec) / 1000.0);
+        //}
         on_complete();
       }
     };
