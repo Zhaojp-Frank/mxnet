@@ -1,14 +1,10 @@
-l=50
-
-export TOFU_USE_BFS_LEVEL=1
-
 echo "Single: "
 for b in 128 256 512
 do
   echo "Batch: $b"
-  python ../tofu_benchmark.py resnet \
-    --batch_size=$b --num_layers=$l \
-    2>&1 | tee resnet${l}_b${b}.log | grep average
+  python ../tofu_benchmark.py alexnet \
+    --batch_size=$b \
+    2>&1 | tee alexnet_b${b}.log | grep average
 done
 
 echo "Tofu:"
@@ -19,9 +15,9 @@ do
   for n in 2 4 8
   do
     echo "Batch: $b, #GPUs: $n"
-    python ../tofu_benchmark.py resnet \
-      --batch_size=$b --num_layers=$l --num_gpus=$n \
-      2>&1 | tee resnet${l}_b${b}_tofu_${n}.log | grep average
+    python ../tofu_benchmark.py alexnet \
+      --batch_size=$b --num_gpus=$n \
+      2>&1 | tee alexnet_b${b}_tofu_${n}.log | grep average
   done
 done
 
@@ -33,9 +29,9 @@ do
   for n in 2 4 8
   do
     echo "Batch: $b, #GPUs: $n"
-    python ../tofu_benchmark.py resnet \
-      --batch_size=$b --num_layers=$l --num_gpus=$n \
-      2>&1 | tee resnet${l}_b${b}_dp_${n}.log | grep average
+    python ../tofu_benchmark.py alexnet \
+      --batch_size=$b --num_gpus=$n \
+      2>&1 | tee alexnet_b${b}_dp_${n}.log | grep average
   done
 done
 
@@ -48,9 +44,9 @@ do
   for n in 2 4 8
   do
     echo "Batch: $b, #GPUs: $n"
-    python ../tofu_benchmark.py resnet \
-      --batch_size=$b --num_layers=$l --num_gpus=$n \
-      2>&1 | tee resnet${l}-no-comm_b${b}_tofu_${n}.log | grep average
+    python ../tofu_benchmark.py alexnet \
+      --batch_size=$b --num_gpus=$n \
+      2>&1 | tee alexnet-no-comm_b${b}_tofu_${n}.log | grep average
   done
 done
 
@@ -62,9 +58,9 @@ do
   for n in 2 4 8
   do
     echo "Batch: $b, #GPUs: $n"
-    python ../tofu_benchmark.py resnet \
-      --batch_size=$b --num_layers=$l --num_gpus=$n \
-      2>&1 | tee resnet${l}-no-comm_b${b}_dp_${n}.log | grep average
+    python ../tofu_benchmark.py alexnet \
+      --batch_size=$b --num_gpus=$n \
+      2>&1 | tee alexnet-no-comm_b${b}_dp_${n}.log | grep average
   done
 done
 

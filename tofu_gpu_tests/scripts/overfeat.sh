@@ -1,41 +1,37 @@
-l=50
-
-export TOFU_USE_BFS_LEVEL=1
-
 echo "Single: "
-for b in 128 256 512
+for b in 64 128 256
 do
   echo "Batch: $b"
-  python ../tofu_benchmark.py resnet \
-    --batch_size=$b --num_layers=$l \
-    2>&1 | tee resnet${l}_b${b}.log | grep average
+  python ../tofu_benchmark.py overfeat \
+    --batch_size=$b \
+    2>&1 | tee overfeat_b${b}.log | grep average
 done
 
 echo "Tofu:"
 export TOFU_FAKE_VAR_SPLIT_CONCAT=1
 export TOFU_TILING_TYPE=kcuts
-for b in 128 256 512
+for b in 64 128 256
 do
   for n in 2 4 8
   do
     echo "Batch: $b, #GPUs: $n"
-    python ../tofu_benchmark.py resnet \
-      --batch_size=$b --num_layers=$l --num_gpus=$n \
-      2>&1 | tee resnet${l}_b${b}_tofu_${n}.log | grep average
+    python ../tofu_benchmark.py overfeat \
+      --batch_size=$b --num_gpus=$n \
+      2>&1 | tee overfeat_b${b}_tofu_${n}.log | grep average
   done
 done
 
 echo "DP:"
 export TOFU_FAKE_VAR_SPLIT_CONCAT=1
 export TOFU_TILING_TYPE=datapar
-for b in 128 256 512
+for b in 64 128 256
 do
   for n in 2 4 8
   do
     echo "Batch: $b, #GPUs: $n"
-    python ../tofu_benchmark.py resnet \
-      --batch_size=$b --num_layers=$l --num_gpus=$n \
-      2>&1 | tee resnet${l}_b${b}_dp_${n}.log | grep average
+    python ../tofu_benchmark.py overfeat \
+      --batch_size=$b --num_gpus=$n \
+      2>&1 | tee overfeat_b${b}_dp_${n}.log | grep average
   done
 done
 
@@ -43,28 +39,28 @@ export TOFU_IGNORE_GPU_COMM=1
 echo "Tofu-no-comm:"
 export TOFU_FAKE_VAR_SPLIT_CONCAT=1
 export TOFU_TILING_TYPE=kcuts
-for b in 128 256 512
+for b in 64 128 256
 do
   for n in 2 4 8
   do
     echo "Batch: $b, #GPUs: $n"
-    python ../tofu_benchmark.py resnet \
-      --batch_size=$b --num_layers=$l --num_gpus=$n \
-      2>&1 | tee resnet${l}-no-comm_b${b}_tofu_${n}.log | grep average
+    python ../tofu_benchmark.py overfeat \
+      --batch_size=$b --num_gpus=$n \
+      2>&1 | tee overfeat-no-comm_b${b}_tofu_${n}.log | grep average
   done
 done
 
 echo "DP-no-comm:"
 export TOFU_FAKE_VAR_SPLIT_CONCAT=1
 export TOFU_TILING_TYPE=datapar
-for b in 128 256 512
+for b in 64 128 256
 do
   for n in 2 4 8
   do
     echo "Batch: $b, #GPUs: $n"
-    python ../tofu_benchmark.py resnet \
-      --batch_size=$b --num_layers=$l --num_gpus=$n \
-      2>&1 | tee resnet${l}-no-comm_b${b}_dp_${n}.log | grep average
+    python ../tofu_benchmark.py overfeat \
+      --batch_size=$b --num_gpus=$n \
+      2>&1 | tee overfeat-no-comm_b${b}_dp_${n}.log | grep average
   done
 done
 
