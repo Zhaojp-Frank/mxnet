@@ -110,7 +110,7 @@ def test():
 
     duration = t1 - t0
     print('duration %f, average %f, std %f' % \
-        (duration, float(duration) / (num_loops - cold_skip), np.asarray(all_time).std()))
+        (duration, np.asarray(all_time).mean(), np.asarray(all_time).std()))
 
 
 if __name__ == "__main__":
