@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 
 import tensorflow as tf
@@ -46,7 +47,7 @@ def get_mpi_hosts(FLAGS):
     comm = MPI.COMM_WORLD
     task_index = comm.Get_rank() / 2
     job_name = "ps" if comm.Get_rank() % 2 == 0 else "worker"
-    num_tasks = comm.Get_size()
+    num_tasks = comm.Get_size() / 2
     ps_hosts = ""
     worker_hosts = ""
     with open(FLAGS.host_file) as fp:
@@ -59,9 +60,13 @@ def get_mpi_hosts(FLAGS):
     FLAGS.job_name = job_name 
     FLAGS.ps_hosts = ps_hosts[:-1]
     FLAGS.worker_hosts = worker_hosts[:-1]
+    FLAGS.num_tasks = num_tasks
 
 
 def main(_):
+    print(os.environ)
+    loops = 103
+    cold_start = 13
     get_mpi_hosts(FLAGS)
     ps_hosts = FLAGS.ps_hosts.split(",")
     worker_hosts = FLAGS.worker_hosts.split(",")
@@ -77,30 +82,40 @@ def main(_):
     if FLAGS.job_name == "ps":
         server.join()
     elif FLAGS.job_name == "worker":
-
+        batch = 128 / FLAGS.num_tasks
+        print("Batch size is %d" % batch)
         # Assigns ops to the local worker by default.
         with tf.device(tf.train.replica_device_setter(
                 worker_device="/job:worker/task:%d" % FLAGS.task_index,
                 cluster=cluster)):
 
             # Build model...
-            data = tf.placeholder(tf.float32, (128, 224, 224, 3))
+            data = tf.placeholder(tf.float32, (batch , 224, 224, 3))
             loss = alexnet(data)
             global_step = tf.contrib.framework.get_or_create_global_step()
 
-            train_op = tf.train.GradientDescentOptimizer(0.01).minimize(
-                    loss, global_step=global_step)
+            optimizer = tf.train.GradientDescentOptimizer(0.01)
+            optimizer = tf.train.SyncReplicasOptimizer(
+                           optimizer, replicas_to_aggregate=FLAGS.num_tasks,
+                           total_num_replicas=FLAGS.num_tasks)
+            train_op = optimizer.minimize(loss, global_step = global_step)
 
         # The StopAtStepHook handles stopping after running given steps.
-        hooks=[tf.train.StopAtStepHook(last_step=15)]
+        hooks=[tf.train.StopAtStepHook(last_step=loops),
+               optimizer.make_session_run_hook(FLAGS.task_index == 0)]
 
         # The MonitoredTrainingSession takes care of session initialization,
         # restoring from a checkpoint, saving to a checkpoint, and closing when done
         # or an error occurs.
-        x = np.random.rand(128, 224, 224, 3)
+        x = np.random.rand(batch, 224, 224, 3)
+        durations = []
+        config = tf.ConfigProto()
+        config.intra_op_parallelism_threads = 4
+        config.inter_op_parallelism_threads = 4
         with tf.train.MonitoredTrainingSession(master=server.target, 
                                                is_chief=(FLAGS.task_index == 0), 
                                                #checkpoint_dir="/tmp/train_logs", 
+                                               config=config,
                                                hooks=hooks) as mon_sess:
             while not mon_sess.should_stop():
                 # Run a training step asynchronously.
@@ -112,6 +127,9 @@ def main(_):
                 end = time.time()
                 duration = end - begin
                 print "Duration: ", duration
+                durations.append(duration)
+            print("average : %f " % (sum(durations[cold_start:]) / (len(durations) - cold_start)))
+        time.sleep(1)
 
 
 if __name__ == "__main__":
