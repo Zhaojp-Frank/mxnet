@@ -10,7 +10,7 @@ OPTIONS="--mca btl openib,self,sm -n $NP -pernode -hostfile $HOST --bind-to none
 OPTIONS=$OPTIONS" -x LD_LIBRARY_PATH=/opt/intel/lib/intel64 "
 OPTIONS=$OPTIONS" -x PYTHONPATH=/local/mxnet/python "
 OPTIONS=$OPTIONS" -x MXNET_P2PNET_HOST_PATH=$HOST "
-OPTIONS=$OPTIONS" -x KMP_AFFINITY=\"explicit,granularity=fine,proclist=[$AFFINITY]\" "
+OPTIONS=$OPTIONS" -x KMP_AFFINITY=verbose,explicit,granularity=thread,proclist=[$AFFINITY] "
 OPTIONS=$OPTIONS" -x OMP_NUM_THREADS=$NCORES "
 OPTIONS=$OPTIONS" -x MKL_NUM_THREADS=$NCORES "
 OPTIONS=$OPTIONS" -x MKL_DOMAIN_NUM_THREADS=$NCORES "
@@ -27,13 +27,18 @@ OPTIONS=$OPTIONS" -x TOFU_NO_COMPUTATION=0 "
 OPTIONS=$OPTIONS" -x TOFU_FAKE_VAR_SPLIT_CONCAT=1 "
 OPTIONS=$OPTIONS" -x MXNET_CPU_TEMP_COPY=16 "
 OPTIONS=$OPTIONS" -x MXNET_EXEC_ENABLE_INPLACE=1 "
+#OPTIONS=$OPTIONS" -x OMP_PROC_BIND=TRUE "
+#OPTIONS=$OPTIONS" -x OMP_SCHEDULE=static "
+#OPTIONS=$OPTIONS" -x OMP_NESTED=TRUE "
+OPTIONS=$OPTIONS" -x LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so "
+#OPTIONS=$OPTIONS" -x LD_PRELOAD=/usr/lib/libtcmalloc_minimal.so.4 "
 CMD="python tofu_test_alexnet.py --batch_size=${B} "
 
 if [[ "$NOTDO_SINGLE" != '1' ]];
 then
 	echo "Doing $NP $B $H single"
 	#mpirun $OPTIONS -output-filename log_alexnet_single -x MXNET_P2PNET_DEBUG=0 /local/mxnet/env.sh
-	mpirun $OPTIONS -output-filename log_alexnet_single_${B} -x MXNET_P2PNET_DEBUG=1 $CMD --address=127.0.0.1 -i 0
+	mpirun $OPTIONS -output-filename log_alexnet_single_${B} -x MXNET_P2PNET_DEBUG=0 $CMD --address=127.0.0.1 -i 0
 fi
 
 echo "Doing $NP $B $H without communication"
@@ -43,7 +48,13 @@ echo "Doing $NP $B $H with communication"
 mpirun $OPTIONS -output-filename log_alexnet_with_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=0 -x TOFU_TILING_TYPE=kcuts -x MXNET_P2PNET_USE_MPI_BARRIER=1 $CMD -f $HOST
 
 echo "Doing $NP $B $H dp without communication"
-mpirun $OPTIONS -output-filename log_alexnet_dp_without_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=3 -x TOFU_TILING_TYPE=datapar -x MXNET_P2PNET_USE_MPI_BARRIER=0 $CMD -f $HOST
+mpirun $OPTIONS -output-filename log_alexnet_dp_without_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=2 -x TOFU_TILING_TYPE=datapar -x MXNET_P2PNET_USE_MPI_BARRIER=0 $CMD -f $HOST
 
 echo "Doing $NP $B $H dp with communication"
 mpirun $OPTIONS -output-filename log_alexnet_dp_with_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=0 -x TOFU_TILING_TYPE=datapar -x MXNET_P2PNET_USE_MPI_BARRIER=1 $CMD -f $HOST
+
+echo "Doing $NP $B $H modelpar without communication"
+mpirun $OPTIONS -output-filename log_alexnet_mp_without_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=2 -x TOFU_TILING_TYPE=modelpar -x MXNET_P2PNET_USE_MPI_BARRIER=0 $CMD -f $HOST
+
+echo "Doing $NP $B $H modelpar with communication"
+mpirun $OPTIONS -output-filename log_alexnet_mp_with_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=0 -x TOFU_TILING_TYPE=modelpar -x MXNET_P2PNET_USE_MPI_BARRIER=1 $CMD -f $HOST

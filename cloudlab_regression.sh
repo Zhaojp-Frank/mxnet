@@ -32,29 +32,29 @@ OPTIONS=$OPTIONS" -x MXNET_EXEC_ENABLE_INPLACE=1 "
 #OPTIONS=$OPTIONS" -x OMP_NESTED=TRUE "
 OPTIONS=$OPTIONS" -x LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so "
 #OPTIONS=$OPTIONS" -x LD_PRELOAD=/usr/lib/libtcmalloc_minimal.so.4 "
-CMD="python tofu_test_overfeat.py --batch_size=${B} "
+CMD="python tofu_test_regression.py --batch_size=256 --hidden_size=128 --feature_size=3000000 "
 
 if [[ "$NOTDO_SINGLE" != '1' ]];
 then
 	echo "Doing $NP $B $H single"
-	#mpirun $OPTIONS -output-filename log_overfeat_single -x MXNET_P2PNET_DEBUG=0 /local/mxnet/env.sh
-	mpirun $OPTIONS -output-filename log_overfeat_single_${B} -x MXNET_P2PNET_DEBUG=0 $CMD --address=127.0.0.1 -i 0
+	#mpirun $OPTIONS -output-filename log_regression_single -x MXNET_P2PNET_DEBUG=0 /local/mxnet/env.sh
+	mpirun $OPTIONS -output-filename log_regression_single_${B} -x MXNET_P2PNET_DEBUG=0 $CMD --address=127.0.0.1 -i 0
 fi
 
 echo "Doing $NP $B $H without communication"
-mpirun $OPTIONS -output-filename log_overfeat_without_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=2 -x TOFU_TILING_TYPE=kcuts -x MXNET_P2PNET_USE_MPI_BARRIER=0 $CMD -f $HOST 
+mpirun $OPTIONS -output-filename log_regression_without_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=2 -x TOFU_TILING_TYPE=kcuts -x MXNET_P2PNET_USE_MPI_BARRIER=0 $CMD -f $HOST 
 
 echo "Doing $NP $B $H with communication"
-mpirun $OPTIONS -output-filename log_overfeat_with_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=0 -x TOFU_TILING_TYPE=kcuts -x MXNET_P2PNET_USE_MPI_BARRIER=1 $CMD -f $HOST
+mpirun $OPTIONS -output-filename log_regression_with_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=0 -x TOFU_TILING_TYPE=kcuts -x MXNET_P2PNET_USE_MPI_BARRIER=1 $CMD -f $HOST
 
 echo "Doing $NP $B $H dp without communication"
-mpirun $OPTIONS -output-filename log_overfeat_dp_without_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=2 -x TOFU_TILING_TYPE=datapar -x MXNET_P2PNET_USE_MPI_BARRIER=0 $CMD -f $HOST
+mpirun $OPTIONS -output-filename log_regression_dp_without_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=2 -x TOFU_TILING_TYPE=datapar  -x MXNET_P2PNET_USE_MPI_BARRIER=1 $CMD -f $HOST
 
 echo "Doing $NP $B $H dp with communication"
-mpirun $OPTIONS -output-filename log_overfeat_dp_with_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=0 -x TOFU_TILING_TYPE=datapar -x MXNET_P2PNET_USE_MPI_BARRIER=1 $CMD -f $HOST
+mpirun $OPTIONS -output-filename log_regression_dp_with_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=0 -x TOFU_TILING_TYPE=datapar -x MXNET_P2PNET_USE_MPI_BARRIER=1 $CMD -f $HOST
 
 echo "Doing $NP $B $H modelpar without communication"
-mpirun $OPTIONS -output-filename log_overfeat_mp_without_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=2 -x TOFU_TILING_TYPE=modelpar -x MXNET_P2PNET_USE_MPI_BARRIER=0 $CMD -f $HOST
+mpirun $OPTIONS -output-filename log_regression_mp_without_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=2 -x TOFU_TILING_TYPE=modelpar -x MXNET_P2PNET_USE_MPI_BARRIER=0 $CMD -f $HOST
 
 echo "Doing $NP $B $H modelpar with communication"
-mpirun $OPTIONS -output-filename log_overfeat_mp_with_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=0 -x TOFU_TILING_TYPE=modelpar -x MXNET_P2PNET_USE_MPI_BARRIER=1 $CMD -f $HOST
+mpirun $OPTIONS -output-filename log_regression_mp_with_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=0 -x TOFU_TILING_TYPE=modelpar -x MXNET_P2PNET_USE_MPI_BARRIER=1 $CMD -f $HOST
