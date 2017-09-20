@@ -114,10 +114,15 @@ def test_net():
                         group2ctx=group2ctx)
 
     all_time = []
+    if n_workers == 16:
+        num_loops * 2
+    if n_workers == 32:
+        num_loops * 4
     for i in range(num_loops):
         print('=> loop %d' % i);
         st_l = time.time()
         if i == cold_skip:
+            time.sleep(3)
             t0 = time.time()
         outputs = executor.forward()
         executor.backward([outputs[0]])

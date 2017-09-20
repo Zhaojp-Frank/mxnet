@@ -16,7 +16,7 @@ def get_symbol(args):
     net = mx.sym.Variable("data")
     net = mx.sym.FullyConnected(net, num_hidden=args.hidden_size, no_bias=True)
     net = mx.sym.SoftmaxOutput(net, name='softmax')
-    return net, [('data', (args.batch_size, args.feature_size)), ('softmax_label', (args.batch_size,))]
+    return net, [('data', (args.batch_size, args.feature_size)), ('softmax/label', (args.batch_size,))]
 
 
 def test_net():
@@ -27,7 +27,7 @@ def test_net():
     parser = argparse.ArgumentParser("MLP single card code")
     parser.add_argument('--batch_size', type=int, default=64, help='Batch size')
     parser.add_argument('--feature_size', type=int, default=1024*1024*2, help='Feature size')
-    parser.add_argument('--hidden_size', type=int, default=1024, help='Hidden size')
+    parser.add_argument('--hidden_size', type=int, default=128, help='Hidden size')
     parser.add_argument('-a', '--addresses', type=str, help='Addresses of all workers.')
     parser.add_argument('-i', '--worker_index', type=int, 
                         help='Index of this worker in addresses')

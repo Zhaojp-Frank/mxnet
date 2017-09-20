@@ -27,6 +27,7 @@ OPTIONS=$OPTIONS" -x TOFU_NO_COMPUTATION=0 "
 OPTIONS=$OPTIONS" -x TOFU_FAKE_VAR_SPLIT_CONCAT=1 "
 OPTIONS=$OPTIONS" -x MXNET_CPU_TEMP_COPY=16 "
 OPTIONS=$OPTIONS" -x MXNET_EXEC_ENABLE_INPLACE=1 "
+OPTIONS=$OPTIONS" -x LD_PRELOAD=/usr/lib/libtcmalloc_minimal.so.4 "
 CMD="python tofu_test_conv.py --batch_size=${B} --channel_size=3 --filter_size=64 --num_layers=1 "
 
 if [[ "$NOTDO_SINGLE" != '1' ]];

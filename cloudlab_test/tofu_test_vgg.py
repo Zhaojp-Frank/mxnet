@@ -8,7 +8,7 @@ import pickle as pickle
 import logging
 import argparse
 
-num_loops = 13
+num_loops = 23
 cold_skip = 3
 
 vgg_type = \
