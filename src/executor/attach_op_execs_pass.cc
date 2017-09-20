@@ -304,19 +304,26 @@ Graph AttachOpExecs(Graph g) {
         }
     }
 
-    FCompute f_zero_compute = FComputeExecutor::GetFCompute(
-        nnvm::Op::Get("_zeros"), vctx[i]);
+    //FCompute f_zero_compute = FComputeExecutor::GetFCompute(
+        //nnvm::Op::Get("_zeros"), vctx[i]);
     if (dmlc::GetEnv("TOFU_IGNORE_GPU_COMM", 0)) {
       if (op->name == "_CrossDeviceCopy") {
         ret[i] = std::make_shared<FComputeExecutor>(
-            f_zero_compute, inode.source->attrs);
+            DoNothingFCompute, inode.source->attrs);
         continue;
       }
     }
     if (dmlc::GetEnv("TOFU_IGNORE_CONVERSION", 0)) {
       if (StartsWith(inode.source->attrs.name, "_TOFU")) {
         ret[i] = std::make_shared<FComputeExecutor>(
-            f_zero_compute, inode.source->attrs);
+            DoNothingFCompute, inode.source->attrs);
+        continue;
+      }
+    }
+    if (dmlc::GetEnv("TOFU_ONLY_GPU0", 0)) {
+      if (vctx[i].dev_type != Context::kGPU || vctx[i].dev_id != 0) {
+        ret[i] = std::make_shared<FComputeExecutor>(
+            DoNothingFCompute, inode.source->attrs);
         continue;
       }
     }

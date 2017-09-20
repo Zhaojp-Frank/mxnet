@@ -14,8 +14,7 @@ def feed_args(net, arg_arrays):
     names = net.list_arguments()
     for name, arr in zip(names, arg_arrays):
         if not name.endswith('label'):
-            # create random data
-            arr[:] = 0.1 * rng.randn(*(arr.shape))
+            arr[:] = 0.0
 
 def test():
     has_mpi = False
@@ -110,7 +109,7 @@ def test():
 
     duration = t1 - t0
     print('duration %f, average %f, std %f' % \
-        (duration, float(duration) / (num_loops - cold_skip), np.asarray(all_time).std()))
+        (duration, np.asarray(all_time).mean(), np.asarray(all_time).std()))
 
 
 if __name__ == "__main__":
