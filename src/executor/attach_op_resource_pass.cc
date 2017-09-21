@@ -36,7 +36,7 @@ Graph AttachOpResources(Graph g) {
         } else {
           Resource r = ResourceManager::Get()->Request(ctx, req);
           requested.push_back(r);
-          cached_temp[ctx] = r;
+          //cached_temp[ctx] = r;
         }
       } else if (req.type == ResourceRequest::kRandom) {
         requested.push_back(ResourceManager::Get()->Request(ctx, req));

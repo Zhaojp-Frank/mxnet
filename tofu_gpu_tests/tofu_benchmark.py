@@ -1,6 +1,7 @@
 # pylint: skip-file
 from __future__ import print_function
 
+from mxnet.base import _LIB
 import mxnet as mx
 import numpy as np
 import os, sys,time
@@ -28,6 +29,7 @@ def test():
     parser.add_argument('--num_gpus', type=int, default=1, help='Number of GPUs')
     parser.add_argument('--num_loops', type=int, default=30, help='Number of benchmarking loops.')
     parser.add_argument('--cold_skip', type=int, default=5, help='Number of loops skipped for warm up.')
+    parser.add_argument('--use_profiler', type=int, default=0)
     parser.add_argument('-f', '--host_file', type=str,
                         help='Host file that contains addresses of all workers.')
 
@@ -82,11 +84,16 @@ def test():
 
     feed_args(net, arg_arrays)
     all_time = []
+    profiling_iter = -1
+    if args.use_profiler:
+        profiling_iter = num_loops - 1
     for i in range(num_loops):
         print('=> loop %d' % i);
         st_l = time.time()
         if i == cold_skip + 1:
             t0 = time.time()
+        if i == profiling_iter:
+            _LIB.MXStartCUDAProfiler()
         outputs = executor.forward()
         if num_classes is None:
           # The last layer is not a loss layer.
@@ -103,8 +110,10 @@ def test():
             outputs[-1].wait_to_read()
         ed_l = time.time()
         print('=> loop duration %f' % float(ed_l - st_l))
-        if (i >= cold_skip):
-             all_time.append(float(ed_l - st_l))
+        if i == profiling_iter:
+            _LIB.MXStopCUDAProfiler()
+        if (i >= cold_skip and i != profiling_iter):
+            all_time.append(float(ed_l - st_l))
     t1 = time.time()
 
     duration = t1 - t0

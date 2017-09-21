@@ -518,10 +518,16 @@ class CuDNNConvolutionOp : public Operator {
                  &nalgo,
                  fwd_algo), CUDNN_STATUS_SUCCESS);
         i = 0;
+        // TODO(minjie): Turn off winograd algorithm since it competes CPU resources.
         while (i < nalgo
                && (fwd_algo[i].status != CUDNN_STATUS_SUCCESS
-               || (param_.cudnn_tune.value() == conv::kLimited
-               && fwd_algo[i].memory > workspace_byte))) ++i;
+                   || (param_.cudnn_tune.value() == conv::kLimited
+                       && fwd_algo[i].memory > workspace_byte)
+                   //|| fwd_algo[i].algo == CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD
+                   //|| fwd_algo[i].algo == CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD_NONFUSED
+                   )) {
+          ++i;
+        }
         if (i == nalgo) {
           LOG(FATAL) << "Failed to find an convolution algorithm.";
         } else {
@@ -538,10 +544,15 @@ class CuDNNConvolutionOp : public Operator {
                  &nalgo,
                  bwd_filter_algo), CUDNN_STATUS_SUCCESS);
         i = 0;
+        // TODO(minjie): Turn off winograd algorithm since it competes CPU resources.
         while (i < nalgo
                && (bwd_filter_algo[i].status != CUDNN_STATUS_SUCCESS
-               || (param_.cudnn_tune.value() == conv::kLimited
-               && bwd_filter_algo[i].memory > workspace_byte))) ++i;
+                   || (param_.cudnn_tune.value() == conv::kLimited
+                       && bwd_filter_algo[i].memory > workspace_byte)
+                   //|| bwd_filter_algo[i].algo == CUDNN_CONVOLUTION_BWD_FILTER_ALGO_WINOGRAD_NONFUSED
+                   )) {
+          ++i;
+        }
         if (i == nalgo) {
           LOG(FATAL) << "Failed to find an convolution algorithm.";
         } else {
@@ -558,10 +569,16 @@ class CuDNNConvolutionOp : public Operator {
                  &nalgo,
                  bwd_data_algo), CUDNN_STATUS_SUCCESS);
         i = 0;
+        // TODO(minjie): Turn off winograd algorithm since it competes CPU resources.
         while (i < nalgo
                && (bwd_data_algo[i].status != CUDNN_STATUS_SUCCESS
-               || (param_.cudnn_tune.value() == conv::kLimited
-               && bwd_data_algo[i].memory > workspace_byte))) ++i;
+                   || (param_.cudnn_tune.value() == conv::kLimited
+                       && bwd_data_algo[i].memory > workspace_byte)
+                   //|| bwd_data_algo[i].algo == CUDNN_CONVOLUTION_BWD_DATA_ALGO_WINOGRAD
+                   //|| bwd_data_algo[i].algo == CUDNN_CONVOLUTION_BWD_DATA_ALGO_WINOGRAD_NONFUSED
+                   )) {
+          ++i;
+        }
         if (i == nalgo) {
           LOG(FATAL) << "Failed to find an convolution algorithm.";
         } else {
@@ -572,6 +589,11 @@ class CuDNNConvolutionOp : public Operator {
     }, ctx, {}, {var});
     Engine::Get()->WaitForVar(var);
     Engine::Get()->DeleteVariable([](RunContext s) {}, ctx, var);
+
+    LOG(INFO) << "Select algo on dev=" << ctx.dev_id
+      << " key=" << key
+      << " fwd_algo=" << algo_ << " bwd_algo=" << back_algo_
+      << " bwd_w_algo=" << back_algo_w_;
   }
 
   void GetTempSize(const OpContext& ctx) {

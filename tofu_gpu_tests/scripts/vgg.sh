@@ -1,5 +1,5 @@
 echo "Single: "
-for b in 64 128 256
+for b in 64
 do
   echo "Batch: $b"
   python ../tofu_benchmark.py vgg \
@@ -7,10 +7,12 @@ do
     2>&1 | tee vgg_b${b}.log | grep average
 done
 
+#export NNVM_EXEC_MATCH_RANGE=0
+
 echo "Tofu:"
 export TOFU_FAKE_VAR_SPLIT_CONCAT=1
 export TOFU_TILING_TYPE=kcuts
-for b in 64 128 256
+for b in 128 256 512
 do
   for n in 2 4 8
   do
@@ -24,7 +26,7 @@ done
 echo "DP:"
 export TOFU_FAKE_VAR_SPLIT_CONCAT=1
 export TOFU_TILING_TYPE=datapar
-for b in 64 128 256
+for b in 128 256 512
 do
   for n in 2 4 8
   do
@@ -39,7 +41,7 @@ export TOFU_IGNORE_GPU_COMM=1
 echo "Tofu-no-comm:"
 export TOFU_FAKE_VAR_SPLIT_CONCAT=1
 export TOFU_TILING_TYPE=kcuts
-for b in 64 128 256
+for b in 128 256 512
 do
   for n in 2 4 8
   do
@@ -53,7 +55,7 @@ done
 echo "DP-no-comm:"
 export TOFU_FAKE_VAR_SPLIT_CONCAT=1
 export TOFU_TILING_TYPE=datapar
-for b in 64 128 256
+for b in 128 256 512
 do
   for n in 2 4 8
   do

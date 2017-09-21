@@ -1,22 +1,23 @@
 l=50
 
 export TOFU_USE_BFS_LEVEL=1
+export MXNET_GPU_COPY_NTHREADS=2
 
-echo "Single: "
-for b in 128 256 512
-do
-  echo "Batch: $b"
-  python ../tofu_benchmark.py resnet \
-    --batch_size=$b --num_layers=$l \
-    2>&1 | tee resnet${l}_b${b}.log | grep average
-done
-
+#echo "Single: "
+#for b in 128
+#do
+#  echo "Batch: $b"
+#  python ../tofu_benchmark.py resnet \
+#    --batch_size=$b --num_layers=$l \
+#    2>&1 | tee resnet${l}_b${b}.log | grep average
+#done
+#
 echo "Tofu:"
 export TOFU_FAKE_VAR_SPLIT_CONCAT=1
 export TOFU_TILING_TYPE=kcuts
 for b in 128 256 512
 do
-  for n in 2 4 8
+  for n in 8
   do
     echo "Batch: $b, #GPUs: $n"
     python ../tofu_benchmark.py resnet \
@@ -30,7 +31,7 @@ export TOFU_FAKE_VAR_SPLIT_CONCAT=1
 export TOFU_TILING_TYPE=datapar
 for b in 128 256 512
 do
-  for n in 2 4 8
+  for n in 8
   do
     echo "Batch: $b, #GPUs: $n"
     python ../tofu_benchmark.py resnet \
@@ -45,7 +46,7 @@ export TOFU_FAKE_VAR_SPLIT_CONCAT=1
 export TOFU_TILING_TYPE=kcuts
 for b in 128 256 512
 do
-  for n in 2 4 8
+  for n in 8
   do
     echo "Batch: $b, #GPUs: $n"
     python ../tofu_benchmark.py resnet \
@@ -59,7 +60,7 @@ export TOFU_FAKE_VAR_SPLIT_CONCAT=1
 export TOFU_TILING_TYPE=datapar
 for b in 128 256 512
 do
-  for n in 2 4 8
+  for n in 8
   do
     echo "Batch: $b, #GPUs: $n"
     python ../tofu_benchmark.py resnet \

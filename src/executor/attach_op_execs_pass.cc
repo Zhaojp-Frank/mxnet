@@ -307,8 +307,9 @@ Graph AttachOpExecs(Graph g) {
         continue;
       }
     }
-    if (dmlc::GetEnv("TOFU_ONLY_GPU0", 0)) {
-      if (vctx[i].dev_type != Context::kGPU || vctx[i].dev_id != 0) {
+    if (dmlc::GetEnv("TOFU_ONLY_RUN_GPU", -1) >= 0) {
+      const int dev = dmlc::GetEnv("TOFU_ONLY_RUN_GPU", 0);
+      if (vctx[i].dev_type != Context::kGPU || vctx[i].dev_id != dev) {
         ret[i] = std::make_shared<FComputeExecutor>(
             DoNothingFCompute, inode.source->attrs);
         continue;

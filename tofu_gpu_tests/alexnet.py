@@ -22,6 +22,7 @@ def get_symbol(args):
     # group 1
     net = conv_factory(net, num_filter=192, kernel=(5, 5), stride=(1, 1), pad=(2, 2))
     net = mx.sym.Pooling(net, kernel=(3, 3), stride=(2, 2), pool_type="max")
+    #return net, (3, 224, 224), None
     # group 2
     net = conv_factory(net, num_filter=384, kernel=(3, 3), stride=(1, 1), pad=(1, 1))
     net = conv_factory(net, num_filter=256, kernel=(3, 3), stride=(1, 1), pad=(1, 1))

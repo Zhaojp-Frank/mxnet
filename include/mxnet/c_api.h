@@ -901,6 +901,8 @@ MXNET_DLL int MXSymbolInferType(SymbolHandle sym,
 //--------------------------------------------
 // Part 4: Executor interface
 //--------------------------------------------
+MXNET_DLL int MXStartCUDAProfiler();
+MXNET_DLL int MXStopCUDAProfiler();
 /*!
  * \brief Delete the executor
  * \param handle the executor.
@@ -921,7 +923,8 @@ MXNET_DLL int MXExecutorPrint(ExecutorHandle handle, const char **out_str);
  * \param is_train int value to indicate whether the forward pass is for evaluation
  * \return 0 when success, -1 when failure happens
  */
-MXNET_DLL int MXExecutorForward(ExecutorHandle handle, int is_train);
+MXNET_DLL int MXExecutorForward(ExecutorHandle handle,
+                                int is_train);
 /*!
  * \brief Excecutor run backward
  *

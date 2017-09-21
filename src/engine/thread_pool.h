@@ -11,6 +11,8 @@
 #include <utility>
 #include "mxnet/base.h"
 
+#include <pthread.h>
+
 namespace mxnet {
 namespace engine {
 
@@ -24,10 +26,24 @@ class ThreadPool {
    * \param size size of the thread pool.
    * \param func the function to run on the thread pool.
    */
-  explicit ThreadPool(size_t size, std::function<void()> func)
+  explicit ThreadPool(size_t size, std::function<void()> func,
+                      const std::vector<int>& affinity = std::vector<int>())
       : worker_threads_(size) {
     for (auto& i : worker_threads_) {
       i = std::thread(func);
+    }
+    if (!affinity.empty()) {
+      cpu_set_t cpuset;
+      CPU_ZERO(&cpuset);
+      for (int aff : affinity) {
+        CPU_SET(aff, &cpuset);
+      }
+      for (auto& i : worker_threads_) {
+        int rc = pthread_setaffinity_np(i.native_handle(),
+                                        sizeof(cpu_set_t),
+                                        &cpuset);
+        CHECK(rc == 0) << "Error setting affinity.";
+      }
     }
   }
   ~ThreadPool() noexcept(false) {

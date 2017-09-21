@@ -8,6 +8,28 @@
 #include <mxnet/executor.h>
 #include "./c_api_common.h"
 
+#if MXNET_USE_CUDA
+#include <cuda_profiler_api.h>
+
+int MXStartCUDAProfiler() {
+  API_BEGIN();
+  for (int i = 0; i < 8; ++i) {
+    cudaSetDevice(i);
+    cudaProfilerStart();
+  }
+  API_END();
+}
+
+int MXStopCUDAProfiler() {
+  API_BEGIN();
+  for (int i = 0; i < 8; ++i) {
+    cudaSetDevice(i);
+    cudaProfilerStop();
+  }
+  API_END();
+}
+#endif
+
 int MXExecutorPrint(ExecutorHandle handle, const char **out_str) {
   Executor *exec = static_cast<Executor*>(handle);
   MXAPIThreadLocalEntry *ret = MXAPIThreadLocalStore::Get();

@@ -99,6 +99,10 @@ class ThreadedEnginePerDevice : public ThreadedEngine {
         } else {
           gpu_normal_workers_.Get(dev_id, [this, dev_id, is_copy, nthread]() {
               auto blk = new ThreadWorkerBlock<kWorkerQueue>();
+              //const std::vector<int> affinity = {dev_id * 4,
+                                                 //dev_id * 4 + 1,
+                                                 //dev_id * 4 + 2,
+                                                 //dev_id * 4 + 3};
               blk->pool.reset(new ThreadPool(nthread, [this, dev_id, is_copy, blk] () {
                     this->GPUWorker(dev_id, is_copy, blk);
                   }));

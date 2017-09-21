@@ -1,3 +1,5 @@
+export NNVM_EXEC_MATCH_RANGE=0
+
 echo "Single: "
 for b in 128 256 512
 do

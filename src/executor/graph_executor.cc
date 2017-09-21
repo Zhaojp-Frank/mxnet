@@ -22,6 +22,10 @@
 namespace mxnet {
 namespace exec {
 namespace {
+inline bool StartsWith(const std::string& value, const std::string& starting) {
+  if (starting.size() > value.size()) return false;
+  return std::equal(starting.begin(), starting.end(), value.begin());
+}
 void EnableP2P(const std::vector<Context>& devs) {
 #if MXNET_USE_CUDA
   std::vector<int> gpus;
@@ -809,6 +813,9 @@ void GraphExecutor::InitCachedOps() {
     if (skip_plus_node.at(nid)) {
       op_nodes_[nid].skip_exec_node = true; continue;
     }
+    if (inode.source->op() == nnvm::Op::Get("_TofuFakeVar")) {
+      op_nodes_[nid].skip_exec_node = true; continue;
+    }
 
     op_nodes_[nid].exec = op_execs[nid];
     op_nodes_[nid].ctx = vctx[nid];
@@ -908,7 +915,7 @@ void GraphExecutor::InitCachedOps() {
       }, Context::CPU(), {}, all_vars, FnProperty::kNormal, 0,
       PROFILER_MESSAGE("SetupExec"));
     }
-    auto& name = idx[nid].source->attrs.name;
+    std::string name = idx[nid].source->attrs.name + "-" + idx[nid].source->attrs.op->name;
     auto exec_fun = [exec, is_async, is_gpu, name, this] (
         RunContext ctx, Engine::CallbackOnComplete on_complete) {
       if (is_async) {
@@ -917,6 +924,10 @@ void GraphExecutor::InitCachedOps() {
       op::P2PNetDebugger::Get().PrintTime("Begin executing %s", name.c_str());
       //timeval st, ed;
       //gettimeofday(&st, NULL);
+      //{
+        //std::lock_guard<std::mutex> guard(time_mutex_);
+        //LOG(INFO) << "[S] " << name << " " << st.tv_usec;
+      //}
       exec->Run(ctx);
       op::P2PNetDebugger::Get().PrintTime("Finish executing %s", name.c_str());
       // call on complete only if it is async op
@@ -932,7 +943,7 @@ void GraphExecutor::InitCachedOps() {
         //gettimeofday(&ed, NULL);
         //{
           //std::lock_guard<std::mutex> guard(time_mutex_);
-          //LOG(INFO) << "Node: " << name << " time: " << ((ed.tv_sec - st.tv_sec) * 1000.0 + (ed.tv_usec - st.tv_usec) / 1000.0);
+          //LOG(INFO) << "[F] " << name << " " << ed.tv_usec << " " << ((ed.tv_sec - st.tv_sec) * 1000.0 + (ed.tv_usec - st.tv_usec) / 1000.0);;
         //}
         on_complete();
       }
@@ -943,6 +954,8 @@ void GraphExecutor::InitCachedOps() {
     if (op_name == "P2PNetInit" || op_name == "P2PNetRecv" ||
         op_name == "P2PNetSend") {
       prop = FnProperty::kCPUPrioritized;
+    } else if (StartsWith(inode.source->attrs.name, "_TOFU")) {
+      prop = FnProperty::kCopyToGPU;
     } else {
       prop = FnProperty::kNormal;
     }
