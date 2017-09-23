@@ -9,114 +9,83 @@ import time
 from tensorflow.python.client import timeline
 FLAGS = None
 
-def alexnet(data, data_format, num_tasks=1):
-    if num_tasks > 1:
-        kernels = []
-        for i in range(num_tasks):
-            kernels.append(tf.Variable(tf.ones([11, 11, 3, 64 / num_tasks], tf.float32)))
-        kernel = tf.concat(kernels, 3)
-    else:
-        kernel = tf.Variable(tf.ones([11, 11, 3, 64], tf.float32))
-    if data_format == 'NHWC':
-        strides = [1, 4, 4, 1]
-    else:
-        strides = [1, 1, 4, 4]
+def overfeat(data, data_format, num_tasks=1):
+    #1
+    kernel = tf.Variable(tf.ones([7, 7, 3, 96], tf.float32))
+    strides = [1, 1, 2, 2]
     net = tf.nn.conv2d(data, kernel, strides, padding='VALID', data_format=data_format)
+    net = tf.nn.relu(net)
     print net.shape
-    net = tf.nn.relu(net)
-    if data_format == 'NHWC':
-        ksize=[1, 3, 3, 1]
-        strides=[1, 2, 2, 1]
-    else:
-        ksize=[1, 1, 3, 3]
-        strides=[1, 1, 2, 2]
-    net = tf.nn.max_pool(net, ksize=ksize, strides=strides, padding='VALID', data_format=data_format)
+    ksize=[1, 1, 3, 3]
+    strides=[1, 1, 3, 3]
+    net = tf.nn.max_pool(net, ksize=ksize, strides=strides, padding='SAME', data_format=data_format)
     print net.shape
-    if num_tasks > 1:
-        kernels = []
-        for i in range(num_tasks):
-            kernels.append(tf.Variable(tf.ones([5, 5, 64, 192 / num_tasks], tf.float32)))
-        kernel = tf.concat(kernels, 3)
-    else:
-        kernel = tf.Variable(tf.ones([5, 5, 64, 192], tf.float32))
-    net = tf.nn.conv2d(net, kernel, [1, 1, 1, 1], padding='SAME', data_format=data_format)
+    #2
+    kernel = tf.Variable(tf.ones([7, 7, 96, 256], tf.float32))
+    strides = [1, 1, 1, 1]
+    net = tf.nn.conv2d(net, kernel, strides, padding='VALID', data_format=data_format)
     net = tf.nn.relu(net)
-    net = tf.nn.max_pool(net, ksize=ksize, strides=strides, padding='VALID', data_format=data_format)
-    if num_tasks > 1:
-        kernels = []
-        for i in range(num_tasks):
-            kernels.append(tf.Variable(tf.ones([3, 3, 192, 384 / num_tasks], tf.float32)))
-        kernel = tf.concat(kernels, 3)
-    else:
-        kernel = tf.Variable(tf.ones([3, 3, 192, 384], tf.float32))
-    net = tf.nn.conv2d(net, kernel, [1, 1, 1, 1], padding='SAME', data_format=data_format)
+    print net.shape
+    ksize=[1, 1, 2, 2]
+    strides=[1, 1, 2, 2]
+    net = tf.nn.max_pool(net, ksize=ksize, strides=strides, padding='SAME', data_format=data_format)
+    print net.shape
+    # 3
+    kernel = tf.Variable(tf.ones([3, 3, 256, 512], tf.float32))
+    strides = [1, 1, 1, 1]
+    net = tf.nn.conv2d(net, kernel, strides, padding='SAME', data_format=data_format)
     net = tf.nn.relu(net)
-    if num_tasks > 1:
-        kernels = []
-        for i in range(num_tasks):
-            kernels.append(tf.Variable(tf.ones([3, 3, 384, 256 / num_tasks], tf.float32)))
-        kernel = tf.concat(kernels, 3)
-    else:
-        kernel = tf.Variable(tf.ones([3, 3, 384, 256], tf.float32))
-    net = tf.nn.conv2d(net, kernel, [1, 1, 1, 1], padding='SAME', data_format=data_format)
+    print net.shape
+    # 4
+    kernel = tf.Variable(tf.ones([3, 3, 512, 512], tf.float32))
+    strides = [1, 1, 1, 1]
+    net = tf.nn.conv2d(net, kernel, strides, padding='SAME', data_format=data_format)
     net = tf.nn.relu(net)
-    if num_tasks > 1:
-        kernels = []
-        for i in range(num_tasks):
-            kernels.append(tf.Variable(tf.ones([3, 3, 256, 256 / num_tasks], tf.float32)))
-        kernel = tf.concat(kernels, 3)
-    else:
-        kernel = tf.Variable(tf.ones([3, 3, 256, 256], tf.float32))
-    net = tf.nn.conv2d(net, kernel, [1, 1, 1, 1], padding='SAME', data_format=data_format)
+    print net.shape
+    # 5
+    kernel = tf.Variable(tf.ones([3, 3, 512, 1024], tf.float32))
+    strides = [1, 1, 1, 1]
+    net = tf.nn.conv2d(net, kernel, strides, padding='SAME', data_format=data_format)
     net = tf.nn.relu(net)
-    net = tf.nn.max_pool(net, ksize=ksize, strides=strides, padding='VALID', data_format=data_format)
-    print net.shape, net.dtype, int(np.prod(net.get_shape()[1:]))
+    print net.shape
+    # 6
+    kernel = tf.Variable(tf.ones([3, 3, 1024, 1024], tf.float32))
+    strides = [1, 1, 1, 1]
+    net = tf.nn.conv2d(net, kernel, strides, padding='SAME', data_format=data_format)
+    net = tf.nn.relu(net)
+    print net.shape
+    ksize=[1, 1, 3, 3]
+    strides=[1, 1, 3, 3]
+    net = tf.nn.max_pool(net, ksize=ksize, strides=strides, padding='SAME', data_format=data_format)
+    print net.shape
+    # 7
     net = tf.reshape(net, [-1, int(np.prod(net.get_shape()[1:]))])
     if num_tasks > 1:
         kernels = []
         for i in range(num_tasks):
-            kernels.append(tf.Variable(tf.ones([6400, 4096 / num_tasks], tf.float32)))
-        kernel1 = tf.concat(kernels, 1)
-        kernels = []
-        for i in range(num_tasks):
-            kernels.append(tf.Variable(tf.ones([4096 / num_tasks], tf.float32)))
-        kernel2 = tf.concat(kernels, 0)
+            kernels.append(tf.Variable(tf.ones([25600/num_tasks, 4096], tf.float32)))
+        kernel1 = tf.concat(kernels, 0)
     else:
-        kernel1 = tf.Variable(tf.ones([6400, 4096]), tf.float32)
-        kernel2 = tf.Variable(tf.ones([4096, ]), tf.float32)
-    #net = tf.nn.relu_layer(net, kernel1, kernel2)
+        kernel1 = tf.Variable(tf.ones([25600, 4096]), tf.float32)
     net = tf.matmul(net, kernel1)
     net = tf.nn.relu(net)
+    print net.shape
+    # 8
     if num_tasks > 1:
         kernels = []
         for i in range(num_tasks):
-            kernels.append(tf.Variable(tf.ones([4096, 4096 / num_tasks], tf.float32)))
-        kernel1 = tf.concat(kernels, 1)
-        kernels = []
-        for i in range(num_tasks):
-            kernels.append(tf.Variable(tf.ones([4096 / num_tasks, ], tf.float32)))
-        kernel2 = tf.concat(kernels, 0)
+            kernels.append(tf.Variable(tf.ones([4096/num_tasks, 4096], tf.float32)))
+        kernel1 = tf.concat(kernels, 0)
     else:
         kernel1 = tf.Variable(tf.ones([4096, 4096]), tf.float32)
-        kernel2 = tf.Variable(tf.ones([4096, ]), tf.float32)
-    #net = tf.nn.relu_layer(net, kernel1, kernel2)
     net = tf.matmul(net, kernel1)
     net = tf.nn.relu(net)
-    if num_tasks > 1:
-        kernels = []
-        for i in range(num_tasks):
-            kernels.append(tf.Variable(tf.ones([4096, 1024 / num_tasks], tf.float32)))
-        kernel1 = tf.concat(kernels, 1)
-        kernels = []
-        for i in range(num_tasks):
-            kernels.append(tf.Variable(tf.ones([1024 / num_tasks, ], tf.float32)))
-        kernel2 = tf.concat(kernels, 0)
-    else:
-        kernel1 = tf.Variable(tf.ones([4096, 1024]), tf.float32)
-        kernel2 = tf.Variable(tf.ones([1024, ]), tf.float32)
-    #net = tf.nn.relu_layer(net, kernel1, kernel2)
+    print net.shape
+    # 9
+    kernel1 = tf.Variable(tf.ones([4096, 1024]), tf.float32)
     net = tf.matmul(net, kernel1)
     net = tf.nn.relu(net)
+
     prob = tf.nn.softmax(net)
     return prob
 
@@ -126,8 +95,8 @@ def get_mpi_hosts(FLAGS):
     comm = MPI.COMM_WORLD
     task_index = comm.Get_rank() / 2
     job_name = "ps" if comm.Get_rank() % 2 == 0 else "worker"
-    #if job_name == "ps":
-        #os.environ["KMP_AFFINITY"]="verbose,explicit,granularity=thread,proclist=[4,5,6,7] "
+    if job_name == "ps":
+        os.environ["KMP_AFFINITY"]="verbose,explicit,granularity=thread,proclist=[4,5,6,7] "
     num_tasks = comm.Get_size() / 2
     ps_hosts = ""
     worker_hosts = ""
@@ -175,20 +144,20 @@ def main(_):
 
             # Build model...
             if data_format == 'NHWC':
-                data = tf.placeholder(tf.float32, (batch , 224, 224, 3))
+                data = tf.placeholder(tf.float32, (batch , 221, 221, 3))
             else:
-                data = tf.placeholder(tf.float32, (batch , 3, 224, 224))
-            loss = alexnet(data, data_format)
-            #loss = alexnet(data, data_format, FLAGS.num_tasks)
+                data = tf.placeholder(tf.float32, (batch , 3, 221, 221))
+            #loss = overfeat(data, data_format)
+            loss = overfeat(data, data_format, FLAGS.num_tasks)
             global_step = tf.contrib.framework.get_or_create_global_step()
 
             optimizer = tf.train.GradientDescentOptimizer(0.01)
             #optimizer = tf.train.SyncReplicasOptimizer(
                            #optimizer, replicas_to_aggregate=FLAGS.num_tasks,
                            #total_num_replicas=FLAGS.num_tasks)
-            train_op = optimizer.minimize(loss, global_step = global_step)
-            #train_op = optimizer.compute_gradients(loss)
-            #train_op = optimizer.apply_gradients(train_op, global_step=global_step)
+            #train_op = optimizer.minimize(loss, global_step = global_step)
+            train_op = optimizer.compute_gradients(loss)
+            train_op = optimizer.apply_gradients(train_op, global_step=global_step)
 
         # The StopAtStepHook handles stopping after running given steps.
         hooks=[tf.train.StopAtStepHook(last_step=loops),]
@@ -198,9 +167,9 @@ def main(_):
         # restoring from a checkpoint, saving to a checkpoint, and closing when done
         # or an error occurs.
         if data_format == 'NHWC':
-            x = np.random.rand(batch, 224, 224, 3)
+            x = np.random.rand(batch, 221, 221, 3)
         else:
-            x = np.random.rand(batch, 3, 224, 224)
+            x = np.random.rand(batch, 3, 221, 221)
         durations = []
         ops = tf.GraphOptions(build_cost_model=0)
         config = tf.ConfigProto(graph_options=ops)
@@ -220,15 +189,15 @@ def main(_):
                 # perform *synchronous* training.
                 # mon_sess.run handles AbortedError in case of preempted PS.
                 begin = time.time()
-                mon_sess.run(train_op, feed_dict={data: x}, options=options, run_metadata=run_metadata)
+                mon_sess.run(train_op, feed_dict={data: x})
                 end = time.time()
                 duration = end - begin
                 print "Duration: ", ((len(durations) + 1), loops, duration)
                 durations.append(duration)
-                if len(durations) == 5:
-                   trace = timeline.Timeline(step_stats=run_metadata.step_stats)
-                   with open('timeline.ctf.json', 'w') as fp:
-                       fp.write(trace.generate_chrome_trace_format())
+                #if len(durations) == 5:
+                   #trace = timeline.Timeline(step_stats=run_metadata.step_stats)
+                   #with open('timeline.ctf.json', 'w') as fp:
+                       #fp.write(trace.generate_chrome_trace_format())
                 if len(durations) >= 100:
                    print("average : %f " % (sum(durations[cold_start:]) / (len(durations) - cold_start)))
         time.sleep(1)

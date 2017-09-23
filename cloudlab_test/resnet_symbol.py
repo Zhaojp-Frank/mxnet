@@ -1,28 +1,16 @@
-# pylint: skip-file
-from __future__ import print_function
-
 import mxnet as mx
-import numpy as np
-import os, sys,time
-import pickle as pickle
-import logging
-import argparse
-import resnet_symbol
 
-num_loops = 15
-cold_skip = 5
-
-rng = np.random.RandomState(seed=32)
+def add_args(parser):
+    parser.add_argument('--num_layers', type=int, default=50, help='Number of resnet layers')
 
 has_activation = True
-
 def Activation(data, **kwargs):
     if has_activation:
         return mx.sym.Activation(data=data, **kwargs)
     else:
         return data
 
-expand_shortcut = False
+expand_shortcut = True
 def Expand(data, num_skips):
     if expand_shortcut:
         for i in range(num_skips):
@@ -129,11 +117,16 @@ def resnet(units, num_stages, filter_list, num_classes, image_shape, bottle_neck
     fc1 = mx.symbol.FullyConnected(data=flat, num_hidden=num_classes, name='fc1', no_bias=True)
     return mx.symbol.SoftmaxOutput(data=fc1, name='softmax')
 
-def get_symbol(num_classes, num_layers, image_shape, conv_workspace=256, **kwargs):
+def get_symbol(args, conv_workspace=256):
     """
     Adapted from https://github.com/tornadomeet/ResNet/blob/master/train_resnet.py
     Original author Wei Wu
     """
+    image_shape = (3, 224, 224)
+    num_classes = 1024
+    num_layers = 50
+    if hasattr(args, 'num_layers'):
+      num_layers = args.num_layers
     (nchannel, height, width) = image_shape
     if height <= 28:
         num_stages = 3
@@ -151,6 +144,7 @@ def get_symbol(num_classes, num_layers, image_shape, conv_workspace=256, **kwarg
     else:
         if num_layers >= 50:
             filter_list = [64, 256, 512, 1024, 2048]
+            #filter_list = [i * 2 for i in filter_list]
             bottle_neck = True
         else:
             filter_list = [64, 64, 128, 256, 512]
@@ -179,115 +173,4 @@ def get_symbol(num_classes, num_layers, image_shape, conv_workspace=256, **kwarg
                   num_classes = num_classes,
                   image_shape = image_shape,
                   bottle_neck = bottle_neck,
-                  workspace   = conv_workspace)
-
-def feed_args(net, arg_arrays):
-    names = net.list_arguments()
-    for name, arr in zip(names, arg_arrays):
-        if not name.endswith('label'):
-            # create random data
-            arr[:] = 0.1 * rng.randn(*(arr.shape))
-
-def test_mlp():
-    has_mpi = False
-    # print logging by default
-    logging.basicConfig(level=logging.DEBUG)
-
-    print(sys.argv)
-    parser = argparse.ArgumentParser("Tofu MLP test code")
-    parser.add_argument('--batch_size', type=int, help='Batch size', default=32)
-    parser.add_argument('--num_layers', type=int, default=50, help='Number of hidden layers')
-    parser.add_argument('--num_gpus', type=int, default=1, help='Number of GPUs')
-    parser.add_argument('-a', '--addresses', type=str, help='Addresses of all workers.')
-    parser.add_argument('-i', '--worker_index', type=int, 
-                        help='Index of this worker in addresses')
-    parser.add_argument('-f', '--host_file', type=str,
-                        help='Host file that contains addresses of all workers.')
-
-    args = parser.parse_args()
-    if args.host_file:
-        addresses = []
-        with open(args.host_file) as fp:
-            for line in fp:
-                if line.find(":") == -1:
-                    addresses.append(line.strip() + ":9200")
-                else:
-                    addresses.append(line.strip())
-    else:
-        addresses = args.addresses.split(',')
-    if args.worker_index is not None:
-        worker_index = args.worker_index
-    else:
-        has_mpi = True
-        from mpi4py import MPI
-        comm = MPI.COMM_WORLD
-        worker_index = comm.Get_rank()
-    n_workers = len(addresses)
-    group2ctx = {'group:%d' % i : mx.cpu(0, addresses[i]) for i in range(n_workers)}
-    default_ctx = mx.cpu(0, addresses[worker_index])
-
-    net, image_shape, num_classes = resnet_symbol.get_symbol(args)
-
-    print(net)
-    print(net.list_arguments())
-    print(net.list_outputs())
-
-    # infer shapes
-    in_shapes = {}
-    #in_shapes = {'fc%d_weight' % i: (args.hidden_size, args.hidden_size) for i in range(args.num_layers)}
-    in_shapes['data'] = (args.batch_size, ) + image_shape
-    in_types = {}
-    #in_types = {'fc%d_weight' % i : mx.base.mx_real_t for i in range(args.num_layers)}
-    in_types['data'] = mx.base.mx_real_t
-    arg_shapes, out_shapes, aux_shapes = net.infer_shape(**in_shapes)
-    arg_types, out_types, aux_types = net.infer_type(**in_types)
-
-    # create ndarrays for all arguments.
-    arg_arrays = [mx.nd.zeros(shape, default_ctx, dtype=dtype)
-                  for shape, dtype in zip(arg_shapes, arg_types)]
-    print('Num arguments: ', len(arg_arrays))
-    # create gradient ndarray for all parameters.
-    args_grad = {name : mx.nd.zeros(shape, default_ctx, dtype=dtype)
-                 for name, shape, dtype in zip(net.list_arguments(), arg_shapes, arg_types)
-                 if name != 'data' and not name.endswith('label')}
-    print('Argument grads: ', args_grad.keys())
-
-    executor = net.bind(ctx=default_ctx,
-                        args=arg_arrays,
-                        args_grad=args_grad,
-                        grad_req='write',
-                        group2ctx=group2ctx)
-    #return
-
-    #feed_args(net, arg_arrays)
-    all_time = []
-    for i in range(num_loops):
-        print('=> loop %d' % i);
-        st_l = time.time()
-        if i == cold_skip:
-            t0 = time.time()
-        outputs = executor.forward()
-        executor.backward()
-        for name, grad in args_grad.items():
-            grad.wait_to_read()
-        # XXX(minjie): Currently, the last output is used to synchronize all send nodes.
-        # Send nodes may not appear on the dependency path of the local graph.
-        # We need make sure all send nodes have finished before the end of the iteration.
-        if len(outputs) > 0:
-            outputs[-1].wait_to_read()
-        ed_l = time.time()
-        print('=> loop duration %f' % float(ed_l - st_l))
-        if (i >= cold_skip):
-             all_time.append(float(ed_l - st_l))
-    t1 = time.time()
-
-    duration = t1 - t0
-    print('duration %f, average %f' % (duration, 
-                                       float(duration) / (num_loops - 
-                                                          cold_skip)))
-    print('std : %f' % np.asarray(all_time).std())
-
-
-if __name__ == "__main__":
-    print('================ Test Begin ====================')
-    test_mlp()
+                  workspace   = conv_workspace), (3, 224, 224), 1024

@@ -11,6 +11,7 @@ OPTIONS=$OPTIONS" -x LD_LIBRARY_PATH=/opt/intel/lib/intel64 "
 OPTIONS=$OPTIONS" -x PYTHONPATH=/local/mxnet/python "
 OPTIONS=$OPTIONS" -x MXNET_P2PNET_HOST_PATH=$HOST "
 OPTIONS=$OPTIONS" -x KMP_AFFINITY=verbose,explicit,granularity=thread,proclist=[$AFFINITY] "
+#OPTIONS=$OPTIONS" -x KMP_AFFINITY=granularity=fine,verbose,compact,1,0 "
 OPTIONS=$OPTIONS" -x OMP_NUM_THREADS=$NCORES "
 OPTIONS=$OPTIONS" -x MKL_NUM_THREADS=$NCORES "
 OPTIONS=$OPTIONS" -x MKL_DOMAIN_NUM_THREADS=$NCORES "
@@ -27,6 +28,7 @@ OPTIONS=$OPTIONS" -x TOFU_NO_COMPUTATION=0 "
 OPTIONS=$OPTIONS" -x TOFU_FAKE_VAR_SPLIT_CONCAT=1 "
 OPTIONS=$OPTIONS" -x MXNET_CPU_TEMP_COPY=16 "
 OPTIONS=$OPTIONS" -x MXNET_EXEC_ENABLE_INPLACE=1 "
+OPTIONS=$OPTIONS" -x KMP_BLOCKTIME=30 "
 #OPTIONS=$OPTIONS" -x OMP_PROC_BIND=TRUE "
 #OPTIONS=$OPTIONS" -x OMP_SCHEDULE=static "
 #OPTIONS=$OPTIONS" -x OMP_NESTED=TRUE "
@@ -42,7 +44,7 @@ then
 fi
 
 echo "Doing $NP $B $H without communication"
-mpirun $OPTIONS -output-filename log_alexnet_without_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=2 -x TOFU_TILING_TYPE=kcuts  -x MXNET_P2PNET_USE_MPI_BARRIER=0 $CMD -f $HOST 
+mpirun $OPTIONS -output-filename log_alexnet_without_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=2 -x TOFU_TILING_TYPE=kcuts  -x MXNET_P2PNET_USE_MPI_BARRIER=0 $CMD -f $HOST
 
 echo "Doing $NP $B $H with communication"
 mpirun $OPTIONS -output-filename log_alexnet_with_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=0 -x TOFU_TILING_TYPE=kcuts -x MXNET_P2PNET_USE_MPI_BARRIER=1 $CMD -f $HOST
@@ -58,3 +60,9 @@ mpirun $OPTIONS -output-filename log_alexnet_mp_without_comm_${NP}_${B}_${H} -x 
 
 echo "Doing $NP $B $H modelpar with communication"
 mpirun $OPTIONS -output-filename log_alexnet_mp_with_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=0 -x TOFU_TILING_TYPE=modelpar -x MXNET_P2PNET_USE_MPI_BARRIER=1 $CMD -f $HOST
+
+echo "Doing $NP $B $H owt without communication"
+mpirun $OPTIONS -output-filename log_alexnet_owt_without_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=2 -x TOFU_TILING_TYPE=hybridpar -x MXNET_P2PNET_USE_MPI_BARRIER=0 $CMD -f $HOST
+
+echo "Doing $NP $B $H owt with communication"
+mpirun $OPTIONS -output-filename log_alexnet_owt_with_comm_${NP}_${B}_${H} -x MXNET_P2PNET_DEBUG=0 -x TOFU_TILING_TYPE=hybridpar -x MXNET_P2PNET_USE_MPI_BARRIER=1 $CMD -f $HOST
