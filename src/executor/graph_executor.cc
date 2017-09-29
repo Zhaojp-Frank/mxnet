@@ -809,6 +809,9 @@ void GraphExecutor::InitCachedOps() {
     if (skip_plus_node.at(nid)) {
       op_nodes_[nid].skip_exec_node = true; continue;
     }
+    if (inode.source->op() == nnvm::Op::Get("_TofuFakeVar")) {
+      op_nodes_[nid].skip_exec_node = true; continue;
+    }
 
     op_nodes_[nid].exec = op_execs[nid];
     op_nodes_[nid].ctx = vctx[nid];

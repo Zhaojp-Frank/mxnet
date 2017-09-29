@@ -339,6 +339,12 @@ NNVM_REGISTER_OP(_NoGradient)
 .set_attr<FCompute>("FCompute<cpu>", NoGradientCompute)
 .set_attr<FCompute>("FCompute<gpu>", NoGradientCompute);
 
+NNVM_REGISTER_OP(_TofuFakeVar)
+ .set_num_inputs(0)
+ .set_num_outputs(1)
+ .set_attr<FCompute>("FCompute<cpu>", NoGradientCompute)
+ .set_attr<FCompute>("FCompute<gpu>", NoGradientCompute) ;
+
 void RegisterLegacyNDFunc() {
   for (auto reg : dmlc::Registry<NDArrayFunctionReg>::List()) {
     if (reg->type_mask & kScalarArgBeforeNDArray) continue;
