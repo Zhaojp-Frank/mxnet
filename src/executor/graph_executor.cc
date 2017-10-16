@@ -10,6 +10,8 @@
 #include <queue>
 #include <algorithm>
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <sys/time.h>
 
 #include "./exec_pass.h"
@@ -577,6 +579,11 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   // setup gradient
   nnvm::Graph g = InitFullGraph(symbol, grad_req_type, arg_grad_store);
   g = InferShapeType(g, in_args, aux_states);
+  std::string json = nnvm::pass::SaveJSON(g);
+  std::ofstream json_file;
+  json_file.open("graph.json");
+  json_file << json;
+  json_file.close();
   // Call partition pass here.
   bool need_grad = false;
   for (OpReqType req : grad_req_type) {
@@ -592,6 +599,19 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   if (num_devices > 1 && need_grad) {
     g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_devices);
     g.attrs["default_group"] = std::make_shared<nnvm::any>(std::string("group:default"));
+    g.attrs["user_tiling_json"] = std::make_shared<nnvm::any>("");
+    const std::string& tiling_type = dmlc::GetEnv("TOFU_TILING_TYPE",
+                                                  std::string("kcuts"));
+    if (tiling_type == "usertiling") {
+      const std::string& user_tiling_json =
+        dmlc::GetEnv("TOFU_TILING_JSON", std::string("user_tiling.json"));
+      std::ifstream json_file;
+      json_file.open(user_tiling_json);
+      std::stringstream json;
+      json << json_file.rdbuf();
+      json_file.close();
+      g.attrs["user_tiling_json"] = std::make_shared<nnvm::any>(json.str());
+    }
     g = nnvm::ApplyPass(g, "PartitionPass");
   }
   // Assign contexts to the graph.
@@ -743,7 +763,6 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
     }
   }
   CHECK_EQ(data_pool_.size(), pool_info.size());
-
   // assign the data entries
   for (size_t i = 0; i < data_entry_.size(); ++i) {
     // avoid pre-allocated arrays
@@ -792,7 +811,7 @@ void GraphExecutor::InitCachedOps() {
   const auto& vctx = graph_.GetAttr<ContextVector>("context");
   const auto& addto_entry = graph_.GetAttr<std::vector<int> >("addto_entry");
   const auto& skip_plus_node = graph_.GetAttr<std::vector<int> >("skip_plus_node");
-  
+
   // Get priorities.
   const auto& node_priorities = CalcPriority();
 
