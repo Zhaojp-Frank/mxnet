@@ -14,6 +14,7 @@
 #include <sstream>
 #include <sys/time.h>
 
+#include "./dfge_profiling.h"
 #include "./exec_pass.h"
 #include "./graph_executor.h"
 #include "../engine/profiler.h"
@@ -78,6 +79,7 @@ GraphExecutor::~GraphExecutor() {
 }
 
 void GraphExecutor::Forward(bool is_train) {
+  DFGEProfiler::Get().Write(-1, false, false);
   RunOps(is_train, 0, num_forward_nodes_);
 }
 
@@ -863,6 +865,7 @@ void GraphExecutor::InitCachedOps() {
         grad_store_[j - num_forward_outputs_].first;
   }
   std::vector<Engine::VarHandle> finish_vars(idx.num_nodes());
+  DFGEProfiler::Get().Begin();
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
     finish_vars[nid] = Engine::Get()->NewVariable();
@@ -931,12 +934,27 @@ void GraphExecutor::InitCachedOps() {
       PROFILER_MESSAGE("SetupExec"));
     }
     auto& name = idx[nid].source->attrs.name;
-    auto exec_fun = [exec, is_async, is_gpu, name, this] (
+    auto exec_fun = [exec, is_async, is_gpu, name, nid, this] (
         RunContext ctx, Engine::CallbackOnComplete on_complete) {
       if (is_async) {
-        exec->op_ctx.async_on_complete = on_complete;
+        //exec->op_ctx.async_on_complete = on_complete;
+        struct Capture {
+          Engine::CallbackOnComplete on_complete;
+          uint32_t nid;
+          bool is_gpu;
+        };
+        Capture* capture = new Capture{on_complete, nid, is_gpu};
+        exec->op_ctx.async_on_complete =
+          Engine::Get()->CreateCallback(
+              [](Engine* engine, void *param) {
+                  Capture* cpt = static_cast<Capture*>(param);
+                  cpt->on_complete();
+                  DFGEProfiler::Get().Write(cpt->nid, cpt->is_gpu, true);
+                  delete cpt;
+              }, static_cast<void*>(capture));
       }
       op::P2PNetDebugger::Get().PrintTime("Begin executing %s", name.c_str());
+      DFGEProfiler::Get().Write(nid, is_gpu, is_async);
       //timeval st, ed;
       //gettimeofday(&st, NULL);
       exec->Run(ctx);
@@ -957,6 +975,7 @@ void GraphExecutor::InitCachedOps() {
           //LOG(INFO) << "Node: " << name << " time: " << ((ed.tv_sec - st.tv_sec) * 1000.0 + (ed.tv_usec - st.tv_usec) / 1000.0);
         //}
         on_complete();
+        DFGEProfiler::Get().Write(nid, is_gpu, is_async);
       }
     };
     // setup the vars

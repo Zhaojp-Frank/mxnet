@@ -1463,6 +1463,8 @@ MXNET_DLL int MXRtcFree(RtcHandle handle);
 
 MXNET_DLL int MXCustomOpRegister(const char* op_type, CustomOpPropCreator creator);
 
+MXNET_DLL int MXReadDFGEProfile(size_t *out_size, const char **out_buf);
+
 #ifdef __cplusplus
 }
 #endif  // __cplusplus
