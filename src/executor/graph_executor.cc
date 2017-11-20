@@ -79,6 +79,7 @@ GraphExecutor::~GraphExecutor() {
 }
 
 void GraphExecutor::Forward(bool is_train) {
+  DFGEProfiler::Get().Begin();
   DFGEProfiler::Get().Write(-1, false, false);
   RunOps(is_train, 0, num_forward_nodes_);
 }
@@ -97,10 +98,10 @@ void GraphExecutor::Backward(const std::vector<NDArray>& head_grads) {
   if (num_forward_inputs_ != idx.input_nodes().size()) {
     for (size_t i = 0; i < head_grad_array_.size(); ++i) {
       if (!head_grad_array_[i].is_none()) {
-        CHECK(i < head_grads.size() && !head_grads[i].is_none())
-            << "Because the last operator is not Loss function, "
-            << "head_gradient is required in calling backward.";
-        LOG(INFO) << "[WARNING!!!] Copy is turned off for header grad";
+        //CHECK(i < head_grads.size() && !head_grads[i].is_none())
+            //<< "Because the last operator is not Loss function, "
+            //<< "head_gradient is required in calling backward.";
+        //LOG(INFO) << "[WARNING!!!] Copy is turned off for header grad";
         // TODO: hack
         //CopyFromTo(head_grads[i], &(head_grad_array_[i]));
       }
