@@ -10,8 +10,11 @@
 #include <queue>
 #include <algorithm>
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <sys/time.h>
 
+#include "./dfge_profiling.h"
 #include "./exec_pass.h"
 #include "./graph_executor.h"
 #include "../engine/profiler.h"
@@ -76,6 +79,8 @@ GraphExecutor::~GraphExecutor() {
 }
 
 void GraphExecutor::Forward(bool is_train) {
+  DFGEProfiler::Get().Begin();
+  DFGEProfiler::Get().Write(-1, false, false);
   RunOps(is_train, 0, num_forward_nodes_);
 }
 
@@ -93,10 +98,10 @@ void GraphExecutor::Backward(const std::vector<NDArray>& head_grads) {
   if (num_forward_inputs_ != idx.input_nodes().size()) {
     for (size_t i = 0; i < head_grad_array_.size(); ++i) {
       if (!head_grad_array_[i].is_none()) {
-        CHECK(i < head_grads.size() && !head_grads[i].is_none())
-            << "Because the last operator is not Loss function, "
-            << "head_gradient is required in calling backward.";
-        LOG(INFO) << "[WARNING!!!] Copy is turned off for header grad";
+        //CHECK(i < head_grads.size() && !head_grads[i].is_none())
+            //<< "Because the last operator is not Loss function, "
+            //<< "head_gradient is required in calling backward.";
+        //LOG(INFO) << "[WARNING!!!] Copy is turned off for header grad";
         // TODO: hack
         //CopyFromTo(head_grads[i], &(head_grad_array_[i]));
       }
@@ -577,6 +582,11 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   // setup gradient
   nnvm::Graph g = InitFullGraph(symbol, grad_req_type, arg_grad_store);
   g = InferShapeType(g, in_args, aux_states);
+  std::string json = nnvm::pass::SaveJSON(g);
+  std::ofstream json_file;
+  json_file.open("graph.json");
+  json_file << json;
+  json_file.close();
   // Call partition pass here.
   bool need_grad = false;
   for (OpReqType req : grad_req_type) {
@@ -592,6 +602,19 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   if (num_devices > 1 && need_grad) {
     g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_devices);
     g.attrs["default_group"] = std::make_shared<nnvm::any>(std::string("group:default"));
+    g.attrs["user_tiling_json"] = std::make_shared<nnvm::any>("");
+    const std::string& tiling_type = dmlc::GetEnv("TOFU_TILING_TYPE",
+                                                  std::string("kcuts"));
+    if (tiling_type == "usertiling") {
+      const std::string& user_tiling_json =
+        dmlc::GetEnv("TOFU_TILING_JSON", std::string("user_tiling.json"));
+      std::ifstream json_file;
+      json_file.open(user_tiling_json);
+      std::stringstream json;
+      json << json_file.rdbuf();
+      json_file.close();
+      g.attrs["user_tiling_json"] = std::make_shared<nnvm::any>(json.str());
+    }
     g = nnvm::ApplyPass(g, "PartitionPass");
   }
   // Assign contexts to the graph.
@@ -743,7 +766,6 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
     }
   }
   CHECK_EQ(data_pool_.size(), pool_info.size());
-
   // assign the data entries
   for (size_t i = 0; i < data_entry_.size(); ++i) {
     // avoid pre-allocated arrays
@@ -792,7 +814,7 @@ void GraphExecutor::InitCachedOps() {
   const auto& vctx = graph_.GetAttr<ContextVector>("context");
   const auto& addto_entry = graph_.GetAttr<std::vector<int> >("addto_entry");
   const auto& skip_plus_node = graph_.GetAttr<std::vector<int> >("skip_plus_node");
-  
+
   // Get priorities.
   const auto& node_priorities = CalcPriority();
 
@@ -807,6 +829,9 @@ void GraphExecutor::InitCachedOps() {
     op_nodes_[nid].opr_name = nullptr;
 #endif
     if (skip_plus_node.at(nid)) {
+      op_nodes_[nid].skip_exec_node = true; continue;
+    }
+    if (inode.source->op() == nnvm::Op::Get("_TofuFakeVar")) {
       op_nodes_[nid].skip_exec_node = true; continue;
     }
 
@@ -841,6 +866,7 @@ void GraphExecutor::InitCachedOps() {
         grad_store_[j - num_forward_outputs_].first;
   }
   std::vector<Engine::VarHandle> finish_vars(idx.num_nodes());
+  DFGEProfiler::Get().Begin();
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
     finish_vars[nid] = Engine::Get()->NewVariable();
@@ -909,12 +935,27 @@ void GraphExecutor::InitCachedOps() {
       PROFILER_MESSAGE("SetupExec"));
     }
     auto& name = idx[nid].source->attrs.name;
-    auto exec_fun = [exec, is_async, is_gpu, name, this] (
+    auto exec_fun = [exec, is_async, is_gpu, name, nid, this] (
         RunContext ctx, Engine::CallbackOnComplete on_complete) {
       if (is_async) {
-        exec->op_ctx.async_on_complete = on_complete;
+        //exec->op_ctx.async_on_complete = on_complete;
+        struct Capture {
+          Engine::CallbackOnComplete on_complete;
+          uint32_t nid;
+          bool is_gpu;
+        };
+        Capture* capture = new Capture{on_complete, nid, is_gpu};
+        exec->op_ctx.async_on_complete =
+          Engine::Get()->CreateCallback(
+              [](Engine* engine, void *param) {
+                  Capture* cpt = static_cast<Capture*>(param);
+                  cpt->on_complete();
+                  DFGEProfiler::Get().Write(cpt->nid, cpt->is_gpu, true);
+                  delete cpt;
+              }, static_cast<void*>(capture));
       }
       op::P2PNetDebugger::Get().PrintTime("Begin executing %s", name.c_str());
+      DFGEProfiler::Get().Write(nid, is_gpu, is_async);
       //timeval st, ed;
       //gettimeofday(&st, NULL);
       exec->Run(ctx);
@@ -935,6 +976,7 @@ void GraphExecutor::InitCachedOps() {
           //LOG(INFO) << "Node: " << name << " time: " << ((ed.tv_sec - st.tv_sec) * 1000.0 + (ed.tv_usec - st.tv_usec) / 1000.0);
         //}
         on_complete();
+        DFGEProfiler::Get().Write(nid, is_gpu, is_async);
       }
     };
     // setup the vars

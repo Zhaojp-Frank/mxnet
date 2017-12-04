@@ -57,4 +57,6 @@ from . import test_utils
 
 from . import rnn
 
+from . import dfge
+
 __version__ = base.__version__

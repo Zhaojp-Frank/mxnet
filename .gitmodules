@@ -10,6 +10,7 @@
 [submodule "nnvm"]
 	path = nnvm
 	url = https://github.com/fegin/nnvm
+	branch = p2p_net_resnet
 [submodule "cub"]
 	path = cub
 	url = https://github.com/NVlabs/cub

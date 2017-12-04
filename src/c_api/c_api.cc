@@ -25,6 +25,7 @@
 #include "./c_api_common.h"
 #include "../operator/custom-inl.h"
 #include "../engine/profiler.h"
+#include "../executor/dfge_profiling.h"
 
 using namespace mxnet;
 
@@ -877,5 +878,11 @@ int MXRtcFree(RtcHandle handle) {
 int MXCustomOpRegister(const char* op_type, CustomOpPropCreator creator) {
   API_BEGIN();
   mxnet::op::CustomOpProp::Register(op_type, creator);
+  API_END();
+}
+
+MXNET_DLL int MXReadDFGEProfile(size_t *out_size, const char **out_buf) {
+  API_BEGIN();
+  *out_buf = exec::DFGEProfiler::Get().Read(out_size);
   API_END();
 }
