@@ -9,7 +9,7 @@
 	url = https://github.com/dmlc/ps-lite
 [submodule "nnvm"]
 	path = nnvm
-	url = https://github.com/dmlc/nnvm
+	url = https://github.com/fegin/nnvm
 [submodule "dlpack"]
 	path = dlpack
 	url = https://github.com/dmlc/dlpack
