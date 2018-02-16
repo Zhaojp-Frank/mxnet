@@ -105,6 +105,7 @@ class GraphExecutor : public Executor {
             Executor* shared_exec = nullptr,
             const nnvm::NodeEntryMap<NDArray>& feed_dict
               = nnvm::NodeEntryMap<NDArray>());
+  nnvm::Graph GetGraph() {return graph_;};
 
  protected:
   friend class mxnet::Imperative;

@@ -25,7 +25,12 @@
 #include <mxnet/base.h>
 #include <mxnet/c_api.h>
 #include <mxnet/executor.h>
+#include <nnvm/c_api.h>
+#include <nnvm/pass.h>
+#include <nnvm/pass_functions.h>
+#include <nnvm/symbolic.h>
 #include "./c_api_common.h"
+#include "../executor/graph_executor.h"
 
 int MXExecutorPrint(ExecutorHandle handle, const char **out_str) {
   Executor *exec = static_cast<Executor*>(handle);
@@ -522,5 +527,17 @@ int MXExecutorSetMonitorCallback(ExecutorHandle handle,
   };
   Executor *exec = static_cast<Executor*>(handle);
   exec->SetMonitorCallback(clbk);
+  API_END();
+}
+
+int MXExecutorSaveGraphToFile(ExecutorHandle handle,
+                              const char *fname) {
+  exec::GraphExecutor *exec = static_cast<exec::GraphExecutor*>(handle);
+  API_BEGIN();
+  std::unique_ptr<dmlc::Stream> fo(dmlc::Stream::Create(fname, "w"));
+  dmlc::ostream os(fo.get());
+  os << nnvm::pass::SaveJSON(exec->GetGraph());
+  // reset file pointer, force flush
+  os.set_stream(nullptr);
   API_END();
 }

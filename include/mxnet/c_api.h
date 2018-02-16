@@ -1440,6 +1440,9 @@ MXNET_DLL int MXExecutorSimpleBind(SymbolHandle symbol_handle,
 MXNET_DLL int MXExecutorSetMonitorCallback(ExecutorHandle handle,
                                            ExecutorMonitorCallback callback,
                                            void* callback_handle);
+
+MXNET_DLL int MXExecutorSaveGraphToFile(ExecutorHandle handle,
+                                        const char *fname);
 //--------------------------------------------
 // Part 5: IO Interface
 //--------------------------------------------

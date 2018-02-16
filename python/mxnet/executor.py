@@ -25,7 +25,7 @@ import copy
 import numpy as np
 from .base import _LIB
 from .base import mx_uint, NDArrayHandle, ExecutorHandle
-from .base import check_call, c_handle_array, py_str
+from .base import check_call, c_handle_array, c_str, py_str, string_types
 from .ndarray import NDArray
 from .ndarray import _ndarray_cls
 from . import ndarray as nd
@@ -496,3 +496,14 @@ class Executor(object):
         check_call(_LIB.MXExecutorPrint(
             self.handle, ctypes.byref(debug_str)))
         return py_str(debug_str.value)
+
+    def save_graph(self, fname):
+        """Saves the dataflow graph in the executor to a file.
+        Parameters
+        ----------
+        fname : str
+            The name of the file.
+        """
+        if not isinstance(fname, string_types):
+            raise TypeError('fname need to be string')
+        check_call(_LIB.MXExecutorSaveGraphToFile(self.handle, c_str(fname)))
