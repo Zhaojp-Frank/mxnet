@@ -36,6 +36,9 @@
 namespace mxnet {
 namespace exec {
 
+nnvm::PlacementVector GraphExecutor::placement_;
+unsigned GraphExecutor::ngpus_ = 0;
+
 GraphExecutor::GraphExecutor() {
   log_verbose_ = dmlc::GetEnv("MXNET_EXEC_VERBOSE_LOGGING", false);
 }
@@ -321,8 +324,9 @@ static Graph AssignContext(Graph g,
                     size_t num_forward_outputs) {
   const auto& idx = g.indexed_graph();
   const auto& mutable_nodes = idx.mutable_input_nodes();
+  const auto& placement = GraphExecutor::GetDevicePlacement();
   // default use default context.
-  if (ctx_map.size() == 0) {
+  if (ctx_map.size() == 0 && placement.size() > 0) {
     g.attrs["context"] = std::make_shared<nnvm::any>(
         ContextVector(idx.num_nodes(), default_ctx));
     for (const auto& x : in_arg_ctxes) {
@@ -402,6 +406,15 @@ static Graph AssignContext(Graph g,
     }
   }
 
+  if (placement.size() > 0) {
+    uint32_t ngpus = GraphExecutor::GetNGPUs();
+    ctx_list.clear();
+    for (uint32_t i = 0; i < ngpus; i++) {
+      ctx_list.push_back(Context::GPU(i));
+    }
+    g = nnvm::pass::ChangePlacement(g, ngpus, "__ctx_group__", placement);
+    device_map = g.GetAttr<nnvm::DeviceAssignMap>("device_map");
+  }
   g.attrs["device"] = std::make_shared<dmlc::any>(std::move(device));
   g = nnvm::pass::PlaceDevice(g, "__ctx_group__", device_map, "_CrossDeviceCopy");
   const auto& assigned_device = g.GetAttr<nnvm::DeviceVector>("device");

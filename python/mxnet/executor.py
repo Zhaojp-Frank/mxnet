@@ -25,7 +25,7 @@ import copy
 import numpy as np
 from .base import _LIB
 from .base import mx_uint, NDArrayHandle, ExecutorHandle
-from .base import check_call, c_handle_array, c_str, py_str, string_types
+from .base import check_call, c_handle_array, c_array, c_str, py_str, string_types
 from .ndarray import NDArray
 from .ndarray import _ndarray_cls
 from . import ndarray as nd
@@ -41,6 +41,11 @@ def _monitor_callback_wrapper(callback):
         """ ctypes function """
         callback(name, array)
     return callback_handle
+
+def set_device_placement(ngpus, placement):
+    c_placement = c_array(mx_uint, placement)
+    check_call(_LIB.MXExecutorSetDevicePlacement(ngpus, c_placement,
+                                                 mx_uint(len(placement))))
 
 class Executor(object):
     """Executor is the object providing efficient symbolic graph execution and optimization.

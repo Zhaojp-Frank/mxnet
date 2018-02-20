@@ -541,3 +541,11 @@ int MXExecutorSaveGraphToFile(ExecutorHandle handle,
   os.set_stream(nullptr);
   API_END();
 }
+
+int MXExecutorSetDevicePlacement(const mx_uint ngpus, const mx_uint* placement,
+                                 const mx_uint size) {
+  API_BEGIN();
+  nnvm::PlacementVector p((unsigned*)placement, (unsigned*)placement + size);
+  exec::GraphExecutor::SetDevicePlacement(ngpus, p);
+  API_END();
+}

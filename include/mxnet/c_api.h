@@ -1443,6 +1443,9 @@ MXNET_DLL int MXExecutorSetMonitorCallback(ExecutorHandle handle,
 
 MXNET_DLL int MXExecutorSaveGraphToFile(ExecutorHandle handle,
                                         const char *fname);
+MXNET_DLL int MXExecutorSetDevicePlacement(const mx_uint ngpus,
+                                           const mx_uint* placement,
+                                           const mx_uint size);
 //--------------------------------------------
 // Part 5: IO Interface
 //--------------------------------------------

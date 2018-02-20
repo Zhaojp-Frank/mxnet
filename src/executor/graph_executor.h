@@ -106,6 +106,13 @@ class GraphExecutor : public Executor {
             const nnvm::NodeEntryMap<NDArray>& feed_dict
               = nnvm::NodeEntryMap<NDArray>());
   nnvm::Graph GetGraph() {return graph_;};
+  static void SetDevicePlacement(const unsigned ngpus,
+                                 const nnvm::PlacementVector placement) {
+    GraphExecutor::ngpus_ = ngpus;
+    GraphExecutor::placement_ = placement;
+  };
+  static unsigned GetNGPUs() {return GraphExecutor::ngpus_;}
+  static const nnvm::PlacementVector& GetDevicePlacement() {return GraphExecutor::placement_;}
 
  protected:
   friend class mxnet::Imperative;
@@ -244,6 +251,9 @@ class GraphExecutor : public Executor {
   std::vector<CachedSegOpr> cached_seg_opr_;
   // verbose logging
   bool log_verbose_ = false;
+  // Device placement
+  static nnvm::PlacementVector placement_;
+  static unsigned ngpus_;
 };
 
 }  // namespace exec
