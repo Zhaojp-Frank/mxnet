@@ -17,13 +17,13 @@ if __name__ == '__main__':
     input_names = (data,)
     input_shapes = ((256, 8192),)
     args_shape, _, _ = net.infer_shape(Data=input_shapes[0])
-    placement = [0, 0, 0, 0, 1, 1, 1, 0, 0]
+    placement = [1, 0, 0, 0, 1, 1, 1, 0, 0]
     arg_to_nid = {'Data':0, 'fullyconnected0_weight':1,
                   'softmaxoutput0_label':5}
     arg_to_shape = dict(zip(net.list_arguments(), args_shape))
-    args, args_grad = mx.executor.set_device_placement(
-                        2, [0, 0, 0, 0, 1, 1, 1, 0, 0], arg_to_nid,
-                        arg_to_shape, mx.nd.zeros)
+    args, args_grad = mx.executor.set_device_placement(2, placement, arg_to_nid,
+                                                       arg_to_shape,
+                                                       mx.nd.zeros)
     executor = net.bind(ctx=mx.gpu(0), args=args, args_grad=args_grad,
                         grad_req='write')
     executor.save_graph('graph.json')
