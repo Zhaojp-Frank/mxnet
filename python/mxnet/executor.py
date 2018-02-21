@@ -26,6 +26,7 @@ import numpy as np
 from .base import _LIB
 from .base import mx_uint, NDArrayHandle, ExecutorHandle
 from .base import check_call, c_handle_array, c_array, c_str, py_str, string_types
+from .context import gpu
 from .ndarray import NDArray
 from .ndarray import _ndarray_cls
 from . import ndarray as nd
@@ -42,10 +43,24 @@ def _monitor_callback_wrapper(callback):
         callback(name, array)
     return callback_handle
 
-def set_device_placement(ngpus, placement):
+
+def set_device_placement(ngpus, placement, arg_to_nid, arg_to_shape,
+                         weight_initializer):
     c_placement = c_array(mx_uint, placement)
     check_call(_LIB.MXExecutorSetDevicePlacement(ngpus, c_placement,
                                                  mx_uint(len(placement))))
+    args = {}
+    arg_grads = {}
+    for arg_name, nid in arg_to_nid.items():
+        args[arg_name] = weight_initializer(shape=arg_to_shape[arg_name],
+                                            ctx=gpu(placement[nid]))
+        if (arg_name.lower() != 'data' and
+            not arg_name.lower().endswith('label')):
+            arg_grads[arg_name] = weight_initializer(
+                                    shape=arg_to_shape[arg_name],
+                                    ctx=gpu(placement[nid]))
+    return args, arg_grads
+
 
 class Executor(object):
     """Executor is the object providing efficient symbolic graph execution and optimization.
