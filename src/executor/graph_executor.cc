@@ -326,7 +326,6 @@ static Graph AssignContext(Graph g,
   const auto& mutable_nodes = idx.mutable_input_nodes();
   const auto& placement = GraphExecutor::GetDevicePlacement();
   // default use default context.
-  std::cout << "Placement.size() = " << placement.size() << std::endl;
   if (ctx_map.size() == 0 && placement.size() == 0) {
     g.attrs["context"] = std::make_shared<nnvm::any>(
         ContextVector(idx.num_nodes(), default_ctx));
@@ -407,7 +406,6 @@ static Graph AssignContext(Graph g,
     }
   }
 
-  std::cout << "Placement.size() = " << placement.size() << std::endl;
   if (placement.size() > 0) {
     uint32_t ngpus = GraphExecutor::GetNGPUs();
     ctx_list.clear();
