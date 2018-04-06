@@ -41,7 +41,7 @@ from ..context import Context
 from ..ndarray import NDArray, _DTYPE_NP_TO_MX, _DTYPE_MX_TO_NP, _GRAD_REQ_MAP
 from ..ndarray.ndarray import _STORAGE_TYPE_STR_TO_ID
 from ..ndarray import _ndarray_cls
-from ..executor import Executor
+from ..executor import Executor, executor_placement
 from . import _internal
 from . import op
 from ._internal import SymbolBase, _set_symbol_class
@@ -1421,6 +1421,9 @@ class Symbol(SymbolBase):
         ctx_map_keys = ctypes.POINTER(ctypes.c_char_p)()
         ctx_map_dev_types = ctypes.POINTER(ctypes.c_int)()
         ctx_map_dev_ids = ctypes.POINTER(ctypes.c_int)()
+        print('---group2ctx---')
+        print(group2ctx)
+        print('---group2ctx---')
         if group2ctx is not None:
             ctx_map_keys = []
             ctx_map_dev_types = []

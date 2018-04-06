@@ -44,21 +44,40 @@ def _monitor_callback_wrapper(callback):
     return callback_handle
 
 
-def set_device_placement(ngpus, placement, arg_to_nid, arg_to_shape,
-                         weight_initializer):
-    c_placement = c_array(mx_uint, placement)
+class Placement(object):
+    def __init__(self, placement, names):
+        self.placement = placement
+        self.names = names
+executor_placement = None
+
+
+def set_device_placement(ngpus, placement, arg_to_nid=None, arg_to_shape=None,
+                         weight_initializer=None):
+    '''
+        args:
+            placement: A list which the first element is a list of integer
+                       (placement) and the second element is a list of string
+                       (names).
+    '''
+    assert len(placement) == 2
+    global executor_placement
+    assert executor_placement is None
+    executor_placement = Placement(placement[0], placement[1])
+    c_placement = c_array(mx_uint, placement[0])
     check_call(_LIB.MXExecutorSetDevicePlacement(ngpus, c_placement,
-                                                 mx_uint(len(placement))))
+                                                 mx_uint(len(placement[0]))))
     args = {}
     arg_grads = {}
-    for arg_name, nid in arg_to_nid.items():
-        args[arg_name] = weight_initializer(shape=arg_to_shape[arg_name],
-                                            ctx=gpu(placement[nid]))
-        if (arg_name.lower() != 'data' and
-            not arg_name.lower().endswith('label')):
-            arg_grads[arg_name] = weight_initializer(
-                                    shape=arg_to_shape[arg_name],
-                                    ctx=gpu(placement[nid]))
+    if arg_to_nid:
+        assert arg_to_shape is not None and weight_initializer is not None
+        for arg_name, nid in arg_to_nid.items():
+            args[arg_name] = weight_initializer(shape=arg_to_shape[arg_name],
+                                                ctx=gpu(placement[0][nid]))
+            if (arg_name.lower() != 'data' and
+                not arg_name.lower().endswith('label')):
+                arg_grads[arg_name] = weight_initializer(
+                                        shape=arg_to_shape[arg_name],
+                                        ctx=gpu(placement[nid]))
     return args, arg_grads
 
 
