@@ -44,11 +44,34 @@ def _monitor_callback_wrapper(callback):
     return callback_handle
 
 
+executor_placement = None
 class Placement(object):
-    def __init__(self, placement, names):
+    def __init__(self, ngpus, placement, names):
+        self.ngpus = ngpus
         self.placement = placement
         self.names = names
-executor_placement = None
+
+    def gen_placement(self, symbol):
+        groups = []
+        group2ctx = {}
+        for i in range(self.ngpus):
+            groups.append('arg_gpu{}'.format(i))
+            group2ctx[groups[i]] = gpu(i)
+        all_nodes = symbol.get_internals()
+        all_names = {name: i for i, name in  enumerate(all_nodes.list_outputs())}
+        for name, place in zip(self.names, self.placement):
+            if '_weight' in name:
+                idx = all_names[name]
+                assert(all_nodes[idx].name == name)
+                attr = all_nodes[idx].list_attr()
+                attr.update({'ctx_group': groups[i]})
+                all_nodes[idx]._set_attr(**attr)
+        return group2ctx
+
+    @classmethod
+    def get_executor_placement(cls):
+        global executor_placement
+        return executor_placement
 
 
 def set_device_placement(ngpus, placement, arg_to_nid=None, arg_to_shape=None,
@@ -62,7 +85,8 @@ def set_device_placement(ngpus, placement, arg_to_nid=None, arg_to_shape=None,
     assert len(placement) == 2
     global executor_placement
     assert executor_placement is None
-    executor_placement = Placement(placement[0], placement[1])
+    print('...........................')
+    executor_placement = Placement(ngpus, placement[0], placement[1])
     c_placement = c_array(mx_uint, placement[0])
     check_call(_LIB.MXExecutorSetDevicePlacement(ngpus, c_placement,
                                                  mx_uint(len(placement[0]))))
