@@ -64,7 +64,7 @@ class Placement(object):
                 idx = all_names[name]
                 assert(all_nodes[idx].name == name)
                 attr = all_nodes[idx].list_attr()
-                attr.update({'ctx_group': groups[i]})
+                attr.update({'ctx_group': groups[place]})
                 all_nodes[idx]._set_attr(**attr)
         return group2ctx
 
