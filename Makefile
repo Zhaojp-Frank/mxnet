@@ -41,8 +41,17 @@ ifeq ($(DEBUG), 1)
 else
 	CFLAGS += -O3
 endif
+
+ifneq ($(ADD_CFLAGS), NONE)
+	CFLAGS += $(ADD_CFLAGS)
+endif
+
+ifneq ($(ADD_LDFLAGS), NONE)
+	LDFLAGS += $(ADD_LDFLAGS)
+endif
+
 CFLAGS += -I$(ROOTDIR)/mshadow/ -I$(ROOTDIR)/dmlc-core/include -fPIC -I$(NNVM_PATH)/include -Iinclude $(MSHADOW_CFLAGS)
-LDFLAGS = -pthread $(MSHADOW_LDFLAGS) $(DMLC_LDFLAGS)
+LDFLAGS += -pthread $(MSHADOW_LDFLAGS) $(DMLC_LDFLAGS)
 ifeq ($(DEBUG), 1)
 	NVCCFLAGS = -std=c++11 -Xcompiler -D_FORCE_INLINES -g -G -O0 -ccbin $(CXX) $(MSHADOW_NVCCFLAGS)
 else
@@ -106,14 +115,6 @@ endif
 
 ifeq ($(USE_THREADED_ENGINE), 1)
 	CFLAGS += -DMXNET_USE_THREADED_ENGINE
-endif
-
-ifneq ($(ADD_CFLAGS), NONE)
-	CFLAGS += $(ADD_CFLAGS)
-endif
-
-ifneq ($(ADD_LDFLAGS), NONE)
-	LDFLAGS += $(ADD_LDFLAGS)
 endif
 
 ifneq ($(USE_CUDA_PATH), NONE)
