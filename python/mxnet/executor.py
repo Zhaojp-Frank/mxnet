@@ -55,12 +55,12 @@ class Placement(object):
         groups = []
         group2ctx = {}
         for i in range(self.ngpus):
-            groups.append('arg_gpu{}'.format(i))
+            groups.append('placement_gpu{}'.format(i))
             group2ctx[groups[i]] = gpu(i)
         all_nodes = symbol.get_internals()
         all_names = {name: i for i, name in  enumerate(all_nodes.list_outputs())}
         for name, place in zip(self.names, self.placement):
-            if '_weight' in name:
+            if name in all_names:
                 idx = all_names[name]
                 assert(all_nodes[idx].name == name)
                 attr = all_nodes[idx].list_attr()
@@ -85,7 +85,6 @@ def set_device_placement(ngpus, placement, arg_to_nid=None, arg_to_shape=None,
     assert len(placement) == 2
     global executor_placement
     assert executor_placement is None
-    print('...........................')
     executor_placement = Placement(ngpus, placement[0], placement[1])
     c_placement = c_array(mx_uint, placement[0])
     check_call(_LIB.MXExecutorSetDevicePlacement(ngpus, c_placement,
