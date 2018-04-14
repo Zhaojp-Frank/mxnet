@@ -1,3 +1,5 @@
+export TOFU_ENABLED=1
+
 echo "Single: "
 for b in 128 256 512
 do

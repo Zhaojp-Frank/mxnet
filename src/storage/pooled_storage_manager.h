@@ -40,6 +40,7 @@ class GPUPooledStorageManager final : public StorageManager {
     ReleaseAll();
   }
 
+  void* DirectAlloc(size_t size) override;
   void* Alloc(size_t size) override;
   void Free(void* ptr, size_t size) override;
 
@@ -65,7 +66,36 @@ class GPUPooledStorageManager final : public StorageManager {
   DISALLOW_COPY_AND_ASSIGN(GPUPooledStorageManager);
 };  // class GPUPooledStorageManager
 
+//#define MXNET_USE_FAKE_GPU_STORAGE
+
+void* GPUPooledStorageManager::DirectAlloc(size_t size) {
+#ifdef MXNET_USE_FAKE_GPU_STORAGE
+  void* ret = nullptr;
+  cudaError_t e = cudaMalloc(&ret, size);
+  if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
+    LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
+  }
+  used_memory_ += size;
+  return ret;
+#else
+  return Alloc(size);
+#endif
+}
+
+void* _Alloc() {
+  void* ret = nullptr;
+  cudaError_t e = cudaMalloc(&ret, 2L * 1024 * 1024 * 1024 * sizeof(float));
+  if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
+    LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
+  }
+  return ret;
+}
+
 void* GPUPooledStorageManager::Alloc(size_t size) {
+#ifdef MXNET_USE_FAKE_GPU_STORAGE
+  static void* ptr = _Alloc();
+  return ptr;
+#else
   std::lock_guard<std::mutex> lock(mutex_);
   auto&& reuse_it = memory_pool_.find(size);
   if (reuse_it == memory_pool_.end() || reuse_it->second.size() == 0) {
@@ -87,6 +117,7 @@ void* GPUPooledStorageManager::Alloc(size_t size) {
     reuse_pool.pop_back();
     return ret;
   }
+#endif
 }
 
 void GPUPooledStorageManager::Free(void* ptr, size_t size) {

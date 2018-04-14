@@ -14,6 +14,11 @@ Operator* CreateOp<gpu>(SliceChannelParam param) {
   return new SliceChannelOp<gpu>(param);
 }
 
+template<>
+Operator* CreateBackwardOp<gpu>(const SliceChannelParam& param) {
+  return CreateOp<gpu>(param);
+}
+
 }  // namespace op
 }  // namespace mxnet
 

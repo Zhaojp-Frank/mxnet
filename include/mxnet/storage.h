@@ -39,7 +39,7 @@ class Storage {
    * \param ctx Context information about the device and ID.
    * \return Handle struct.
    */
-  virtual Handle Alloc(size_t size, Context ctx) = 0;
+  virtual Handle Alloc(size_t size, Context ctx, bool direct = false) = 0;
   /*!
    * \brief Free storage.
    * \param handle Handle struect.

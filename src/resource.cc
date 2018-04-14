@@ -47,7 +47,7 @@ struct SpaceAllocator {
     if (handle.size != 0) {
       Storage::Get()->DirectFree(handle);
     }
-    handle = Storage::Get()->Alloc(size, ctx);
+    handle = Storage::Get()->Alloc(size, ctx, true);
     return handle.dptr;
   }
 
@@ -56,7 +56,7 @@ struct SpaceAllocator {
     if (handle.size != 0) {
       Storage::Get()->DirectFree(host_handle);
     }
-    host_handle = Storage::Get()->Alloc(size, Context());
+    host_handle = Storage::Get()->Alloc(size, Context(), true);
     return host_handle.dptr;
   }
 };

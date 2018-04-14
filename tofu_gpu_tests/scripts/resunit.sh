@@ -2,6 +2,7 @@ b=32
 f=2048
 i=14
 
+export TOFU_ENABLED=1
 export MXNET_CUDNN_AUTOTUNE_DEFAULT=0
 
 echo "ResUnit b=$b, f=$f, i=$i"

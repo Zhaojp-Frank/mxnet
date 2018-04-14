@@ -1,12 +1,13 @@
-l=50
+l=152
 
 export TOFU_USE_BFS_LEVEL=1
-export MXNET_CUDNN_AUTOTUNE_DEFAULT=0
+export TOFU_ENABLED=1
+#export MXNET_CUDNN_AUTOTUNE_DEFAULT=0
 
 echo "Single: "
 for b in 1 2 4 8 16 32
 do
-  for w in 8
+  for w in 4.5 6 8
   do
     echo "Batch: $b, Wide: $w"
     python ../tofu_benchmark.py resnet \

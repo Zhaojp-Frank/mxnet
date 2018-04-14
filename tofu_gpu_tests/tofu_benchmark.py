@@ -8,7 +8,7 @@ import pickle as pickle
 import logging
 import argparse
 
-rng = np.random.RandomState(seed=32)
+rng = np.random.RandomState(seed=42)
 
 def feed_args(net, arg_arrays):
     names = net.list_arguments()
@@ -30,6 +30,7 @@ def test():
     parser.add_argument('--cold_skip', type=int, default=5, help='Number of loops skipped for warm up.')
     parser.add_argument('-f', '--host_file', type=str,
                         help='Host file that contains addresses of all workers.')
+    parser.add_argument('--use_momentum', type=int, default=1, help='Whether to simulate memory consumption with momentum.')
 
     args, _ = parser.parse_known_args()
 
@@ -42,9 +43,9 @@ def test():
 
     group2ctx = {'group:%d' % i : mx.gpu(i) for i in range(args.num_gpus)}
     if args.num_gpus == 1:
-      default_ctx = mx.gpu(0)
+        default_ctx = mx.gpu(0)
     else:
-      default_ctx = mx.cpu(0)
+        default_ctx = mx.cpu(0)
 
     num_loops = args.num_loops
     cold_skip = args.cold_skip
@@ -73,6 +74,10 @@ def test():
                  for name, shape, dtype in zip(net.list_arguments(), arg_shapes, arg_types)
                  if name != 'data' and not name.endswith('label')}
     print('Argument grads: ', args_grad.keys())
+    if args.use_momentum:
+        args_mom = {name : mx.nd.zeros(shape, default_ctx, dtype=dtype)
+                    for name, shape, dtype in zip(net.list_arguments(), arg_shapes, arg_types)
+                    if name != 'data' and not name.endswith('label')}
 
     executor = net.bind(ctx=default_ctx,
                         args=arg_arrays,

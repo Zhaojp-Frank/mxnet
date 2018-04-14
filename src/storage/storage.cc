@@ -19,7 +19,7 @@ namespace mxnet {
 // consider change storage as a pure abstract class
 class StorageImpl : public Storage {
  public:
-  Handle Alloc(size_t size, Context ctx) override;
+  Handle Alloc(size_t size, Context ctx, bool direct = false) override;
   void Free(Handle handle) override;
   void DirectFree(Handle handle) override;
   StorageImpl() {}
@@ -49,7 +49,7 @@ class StorageImpl : public Storage {
              kMaxNumberOfDevices> storage_managers_;
 };  // struct Storage::Impl
 
-Storage::Handle StorageImpl::Alloc(size_t size, Context ctx) {
+Storage::Handle StorageImpl::Alloc(size_t size, Context ctx, bool direct) {
   // space already recycled, ignore request
   Handle hd;
   hd.ctx = ctx;
@@ -84,7 +84,11 @@ Storage::Handle StorageImpl::Alloc(size_t size, Context ctx) {
         return ptr;
       });
   this->ActivateDevice(ctx);
-  hd.dptr = manager->Alloc(size);
+  if (direct) {
+    hd.dptr = manager->DirectAlloc(size);
+  } else {
+    hd.dptr = manager->Alloc(size);
+  }
   return hd;
 }
 

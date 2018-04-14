@@ -2,7 +2,7 @@ import mxnet as mx
 
 def add_args(parser):
     parser.add_argument('--num_layers', type=int, default=50, help='Number of resnet layers')
-    parser.add_argument('--wide_scale', type=int, default=1, help='Wide resnet scale')
+    parser.add_argument('--wide_scale', type=float, default=1.0, help='Wide resnet scale')
     parser.add_argument('--workspace', type=int, default=256, help='Convolution workspace size')
 
 has_activation = True
@@ -150,7 +150,8 @@ def get_symbol(args):
         else:
             filter_list = [64, 64, 128, 256, 512]
             bottle_neck = False
-        filter_list = [i * args.wide_scale for i in filter_list]
+        filter_list = [int(i * args.wide_scale) for i in filter_list]
+        print(filter_list)
         num_stages = 4
         if num_layers == 18:
             units = [2, 2, 2, 2]

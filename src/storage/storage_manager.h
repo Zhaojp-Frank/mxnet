@@ -28,6 +28,10 @@ class StorageManager {
    * \param size Size of the storage.
    */
   virtual void Free(void* ptr, size_t size) = 0;
+
+  virtual void* DirectAlloc(size_t size) {
+    return Alloc(size);
+  }
   /*!
    * \brief Direct de-allocation.
    * \param ptr Pointer to deallocate.
