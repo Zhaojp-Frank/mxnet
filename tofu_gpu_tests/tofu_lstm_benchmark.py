@@ -99,7 +99,7 @@ def test():
     parser.add_argument('--num_gpus', type=int, default=1, help='Number of GPUs')
     parser.add_argument('--num_loops', type=int, default=30, help='Number of benchmarking loops.')
     parser.add_argument('--cold_skip', type=int, default=5, help='Number of loops skipped for warm up.')
-    parser.add_argument('--use_momentum', type=int, default=1, help='Whether to simulate memory consumption with momentum.')
+    parser.add_argument('--use_momentum', type=int, default=0, help='Whether to simulate memory consumption with momentum.')
 
     args, _ = parser.parse_known_args()
 
@@ -151,6 +151,10 @@ def test():
                  if not name.startswith('data') and not name.endswith('label')}
     print('Argument grads: ', args_grad.keys())
     if args.use_momentum:
+        assert False, "Momentum simulation is not required since this MXNet implementation \
+                is not able to do fully inplace gradient computation. An extra gradient \
+                buffer is used which ends up with the same memory consumption as maintaining \
+                a momentum."
         args_mom = {name : mx.nd.zeros(shape, name2ctx[name], dtype=dtype)
                     for name, shape, dtype in zip(net.list_arguments(), arg_shapes, arg_types)
                     if not name.startswith('data') and not name.endswith('label')}

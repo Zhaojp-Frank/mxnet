@@ -17,6 +17,7 @@
 #include "./storage_manager.h"
 #include "../common/cuda_utils.h"
 
+//#define MXNET_USE_FAKE_GPU_STORAGE
 
 namespace mxnet {
 namespace storage {
@@ -61,12 +62,13 @@ class GPUPooledStorageManager final : public StorageManager {
   size_t used_memory_ = 0;
   // percentage of reserved memory
   int reserve_;
+#ifdef MXNET_USE_FAKE_GPU_STORAGE
+  void *ptr_ = nullptr;
+#endif
   // memory pool
   std::unordered_map<size_t, std::vector<void*>> memory_pool_;
   DISALLOW_COPY_AND_ASSIGN(GPUPooledStorageManager);
 };  // class GPUPooledStorageManager
-
-//#define MXNET_USE_FAKE_GPU_STORAGE
 
 void* GPUPooledStorageManager::DirectAlloc(size_t size) {
 #ifdef MXNET_USE_FAKE_GPU_STORAGE
@@ -93,8 +95,11 @@ void* _Alloc() {
 
 void* GPUPooledStorageManager::Alloc(size_t size) {
 #ifdef MXNET_USE_FAKE_GPU_STORAGE
-  static void* ptr = _Alloc();
-  return ptr;
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (ptr_ == nullptr) {
+    ptr_ = _Alloc();
+  }
+  return ptr_;
 #else
   std::lock_guard<std::mutex> lock(mutex_);
   auto&& reuse_it = memory_pool_.find(size);
