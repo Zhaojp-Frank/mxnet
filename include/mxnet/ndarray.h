@@ -79,7 +79,7 @@ class NDArray {
   inline TBlob data() const {
     TBlob res;
     MSHADOW_TYPE_SWITCH(dtype_, DType, {
-      res = TBlob(static_cast<DType*>(ptr_->shandle.dptr)
+      res = TBlob(static_cast<DType*>(ptr_->shandle.GetDptr())
         + offset_, shape_, ptr_->shandle.ctx.dev_mask());
     });
 #if MKL_EXPERIMENTAL == 1
@@ -95,7 +95,7 @@ class NDArray {
     TShape raw_shape(1);
     raw_shape[0] = length;
     MSHADOW_TYPE_SWITCH(dtype_, DType, {
-      res = TBlob(static_cast<DType*>(ptr_->shandle.dptr)
+      res = TBlob(static_cast<DType*>(ptr_->shandle.GetDptr())
         + offset_ + offset, raw_shape, ptr_->shandle.ctx.dev_mask());
     });
 #if MKL_EXPERIMENTAL == 1
@@ -297,7 +297,7 @@ class NDArray {
 #if MKL_EXPERIMENTAL == 1
     if (Mkl_mem_ != nullptr) {
       // convert prv to cpu
-      Mkl_mem_->check_and_prv_to_cpu(ptr_->shandle.dptr);
+      Mkl_mem_->check_and_prv_to_cpu(ptr_->shandle.GetDptr());
     }
 #endif
     NDArray ret = *this;
@@ -372,7 +372,7 @@ class NDArray {
         CHECK_EQ(data.dev_mask_, gpu::kDevMask);
         shandle.ctx = Context::GPU(dev_id);
       }
-      shandle.dptr = data.dptr_;
+      shandle.SetDptr(data.dptr_);
       shandle.size = data.shape_.Size() * mshadow::mshadow_sizeof(data.type_flag_);
     }
     /*! \brief construct a new chunk */

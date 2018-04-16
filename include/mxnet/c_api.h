@@ -167,6 +167,9 @@ MXNET_DLL int MXRandomSeed(int seed);
  * \return 0 when success, -1 when failure happens.
  */
 MXNET_DLL int MXNotifyShutdown();
+
+MXNET_DLL int MXStartIteration();
+MXNET_DLL int MXStopIteration();
 /*!
  * \brief Set up configuration of profiler
  * \param mode indicate the working mode of profiler,

@@ -32,6 +32,7 @@ class GPUPooledStorageManager final : public StorageManager {
    */
   GPUPooledStorageManager() {
     reserve_ = dmlc::GetEnv("MXNET_GPU_MEM_POOL_RESERVE", 5);
+    swap = Swap::_GetSharedRef();
   }
   /*!
    * \brief Default destructor.
@@ -44,10 +45,12 @@ class GPUPooledStorageManager final : public StorageManager {
   void Free(void* ptr, size_t size) override;
 
   void DirectFree(void* ptr, size_t size) override {
-    cudaError_t err = cudaFree(ptr);
-    // ignore unloading error, as memory has already been recycled
-    if (err != cudaSuccess && err != cudaErrorCudartUnloading) {
-      LOG(FATAL) << "CUDA: " << cudaGetErrorString(err);
+    if (swap->FreeReserved(ptr, size)) {
+        cudaError_t err = cudaFree(ptr);
+        // ignore unloading error, as memory has already been recycled
+        if (err != cudaSuccess && err != cudaErrorCudartUnloading) {
+          LOG(FATAL) << "CUDA: " << cudaGetErrorString(err);
+        }
     }
     used_memory_ -= size;
   }
@@ -60,6 +63,7 @@ class GPUPooledStorageManager final : public StorageManager {
   size_t used_memory_ = 0;
   // percentage of reserved memory
   int reserve_;
+  std::shared_ptr<Swap> swap;
   // memory pool
   std::unordered_map<size_t, std::vector<void*>> memory_pool_;
   DISALLOW_COPY_AND_ASSIGN(GPUPooledStorageManager);
@@ -68,20 +72,36 @@ class GPUPooledStorageManager final : public StorageManager {
 void* GPUPooledStorageManager::Alloc(size_t size) {
   std::lock_guard<std::mutex> lock(mutex_);
   auto&& reuse_it = memory_pool_.find(size);
+
+  if (reuse_it != memory_pool_.end()) {
+    auto&& reuse_pool = reuse_it->second;
+    auto it = reuse_pool.begin();
+    while (it != reuse_pool.end()) {
+        if (swap->CheckReservedAndFree(*it, size)) {
+            it = reuse_pool.erase(it);
+        } else {
+            it++;
+        }
+    }
+  }
   if (reuse_it == memory_pool_.end() || reuse_it->second.size() == 0) {
     size_t free, total;
     cudaMemGetInfo(&free, &total);
     if (free <= total * reserve_ / 100 || size > free - total * reserve_ / 100)
       ReleaseAll();
 
+    swap->SwapOut(size, -1);
     void* ret = nullptr;
     cudaError_t e = cudaMalloc(&ret, size);
     if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
+      cudaMemGetInfo(&free, &total);
+      std::cout << "Why fail? " << free << " " << size << std::endl;
       LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
     }
     used_memory_ += size;
     return ret;
   } else {
+    std::cout << "Reuse " << std::endl;
     auto&& reuse_pool = reuse_it->second;
     auto ret = reuse_pool.back();
     reuse_pool.pop_back();
@@ -90,7 +110,19 @@ void* GPUPooledStorageManager::Alloc(size_t size) {
 }
 
 void GPUPooledStorageManager::Free(void* ptr, size_t size) {
+  //std::cout << "Doing Free()" << std::endl;
   std::lock_guard<std::mutex> lock(mutex_);
+  for (auto&& reuse_it = memory_pool_.begin(); reuse_it != memory_pool_.end(); reuse_it++) {
+    auto&& reuse_pool = reuse_it->second;
+    auto it = reuse_pool.begin();
+    while (it != reuse_pool.end()) {
+        if (swap->CheckReservedAndFree(*it, reuse_it->first)) {
+            it = reuse_pool.erase(it);
+        } else {
+            it++;
+        }
+    }
+  }
   auto&& reuse_pool = memory_pool_[size];
   reuse_pool.push_back(ptr);
 }

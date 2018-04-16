@@ -217,4 +217,10 @@ def _notify_shutdown():
     """Notify MXNet about a shutdown."""
     check_call(_LIB.MXNotifyShutdown())
 
+def start_iteration():
+    check_call(_LIB.MXStartIteration())
+
+def stop_iteration():
+    check_call(_LIB.MXStopIteration())
+
 atexit.register(_notify_shutdown)

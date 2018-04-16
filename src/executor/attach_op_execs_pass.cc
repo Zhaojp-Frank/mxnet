@@ -33,6 +33,7 @@ inline bool StartsWith(const string& value, const string& starting) {
 class ForwardOpExecutor : public OpExecutor {
  public:
   void Run(RunContext rctx) override {
+    this->Setup();
     op_ctx.run_ctx = rctx;
     op_->Forward(op_ctx, in_data_, req, out_data_, aux_data_);
   }
@@ -71,6 +72,7 @@ class BackwardOpExecutor : public OpExecutor {
  public:
   void Run(RunContext rctx) override {
     op_ctx.run_ctx = rctx;
+    this->Setup();
     op_->Backward(op_ctx, out_grad_, in_data_, out_data_,
                   req, in_grad_, aux_data_);
   }
@@ -132,6 +134,7 @@ class FComputeExecutor : public OpExecutor {
  public:
   void Run(RunContext rctx) override {
     op_ctx.run_ctx = rctx;
+    this->Setup();
     fcompute_(attrs_, op_ctx, in_data_, req, out_data_);
   }
   void Setup() override {

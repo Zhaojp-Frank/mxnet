@@ -84,6 +84,7 @@ def test():
     all_time = []
     for i in range(num_loops):
         print('=> loop %d' % i);
+        mx.base.start_iteration()
         st_l = time.time()
         if i == cold_skip + 1:
             t0 = time.time()
@@ -99,6 +100,7 @@ def test():
         # XXX(minjie): Currently, the last output is used to synchronize all send nodes.
         # Send nodes may not appear on the dependency path of the local graph.
         # We need make sure all send nodes have finished before the end of the iteration.
+        mx.base.stop_iteration()
         if len(outputs) > 0:
             outputs[-1].wait_to_read()
         ed_l = time.time()
