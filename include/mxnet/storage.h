@@ -24,30 +24,32 @@ namespace mxnet {
 using handle_id_t = unsigned long long;
 using timestamp_t = unsigned long long;
 
-class SwapHistory {
+class MemHistory {
 public:
     enum record_t {SET_ADDR, GET_ADDR, DEL_ADDR};
-    struct SwapRecord {
+    struct MemRecord {
         handle_id_t id;
         record_t type;
         timestamp_t time;
         size_t size;
     };
 
-    ~SwapHistory();
-    static SwapHistory* Get();
-    static std::shared_ptr<SwapHistory> _GetSharedRef();
+    ~MemHistory();
+    static MemHistory* Get();
+    static std::shared_ptr<MemHistory> _GetSharedRef();
     void PutRecord(handle_id_t id, record_t type, size_t size);
     void StartIteration();
     void StopIteration();
+    void CreateMacroOrder();
     bool IterationStarted() { return iteration_started_; };
     bool HistoryRecorded() { return history.size() != 0 && !do_record_;};
 
-    std::vector<SwapRecord> history;
+    std::vector<MemRecord> history;
+    std::vector<MemRecord> macro_history;
     size_t record_idx;
 
 private:
-    SwapHistory();
+    MemHistory();
     bool iteration_started_;
     bool do_record_;
     size_t iteration_idx_;
@@ -106,6 +108,7 @@ private:
     std::thread swapper_;
     size_t look_ahead_;
     size_t cache_miss_;
+    size_t waiting_swapping_;
 };
 
 
@@ -127,7 +130,7 @@ class Storage {
         }
         //id_ = handle_dis(handle_gen);
         id_ = ++base_id_;
-        std::cout << "Handle id " << id_ << std::endl;
+        //std::cout << "Handle id " << id_ << std::endl;
     }
 
     void Free(bool preserve) {

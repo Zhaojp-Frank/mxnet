@@ -137,13 +137,13 @@ Storage* Storage::Get() {
   return ptr;
 }
 
-std::shared_ptr<SwapHistory> SwapHistory::_GetSharedRef() {
-    static std::shared_ptr<SwapHistory> inst(new SwapHistory());
+std::shared_ptr<MemHistory> MemHistory::_GetSharedRef() {
+    static std::shared_ptr<MemHistory> inst(new MemHistory());
     return inst;
 }
 
-SwapHistory* SwapHistory::Get() {
-    static SwapHistory *s = _GetSharedRef().get();
+MemHistory* MemHistory::Get() {
+    static MemHistory *s = _GetSharedRef().get();
     return s;
 }
 
@@ -152,21 +152,36 @@ std::shared_ptr<Swap> Swap::_GetSharedRef() {
     return inst;
 }
 
-SwapHistory::SwapHistory() {
+MemHistory::MemHistory() {
     iteration_started_ = false;
     iteration_idx_ = 0;
     do_record_ = false;
 }
 
-SwapHistory::~SwapHistory() {
+MemHistory::~MemHistory() {
+    std::cout << "Destroy MemHistory" << std::endl;
 }
 
-void SwapHistory::PutRecord(handle_id_t id, record_t type, size_t size) {
+void MemHistory::PutRecord(handle_id_t id, record_t type, size_t size) {
     if (!iteration_started_) {
         return;
     }
-    if (!do_record_) {
-        if (history.size() > 0) {
+    if (do_record_) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        timestamp_t t =
+            (duration_cast<microseconds>(high_resolution_clock::now() -
+                                         begin_time_)).count();
+        MemRecord r = {id, type, t, size};
+        history.push_back(r);
+        //std::cout << "his : "
+                  //<< history[record_idx].id << " "
+                  //<< history[record_idx].type << " "
+                  //<< history[record_idx].size << " "
+                  //<< history[record_idx].time << " "
+                  //<< history.size() << std::endl;
+                  //
+    } else {
+        //if (history.size() > 0) {
             //std::cout << "his : "
                       //<< history[record_idx].id << " "
                       //<< history[record_idx].type << " "
@@ -176,35 +191,70 @@ void SwapHistory::PutRecord(handle_id_t id, record_t type, size_t size) {
             //std::cout << "now : "
                       //<< id << " " << type << " " << size
                       //<< " " << record_idx << std::endl;
-        }
-    } else {
-        std::lock_guard<std::mutex> lock(mutex_);
-        timestamp_t t =
-            (duration_cast<microseconds>(high_resolution_clock::now() -
-                                         begin_time_)).count();
-        SwapRecord r = {id, type, t, size};
-        history.push_back(r);
+        //}
     }
     record_idx += 1;
 }
 
-void SwapHistory::StartIteration() {
+void MemHistory::StartIteration() {
     iteration_started_ = true;
     record_idx = 0;
-    if (iteration_idx_ == 1) {
+    if (iteration_idx_ == 2) {
         do_record_ = true ;
     }
     begin_time_ = high_resolution_clock::now();
 }
 
-void SwapHistory::StopIteration() {
+void MemHistory::CreateMacroOrder() {
+    unsigned threshold = dmlc::GetEnv("MXNET_MACRO_MEM_ORDER_THRESHOLD", 500);
+    unsigned previous = 0;
+    std::unordered_map<handle_id_t, MemRecord> members;
+    for (auto& h : history) {
+        if (h.time - previous > threshold) {
+            std::vector<MemRecord> temp;
+            unsigned long time = 0;
+            for (auto m : members) {
+                if (time == 0) {
+                    time = m.second.time;
+                }
+                temp.push_back(MemRecord{m.second.id, m.second.type, time,
+                                         m.second.size});
+            }
+            std::sort(temp.begin(), temp.end(),
+                      [](const MemRecord& a, const MemRecord& b) -> bool {
+                        return a.size > b.size;
+                      });
+            macro_history.insert(macro_history.end(), temp.begin(),
+                                 temp.end());
+            members.clear();
+        }
+        if (members.find(h.id) == members.end()) {
+            members[h.id] = h;
+        }
+        previous = h.time;
+    }
+#if 0
+    std::cout << "Macro history:" << std::endl;
+    for (auto& h : macro_history) {
+        std::cout << h.time << " " << h.id << " " << h.size << std::endl;
+    }
+#endif
+}
+
+void MemHistory::StopIteration() {
     iteration_started_ = false;
     iteration_idx_ += 1;
-    std::unordered_set<handle_id_t> handles;
     if (do_record_) {
+        CreateMacroOrder();
+#if 0
+        std::unordered_set<handle_id_t> handles;
         size_t size = 0;
+        unsigned long previous = 0;
+        std::cout << "differences : " << std::endl;
         for (auto& h : history) {
             auto it = handles.find(h.id);
+            std::cout << h.time - previous << std::endl;
+            previous = h.time;
             if (it == handles.end()) {
                 size += h.size;
                 handles.insert(h.id);
@@ -214,6 +264,7 @@ void SwapHistory::StopIteration() {
         size_t free, total;
         CUDA_CALL(cudaMemGetInfo(&free, &total));
         std::cout << "Total = " << total * 1.0 / 1024 / 1024 << std::endl;
+#endif
     }
     do_record_ = false;
 }
@@ -225,22 +276,22 @@ Swap* Swap::Get() {
 
 Swap::Swap() {
     std::cout << "Initialize Swap" << std::endl;
-    lru_ = std::vector<std::list<SwapInfo*>>(8);
-    free_memory_ = std::vector<size_t>{0, 0, 0, 0, 0, 0, 0, 0};
-    reserved_mem_ = std::vector<std::unordered_map<void*, size_t>>(8);
+    do_swap_ = dmlc::GetEnv("MXNET_DO_SWAP", 0);
     swap_lock_ = PTHREAD_RWLOCK_INITIALIZER;
+    swapper_began_ = false;
+    look_ahead_ = 100;
+    lru_ = std::vector<std::list<SwapInfo*>>(8);
+    reserved_mem_ = std::vector<std::unordered_map<void*, size_t>>(8);
     for (int i = 0; i < 8; i++) {
         locks_[i] = PTHREAD_RWLOCK_INITIALIZER;
         streams_init_[i] = false;
+        free_memory_.push_back(0);
     }
-    swapper_began_ = false;
-    do_swap_ = dmlc::GetEnv("MXNET_DO_SWAP", 0);
 #if MXNET_USE_CUDA
     size_t fifo_size, heap_size;
     cudaDeviceGetLimit(&fifo_size, cudaLimitPrintfFifoSize);
     cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
     swap_threshold_ = (fifo_size + heap_size + 1024 * 1024) * 16;
-    look_ahead_ = 100;
 #endif  // MXNET_USE_CUDA
 };
 
@@ -258,8 +309,8 @@ int Swap::UpdateFree(int device) {
     return device;
 }
 
-void Swap::SwapOut(unsigned required_memory, int device, bool acquire_lock=false,
-                   bool async=false) {
+void Swap::SwapOut(unsigned required_memory, int device,
+                   bool acquire_lock=false, bool async=false) {
     if (!do_swap_) {
         return;
     }
@@ -326,7 +377,6 @@ void Swap::SwapOut(unsigned required_memory, int device, bool acquire_lock=false
             pthread_rwlock_wrlock(&locks_[device]);
             target->is_swapping.clear(std::memory_order_release);
         } else {
-            //pthread_rwlock_unlock(&locks_[device]);
             std::cout << "Unfortunately, we need to free reserved memory."
                       << "This implementation is very tricky and dangerous "
                       << "since we don't have a persistent id. The correctness "
@@ -364,17 +414,22 @@ void Swap::SwapOut(unsigned required_memory, int device, bool acquire_lock=false
 void Swap::SwapIn(SwapInfo *info, bool async=false) {
     //std::cout << "SwapIn " << info->handle_id << std::endl;
 #if MXNET_USE_CUDA
+    bool waiting = false;
     while (info->is_swapping.test_and_set(std::memory_order_acquire)) {
+        waiting = true;
         pthread_rwlock_unlock(&locks_[info->device]);
         usleep(100);
         pthread_rwlock_wrlock(&locks_[info->device]);
+    }
+    if (waiting) {
+        waiting_swapping_ += 1;
     }
     //std::cout << "SwapIn " << info->handle_id << std::endl;
     if (!info->swap_in) {
         CHECK(info->dptr == nullptr);
         CHECK(info->cpu_address != nullptr);
-        int device = 0;
-        CUDA_CALL(cudaGetDevice(&device));
+        int old_device = 0;
+        CUDA_CALL(cudaGetDevice(&old_device));
         SwapOut(info->size, info->device, false, async);
         CHECK(free_memory_[info->device] > info->size);
         CUDA_CALL(cudaSetDevice(info->device));
@@ -394,7 +449,7 @@ void Swap::SwapIn(SwapInfo *info, bool async=false) {
                                  cudaMemcpyHostToDevice));
         }
         pthread_rwlock_wrlock(&locks_[info->device]);
-        CUDA_CALL(cudaSetDevice(device));
+        CUDA_CALL(cudaSetDevice(old_device));
         info->swap_count += 1;
         info->swap_in = true;
         //std::cout << "Do swap in" << std::endl;
@@ -442,7 +497,7 @@ void Swap::SetAddr(handle_id_t handle_id, void* dptr, size_t size,
                    bool record) {
     //std::cout << "SetAddr " << handle_id << std::endl;
     if (record) {
-        SwapHistory::Get()->PutRecord(handle_id, SwapHistory::DEL_ADDR, size);
+        MemHistory::Get()->PutRecord(handle_id, MemHistory::DEL_ADDR, size);
     }
     if (dptr == nullptr) {
         return ;
@@ -476,10 +531,10 @@ void Swap::SetAddr(handle_id_t handle_id, void* dptr, size_t size,
 void Swap::DelAddr(handle_id_t handle_id, size_t size, bool preserve,
                    bool record) {
     if (record) {
-        SwapHistory::Get()->PutRecord(handle_id, SwapHistory::DEL_ADDR, size);
+        MemHistory::Get()->PutRecord(handle_id, MemHistory::DEL_ADDR, size);
     }
     //std::cout << "DelAddr " << handle_id << std::endl;
-    SwapHistory::Get()->PutRecord(handle_id, SwapHistory::DEL_ADDR, size);
+    MemHistory::Get()->PutRecord(handle_id, MemHistory::DEL_ADDR, size);
     auto key = handle_id ^ size;
     pthread_rwlock_wrlock(&swap_lock_);
     auto iter = swap_info_.find(key);
@@ -514,7 +569,7 @@ void Swap::DelAddr(handle_id_t handle_id, size_t size, bool preserve,
 void* Swap::GetAddr(handle_id_t handle_id, size_t size, bool record) {
     //std::cout << "GetAddr " << handle_id << std::endl;
     if (record) {
-        SwapHistory::Get()->PutRecord(handle_id, SwapHistory::GET_ADDR, size);
+        MemHistory::Get()->PutRecord(handle_id, MemHistory::GET_ADDR, size);
     }
     auto key = handle_id ^ size;
     pthread_rwlock_rdlock(&swap_lock_);
@@ -545,20 +600,19 @@ void* Swap::GetAddr(handle_id_t handle_id, size_t size, bool record) {
     return swap_info->dptr;
 };
 
-#if 1
 void Swap::Swapper() {
     cache_miss_ = 0;
+    waiting_swapping_ = 0;
     size_t curr_pos = 0;
     std::cout << "Execute Swapper()" << std::endl;
     while (!should_stop_) {
-        //auto begin = high_resolution_clock::now();
-        auto shistory = SwapHistory::Get();
+        auto shistory = MemHistory::Get();
         while (shistory->history.size() > curr_pos &&
                (shistory->record_idx >= curr_pos ||
                 (curr_pos - shistory->record_idx) < look_ahead_)) {
             auto &h = shistory->history[curr_pos];
             auto info = swap_info_.at(h.id ^ h.size);
-            if (h.type == SwapHistory::GET_ADDR) {
+            if (h.type == MemHistory::GET_ADDR) {
                 Swap::Get()->GetAddr(h.id, h.size, false);
             } else {
                 std::cout << "The history item contains not only read item : "
@@ -566,40 +620,34 @@ void Swap::Swapper() {
             }
             curr_pos += 1;
         }
-        //std::cout << "@@@@@@@@@@@ spent "
-                  //<< ((duration_cast<microseconds>(high_resolution_clock::now() - begin)).count()) / 1e6;
         swapper_began_ = true;
         usleep(5);
     }
 }
-#endif
 
 void Swap::StartIteration() {
-    SwapHistory::Get()->StartIteration();
-    cudaProfilerStart();
-    if (SwapHistory::Get()->HistoryRecorded()) {
+    //cudaProfilerStart();
+    MemHistory::Get()->StartIteration();
+    if (MemHistory::Get()->HistoryRecorded() && do_swap_) {
         should_stop_ = false;
         swapper_began_ = false;
         std::cout << "Prepare to execute Swapper()" << std::endl;
-#if 1
         swapper_ = std::thread(&Swap::Swapper, this);
         while (!swapper_began_) {
             usleep(10);
         }
-#endif
     }
 }
 
 void Swap::StopIteration() {
-    SwapHistory::Get()->StopIteration();
+    MemHistory::Get()->StopIteration();
     should_stop_ = true;
-#if 1
     if (swapper_began_) {
         swapper_.join();
         std::cout << "We have " << cache_miss_ << " cache miss." << std::endl;
+        std::cout << "We have " << waiting_swapping_ << " waiting swapping." << std::endl;
     }
-#endif
-    cudaProfilerStop();
+    //cudaProfilerStop();
 }
 
 }  // namespace mxnet
