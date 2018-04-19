@@ -80,13 +80,13 @@ int MXNotifyShutdown() {
 
 int MXStartIteration() {
   API_BEGIN();
-  SwapHistory::Get()->StartIteration();
+  Swap::Get()->StartIteration();
   API_END();
 }
 
 int MXStopIteration() {
   API_BEGIN();
-  SwapHistory::Get()->StopIteration();
+  Swap::Get()->StopIteration();
   API_END();
 }
 

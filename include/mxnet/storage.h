@@ -6,11 +6,13 @@
 #ifndef MXNET_STORAGE_H_
 #define MXNET_STORAGE_H_
 
+#include <atomic>
+#include <chrono>
 #include <mutex>
 #include <pthread.h>
 #include <thread>
+#include <unistd.h>
 #include <memory>
-#include <chrono>
 #if MXNET_USE_CUDA
 #include <cuda_runtime.h>
 #endif  // MXNET_USE_CUDA
@@ -38,14 +40,16 @@ public:
     void PutRecord(handle_id_t id, record_t type, size_t size);
     void StartIteration();
     void StopIteration();
+    bool IterationStarted() { return iteration_started_; };
+    bool HistoryRecorded() { return history.size() != 0 && !do_record_;};
+
+    std::vector<SwapRecord> history;
+    size_t record_idx;
 
 private:
     SwapHistory();
-
-    std::vector<SwapRecord> history_;
     bool iteration_started_;
     bool do_record_;
-    size_t record_idx_;
     size_t iteration_idx_;
     high_resolution_clock::time_point begin_time_;
     std::mutex mutex_;
@@ -56,6 +60,7 @@ public:
     struct SwapInfo {
         handle_id_t handle_id;
         bool swap_in;
+        std::atomic_flag is_swapping;
         int swap_count;
         int device;
         void* dptr;
@@ -66,25 +71,43 @@ public:
     ~Swap();
     static Swap* Get();
     static std::shared_ptr<Swap> _GetSharedRef();
-    void SwapOut(unsigned required_memory, int device);
-    void SwapIn(SwapInfo *info);
-    int UpdateFree();
-    void SetAddr(handle_id_t handle_id, void* dptr, size_t size);
-    void DelAddr(handle_id_t handle_id, size_t size, bool preserve);
+    void SwapOut(unsigned required_memory, int device, bool acquire_lock,
+                 bool async);
+    void SwapIn(SwapInfo *info, bool async);
+    int UpdateFree(int device);
+    void SetAddr(handle_id_t handle_id, void* dptr, size_t size,
+                 bool record=true);
+    void DelAddr(handle_id_t handle_id, size_t size, bool preserve,
+                 bool record=true);
+    void* GetAddr(handle_id_t handle_id, size_t size,
+                  bool record=true);
     bool FreeReserved(void *ptr, size_t size);
     bool CheckReservedAndFree(void *ptr, size_t size);
-    void* GetAddr(handle_id_t handle_id, size_t size);
+    void StartIteration();
+    void StopIteration();
 
 private:
     Swap();
+#if 1
+    void Swapper();
+#endif
     std::unordered_map<handle_id_t, SwapInfo*> swap_info_;
-    std::unordered_map<void*, size_t> reserved_mem_;
+    std::vector<std::unordered_map<void*, size_t>> reserved_mem_;
     std::vector<std::list<SwapInfo*>> lru_;
     std::vector<size_t> free_memory_;
-    std::mutex mutex_;
+    pthread_rwlock_t swap_lock_;
+    pthread_rwlock_t locks_[8];
+    cudaStream_t streams_[8];
+    bool streams_init_[8];
     bool do_swap_;
     size_t swap_threshold_;
+    bool should_stop_;
+    bool swapper_began_;
+    std::thread swapper_;
+    size_t look_ahead_;
+    size_t cache_miss_;
 };
+
 
 /*!
  * \brief Storage manager across multiple devices.

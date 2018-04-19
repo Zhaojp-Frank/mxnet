@@ -90,7 +90,7 @@ void* GPUPooledStorageManager::Alloc(size_t size) {
     if (free <= total * reserve_ / 100 || size > free - total * reserve_ / 100)
       ReleaseAll();
 
-    swap->SwapOut(size, -1);
+    swap->SwapOut(size, -1, true, false);
     void* ret = nullptr;
     cudaError_t e = cudaMalloc(&ret, size);
     if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
