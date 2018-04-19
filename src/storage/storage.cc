@@ -279,7 +279,7 @@ Swap::Swap() {
     do_swap_ = dmlc::GetEnv("MXNET_DO_SWAP", 0);
     swap_lock_ = PTHREAD_RWLOCK_INITIALIZER;
     swapper_began_ = false;
-    look_ahead_ = 100;
+    look_ahead_ = dmlc::GetEnv("MXNET_SWAPPER_LOOK_AHEAD", 100);
     lru_ = std::vector<std::list<SwapInfo*>>(8);
     reserved_mem_ = std::vector<std::unordered_map<void*, size_t>>(8);
     for (int i = 0; i < 8; i++) {
@@ -291,7 +291,10 @@ Swap::Swap() {
     size_t fifo_size, heap_size;
     cudaDeviceGetLimit(&fifo_size, cudaLimitPrintfFifoSize);
     cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
-    swap_threshold_ = (fifo_size + heap_size + 1024 * 1024) * 16;
+    unsigned swap_threshold_multiplier =
+        dmlc::GetEnv("MXNET_SWAP_THRESHOLD_MULTIPLIER", 32);
+    swap_threshold_ = (fifo_size + heap_size + 1024 * 1024) *
+                      swap_threshold_multiplier;
 #endif  // MXNET_USE_CUDA
 };
 
@@ -457,7 +460,7 @@ void Swap::SwapIn(SwapInfo *info, bool async=false) {
         LOG(FATAL) << "No swap in required without CUDA.";
 #endif  // MXNET_USE_CUDA
     } else {
-        std::cout << "Doesn't do swap in" << std::endl;
+        //std::cout << "Doesn't do swap in" << std::endl;
     }
     info->is_swapping.clear(std::memory_order_release);
 }
