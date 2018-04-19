@@ -421,7 +421,7 @@ void Swap::SwapIn(SwapInfo *info, bool async=false) {
     while (info->is_swapping.test_and_set(std::memory_order_acquire)) {
         waiting = true;
         pthread_rwlock_unlock(&locks_[info->device]);
-        usleep(100);
+        usleep(50);
         pthread_rwlock_wrlock(&locks_[info->device]);
     }
     if (waiting) {
@@ -624,7 +624,7 @@ void Swap::Swapper() {
             curr_pos += 1;
         }
         swapper_began_ = true;
-        usleep(5);
+        usleep(1);
     }
 }
 
@@ -637,7 +637,7 @@ void Swap::StartIteration() {
         std::cout << "Prepare to execute Swapper()" << std::endl;
         swapper_ = std::thread(&Swap::Swapper, this);
         while (!swapper_began_) {
-            usleep(10);
+            usleep(5);
         }
     }
 }
@@ -647,6 +647,7 @@ void Swap::StopIteration() {
     should_stop_ = true;
     if (swapper_began_) {
         swapper_.join();
+        std::cout << "Total dptr access " << MemHistory::Get()->history.size() << std::endl;
         std::cout << "We have " << cache_miss_ << " cache miss." << std::endl;
         std::cout << "We have " << waiting_swapping_ << " waiting swapping." << std::endl;
     }
