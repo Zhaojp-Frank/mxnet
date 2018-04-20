@@ -37,15 +37,16 @@ public:
     ~MemHistory();
     static MemHistory* Get();
     static std::shared_ptr<MemHistory> _GetSharedRef();
-    void PutRecord(handle_id_t id, record_t type, size_t size);
+    void PutRecord(handle_id_t id, int device, record_t type, size_t size);
     void StartIteration();
     void StopIteration();
     void CreateMacroOrder();
     bool IterationStarted() { return iteration_started_; };
-    bool HistoryRecorded() { return history.size() != 0 && !do_record_;};
+    bool HistoryRecorded() { return history[0].size() != 0 && !do_record_; };
+    int GetNumDevice() { return num_device_; };
 
-    std::vector<MemRecord> history;
-    std::vector<MemRecord> macro_history;
+    std::vector<MemRecord> history[8];
+    std::vector<MemRecord> macro_history[8];
     size_t record_idx;
 
 private:
@@ -54,7 +55,8 @@ private:
     bool do_record_;
     size_t iteration_idx_;
     high_resolution_clock::time_point begin_time_;
-    std::mutex mutex_;
+    std::mutex mutex_[8];
+    int num_device_;
 };
 
 class Swap {
@@ -77,7 +79,7 @@ public:
                  bool async);
     void SwapIn(SwapInfo *info, bool async);
     int UpdateFree(int device);
-    void SetAddr(handle_id_t handle_id, void* dptr, size_t size,
+    void SetAddr(handle_id_t handle_id, void* dptr, size_t size, int dev_id,
                  bool record=true);
     void DelAddr(handle_id_t handle_id, size_t size, bool preserve,
                  bool record=true);
@@ -90,9 +92,7 @@ public:
 
 private:
     Swap();
-#if 1
-    void Swapper();
-#endif
+    void Swapper(int device);
     std::unordered_map<handle_id_t, SwapInfo*> swap_info_;
     std::vector<std::unordered_map<void*, size_t>> reserved_mem_;
     std::vector<std::list<SwapInfo*>> lru_;
@@ -105,10 +105,11 @@ private:
     size_t swap_threshold_;
     bool should_stop_;
     bool swapper_began_;
-    std::thread swapper_;
+    std::thread swapper_[8];
     size_t look_ahead_;
     size_t cache_miss_;
     size_t waiting_swapping_;
+    int num_device_;
 };
 
 
@@ -140,8 +141,8 @@ class Storage {
     /*!
      * \brief Pointer to the data.
      */
-    void SetDptr(void* ptr) {
-        Swap::Get()->SetAddr(id_, ptr, size);
+    void SetDptr(void* ptr, int dev_id) {
+        Swap::Get()->SetAddr(id_, ptr, size, dev_id);
         dptr_ = ptr;
     }
     void* GetDptr() {

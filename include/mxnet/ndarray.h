@@ -366,13 +366,16 @@ class NDArray {
         : static_data(true),
           delay_alloc(false) {
       var = Engine::Get()->NewVariable();
+      int real_dev_id = 0;
       if (data.dev_mask_ == cpu::kDevMask) {
         shandle.ctx = Context::CPU();
+        real_dev_id = -1;
       } else {
         CHECK_EQ(data.dev_mask_, gpu::kDevMask);
         shandle.ctx = Context::GPU(dev_id);
+        real_dev_id = dev_id;
       }
-      shandle.SetDptr(data.dptr_);
+      shandle.SetDptr(data.dptr_, real_dev_id);
       shandle.size = data.shape_.Size() * mshadow::mshadow_sizeof(data.type_flag_);
     }
     /*! \brief construct a new chunk */
