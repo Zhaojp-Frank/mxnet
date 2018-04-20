@@ -135,11 +135,13 @@ Storage* Storage::Get() {
   return ptr;
 }
 
-std::random_device Storage::Handle::handle_rd;
-std::mt19937_64 Storage::Handle::handle_gen;
-std::uniform_int_distribution<handle_id_t> Storage::Handle::handle_dis;
-handle_id_t Storage::Handle::base_id_ = 0;
-bool Storage::Handle::handle_random = false;
+/**
+ * 
+ * Swap, Cache and MemHistory Implemenetation.
+ *
+ */
+
+std::atomic<handle_id_t> Storage::Handle::base_id_(0);
 
 std::shared_ptr<MemHistory> MemHistory::_GetSharedRef() {
     static std::shared_ptr<MemHistory> inst(new MemHistory());
@@ -151,14 +153,9 @@ MemHistory* MemHistory::Get() {
     return s;
 }
 
-std::shared_ptr<Swap> Swap::_GetSharedRef() {
-    static std::shared_ptr<Swap> inst(new Swap());
-    return inst;
-}
-
 MemHistory::MemHistory() {
     iteration_started_ = false;
-    iteration_idx_ = 0;
+    iteration_idx_ = 1;
     do_record_ = false;
     num_device_ = 1;
 }
@@ -167,7 +164,7 @@ MemHistory::~MemHistory() {
     std::cout << "Destroy MemHistory" << std::endl;
 }
 
-void MemHistory::PutRecord(handle_id_t id, int device, record_t type,
+void MemHistory::PutRecord(handle_id_t handle_id, int device, record_t type,
                            size_t size) {
     if (!iteration_started_) {
         return;
@@ -180,10 +177,10 @@ void MemHistory::PutRecord(handle_id_t id, int device, record_t type,
         timestamp_t t =
             (duration_cast<microseconds>(high_resolution_clock::now() -
                                          begin_time_)).count();
-        MemRecord r = {id, type, t, size};
+        MemRecord r = {handle_id, type, t, size};
         history[device].push_back(r);
         //std::cout << "his : "
-                  //<< history[record_idx].id << " "
+                  //<< history[record_idx].handle_id << " "
                   //<< history[record_idx].type << " "
                   //<< history[record_idx].size << " "
                   //<< history[record_idx].time << " "
@@ -192,7 +189,7 @@ void MemHistory::PutRecord(handle_id_t id, int device, record_t type,
     } else {
         //if (history.size() > 0) {
             //std::cout << "his : "
-                      //<< history[record_idx].id << " "
+                      //<< history[record_idx].handle_id << " "
                       //<< history[record_idx].type << " "
                       //<< history[record_idx].size << " "
                       //<< history[record_idx].time << " "
@@ -206,30 +203,26 @@ void MemHistory::PutRecord(handle_id_t id, int device, record_t type,
 }
 
 void MemHistory::StartIteration() {
+    unsigned start_iteration = dmlc::GetEnv("MXNET_MEM_RECORD_ITERATION", 4);
     iteration_started_ = true;
     record_idx = 0;
-    if (iteration_idx_ == 4) {
-        do_record_ = true ;
-    }
+    do_record_ = (iteration_idx_ == start_iteration);
     begin_time_ = high_resolution_clock::now();
 }
 
-void MemHistory::CreateMacroOrder() {
+void MemHistory::Analyze() {
     unsigned threshold = dmlc::GetEnv("MXNET_MACRO_MEM_ORDER_THRESHOLD", 500);
-    unsigned previous = 0;
-    for (int device=0; device < num_device_; device++) {
+    for (int device = 0; device < num_device_; device++) {
+        unsigned previous_time = 0;
         std::unordered_map<handle_id_t, MemRecord> members;
         for (auto& h : history[device]) {
-            access_stats[h.id] += 1;
-            if (h.time - previous > threshold) {
+            access_stats[h.handle_id] += 1;
+            if (h.time - previous_time > threshold) {
                 std::vector<MemRecord> temp;
-                unsigned long time = 0;
+                unsigned long time = members.begin()->second.time;
                 for (auto m : members) {
-                    if (time == 0) {
-                        time = m.second.time;
-                    }
-                    temp.push_back(MemRecord{m.second.id, m.second.type, time,
-                                             m.second.size});
+                    temp.push_back(MemRecord{m.second.handle_id, m.second.type, 
+                                             time, m.second.size});
                 }
                 std::sort(temp.begin(), temp.end(),
                           [](const MemRecord& a, const MemRecord& b) -> bool {
@@ -239,17 +232,35 @@ void MemHistory::CreateMacroOrder() {
                                              temp.begin(), temp.end());
                 members.clear();
             }
-            if (members.find(h.id) == members.end()) {
-                members[h.id] = h;
+            if (members.find(h.handle_id) == members.end()) {
+                members[h.handle_id] = h;
             }
-            previous = h.time;
+            previous_time = h.time;
         }
     }
 #if 0
     std::cout << "Macro history:" << std::endl;
     for (auto& h : macro_history) {
-        std::cout << h.time << " " << h.id << " " << h.size << std::endl;
+        std::cout << h.time << " " << h.handle_id << " " << h.size << std::endl;
     }
+
+    std::unordered_set<handle_id_t> handles;
+    size_t size = 0;
+    unsigned long previous = 0;
+    std::cout << "differences : " << std::endl;
+    for (auto& h : history) {
+        auto it = handles.find(h.handle_id);
+        std::cout << h.time - previous << std::endl;
+        previous = h.time;
+        if (it == handles.end()) {
+            size += h.size;
+            handles.insert(h.handle_id);
+        }
+    }
+    std::cout << "Size = " << size * 1.0 / 1024 / 1024 << std::endl;
+    size_t free, total;
+    CUDA_CALL(cudaMemGetInfo(&free, &total));
+    std::cout << "Total = " << total * 1.0 / 1024 / 1024 << std::endl;
 #endif
 }
 
@@ -257,28 +268,14 @@ void MemHistory::StopIteration() {
     iteration_started_ = false;
     iteration_idx_ += 1;
     if (do_record_) {
-        CreateMacroOrder();
-#if 0
-        std::unordered_set<handle_id_t> handles;
-        size_t size = 0;
-        unsigned long previous = 0;
-        std::cout << "differences : " << std::endl;
-        for (auto& h : history) {
-            auto it = handles.find(h.id);
-            std::cout << h.time - previous << std::endl;
-            previous = h.time;
-            if (it == handles.end()) {
-                size += h.size;
-                handles.insert(h.id);
-            }
-        }
-        std::cout << "Size = " << size * 1.0 / 1024 / 1024 << std::endl;
-        size_t free, total;
-        CUDA_CALL(cudaMemGetInfo(&free, &total));
-        std::cout << "Total = " << total * 1.0 / 1024 / 1024 << std::endl;
-#endif
+        Analyze();
     }
     do_record_ = false;
+}
+
+std::shared_ptr<Swap> Swap::_GetSharedRef() {
+    static std::shared_ptr<Swap> inst(new Swap());
+    return inst;
 }
 
 Swap* Swap::Get() {
@@ -322,163 +319,6 @@ int Swap::UpdateFree(int device) {
     return device;
 }
 
-void Swap::SwapOut(unsigned required_memory, int device,
-                   bool acquire_lock=false, bool async=false) {
-    if (!do_swap_) {
-        return;
-    }
-    if (device == -1) {
-        CUDA_CALL(cudaGetDevice(&device));
-    }
-    if (acquire_lock) {
-        pthread_rwlock_wrlock(&locks_[device]);
-    }
-    UpdateFree(device);
-    if (free_memory_[device] > required_memory + swap_threshold_) {
-        if (acquire_lock) {
-            pthread_rwlock_unlock(&locks_[device]);
-        }
-        return;
-    }
-    //std::cout << "Required " << required_memory << " " << swap_threshold_ << std::endl;
-    unsigned ignored_lru = 0;
-    CUDA_CALL(cudaSetDevice(device));
-    while (free_memory_[device] < required_memory + swap_threshold_) {
-        if (lru_[device].size() - ignored_lru > 0) {
-            auto target = lru_[device].back();
-            lru_[device].pop_back();
-            //std::cout << "Size " << lru_[device].size() << std::endl;
-            //CHECK(target->swap_in);
-            //CHECK(target->dptr != nullptr);
-            if (target->dptr == nullptr || !target->swap_in) {
-                std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl
-                          << "swap_info->dptr is nullptr or "
-                          << "target->swap_in is not set." << std::endl
-                          << "This should happen only when all iterations are "
-                          << "done." << std::endl
-                          << "Current lru size is " << lru_[device].size()
-                          << std::endl;
-                ignored_lru += 1;
-                lru_[device].push_front(target);
-                continue;
-            }
-            CHECK(!target->is_swapping.test_and_set(std::memory_order_acquire));
-            //std::cout << "Swapping out " << target->handle_id << std::endl;
-            target->swap_in = false;
-            target->it = lru_[device].end();
-            pthread_rwlock_unlock(&locks_[device]);
-            if (target->cpu_address == nullptr) {
-                target->cpu_address = new char[int(target->size)];
-            }
-            if (!streams_init_[device]) {
-                streams_init_[device] = true;
-                cudaStreamCreate(&streams_[device]);
-            }
-            if (access_stats_.size() == 0 || 
-                    (access_stats_[target->handle_id] <
-                        MemHistory::Get()->access_stats[target->handle_id])) {
-
-                if (async) {
-                    CUDA_CALL(cudaMemcpyAsync(target->cpu_address, target->dptr,
-                                              target->size,
-                                              cudaMemcpyDeviceToHost,
-                                              streams_[device]));
-                    CUDA_CALL(cudaStreamSynchronize(streams_[device]));
-                } else {
-                    CUDA_CALL(cudaMemcpy(target->cpu_address, target->dptr,
-                                         target->size, cudaMemcpyDeviceToHost));
-                }
-            }
-            CUDA_CALL(cudaFree(target->dptr));
-            target->dptr = nullptr;
-            pthread_rwlock_wrlock(&locks_[device]);
-            target->is_swapping.clear(std::memory_order_release);
-        } else {
-            std::cout << "Unfortunately, we need to free reserved memory."
-                      << "This implementation is very tricky and dangerous "
-                      << "since we don't have a persistent id. The correctness "
-                      << "is not guaranteed."
-                      << std::endl;
-            auto it = reserved_mem_[device].begin();
-            size_t needed = (required_memory + swap_threshold_) -
-                            free_memory_[device];
-            while (needed > 0) {
-                while (!(it->second & (1L << 63))) {
-                    it++;
-                }
-                CHECK(reserved_mem_[device].find(it->first) != reserved_mem_[device].end());
-                CHECK(it != reserved_mem_[device].end());
-                CUDA_CALL(cudaSetDevice(device));
-                CUDA_CALL(cudaFree(it->first));
-                it->second &= (~(1L << 63));
-                if (it->second > needed) {
-                    needed = 0;
-                } else {
-                    needed -= it->second;
-                }
-            }
-        }
-        UpdateFree(device);
-    }
-    if (acquire_lock) {
-        pthread_rwlock_unlock(&locks_[device]);
-    }
-}
-
-void Swap::SwapIn(SwapInfo *info, bool async=false) {
-    //std::cout << "SwapIn " << info->handle_id << std::endl;
-    bool waiting = false;
-    while (info->is_swapping.test_and_set(std::memory_order_acquire)) {
-        waiting = true;
-        pthread_rwlock_unlock(&locks_[info->device]);
-        usleep(50);
-        pthread_rwlock_wrlock(&locks_[info->device]);
-    }
-    if (waiting) {
-        waiting_swapping_ += 1;
-    }
-    //std::cout << "SwapIn " << info->handle_id << std::endl;
-    if (!info->swap_in) {
-        CHECK(info->dptr == nullptr);
-        CHECK(info->cpu_address != nullptr);
-        int old_device = 0;
-        CUDA_CALL(cudaGetDevice(&old_device));
-        CUDA_CALL(cudaSetDevice(info->device));
-        SwapOut(info->size, info->device, false, async);
-        CHECK(free_memory_[info->device] > info->size);
-        pthread_rwlock_unlock(&locks_[info->device]);
-        cudaError_t e = cudaMalloc(&(info->dptr), info->size);
-        if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
-            UpdateFree(info->device);
-            std::cout << info->device
-                      << " free_memory_[info->device] "
-                      << free_memory_[info->device]
-                      << " required " << info->size << std::endl;
-            LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
-        }
-        CHECK(info->cpu_address != nullptr);
-        if (access_stats_.size() == 0 || access_stats_[info->handle_id] > 1) {
-            if (async) {
-                CUDA_CALL(cudaMemcpyAsync(info->dptr, info->cpu_address, info->size,
-                                          cudaMemcpyHostToDevice,
-                                          streams_[info->device]));
-                CUDA_CALL(cudaStreamSynchronize(streams_[info->device]));
-            } else {
-                CUDA_CALL(cudaMemcpy(info->dptr, info->cpu_address, info->size,
-                                     cudaMemcpyHostToDevice));
-            }
-        }
-        pthread_rwlock_wrlock(&locks_[info->device]);
-        CUDA_CALL(cudaSetDevice(old_device));
-        info->swap_count += 1;
-        info->swap_in = true;
-        //std::cout << "Do swap in" << std::endl;
-    } else {
-        //std::cout << "Doesn't do swap in" << std::endl;
-    }
-    info->is_swapping.clear(std::memory_order_release);
-}
-
 bool Swap::FreeReserved(void *ptr, size_t size) {
     int device;
     CUDA_CALL(cudaGetDevice(&device));
@@ -510,6 +350,160 @@ bool Swap::CheckReservedAndFree(void *ptr, size_t size) {
     }
 }
 
+void Swap::AllocateReserved(size_t required, int device) {
+    std::cout << "Unfortunately, we need to free reserved memory."
+              << "This implementation is very tricky and dangerous "
+              << "since we don't have a persistent id. The correctness "
+              << "is not guaranteed."
+              << std::endl;
+
+    auto it = reserved_mem_[device].begin();
+    while (required > 0) {
+        while (!(it->second & (1L << 63))) {
+            it++;
+        }
+        CHECK(reserved_mem_[device].find(it->first) != 
+              reserved_mem_[device].end());
+        CHECK(it != reserved_mem_[device].end());
+        CUDA_CALL(cudaFree(it->first));
+        it->second &= (~(1L << 63));
+        if (it->second > required) {
+            required = 0;
+        } else {
+            required -= it->second;
+        }
+    }
+}
+
+void Swap::DoSwap(SwapInfo* info, bool swap_out, bool async) {
+    if (!streams_init_[info->device]) {
+        streams_init_[info->device] = true;
+        cudaStreamCreate(&streams_[info->device]);
+    }
+    if (swap_out) {
+        if (info->cpu_address == nullptr) {
+            info->cpu_address = new char[int(info->size)];
+        }
+        if (access_stats_.size() == 0 || 
+                (access_stats_[info->handle_id] <
+                    MemHistory::Get()->access_stats[info->handle_id])) {
+
+            if (async) {
+                CUDA_CALL(cudaMemcpyAsync(info->cpu_address, info->dptr,
+                                          info->size,
+                                          cudaMemcpyDeviceToHost,
+                                          streams_[info->device]));
+                CUDA_CALL(cudaStreamSynchronize(streams_[info->device]));
+            } else {
+                CUDA_CALL(cudaMemcpy(info->cpu_address, info->dptr,
+                                     info->size, cudaMemcpyDeviceToHost));
+            }
+        }
+        CUDA_CALL(cudaFree(info->dptr));
+        info->dptr = nullptr;
+    } else {
+        cudaError_t e = cudaMalloc(&(info->dptr), info->size);
+        if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
+            LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
+        }
+        CHECK(info->cpu_address != nullptr);
+        if (access_stats_.size() == 0 || access_stats_[info->handle_id] > 1) {
+            if (async) {
+                CUDA_CALL(cudaMemcpyAsync(info->dptr, info->cpu_address,
+                                          info->size, cudaMemcpyHostToDevice,
+                                          streams_[info->device]));
+                CUDA_CALL(cudaStreamSynchronize(streams_[info->device]));
+            } else {
+                CUDA_CALL(cudaMemcpy(info->dptr, info->cpu_address, info->size,
+                                     cudaMemcpyHostToDevice));
+            }
+        }
+    }
+}
+
+void Swap::SwapOut(unsigned required_memory, int device,
+                   bool acquire_lock=false, bool async=false) {
+    if (!do_swap_) {
+        return;
+    }
+    if (device == -1) {
+        CUDA_CALL(cudaGetDevice(&device));
+    }
+    if (acquire_lock) {
+        pthread_rwlock_wrlock(&locks_[device]);
+    }
+    UpdateFree(device);
+    if (free_memory_[device] > required_memory + swap_threshold_) {
+        if (acquire_lock) {
+            pthread_rwlock_unlock(&locks_[device]);
+        }
+        return;
+    }
+    //std::cout << "Required " << required_memory << " " << swap_threshold_ << std::endl;
+    unsigned ignored_lru = 0;
+    CUDA_CALL(cudaSetDevice(device));
+    while (free_memory_[device] < required_memory + swap_threshold_) {
+        if (lru_[device].size() - ignored_lru > 0) {
+            auto target = lru_[device].back();
+            lru_[device].pop_back();
+            if (target->dptr == nullptr || !target->swap_in) {
+                std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl
+                          << "(swap_info->dptr == nullptr || !target->swap_in)."
+                          << "This should happen when all iterations are done."
+                          << "Current lru size is " << lru_[device].size()
+                          << std::endl;
+                ignored_lru += 1;
+                lru_[device].push_front(target);
+                continue;
+            }
+            CHECK(!target->is_swapping.test_and_set(std::memory_order_acquire));
+            target->swap_in = false;
+            target->it = lru_[device].end();
+            pthread_rwlock_unlock(&locks_[device]);
+            DoSwap(target, true, async);
+            pthread_rwlock_wrlock(&locks_[device]);
+            target->is_swapping.clear(std::memory_order_release);
+        } else {
+            size_t required = required_memory + swap_threshold_ - 
+                              free_memory_[device];
+            AllocateReserved(required, device); 
+        }
+        UpdateFree(device);
+    }
+    if (acquire_lock) {
+        pthread_rwlock_unlock(&locks_[device]);
+    }
+}
+
+void Swap::SwapIn(SwapInfo *info, bool async=false) {
+    //std::cout << "SwapIn " << info->handle_id << std::endl;
+    bool waiting = false;
+    while (info->is_swapping.test_and_set(std::memory_order_acquire)) {
+        waiting = true;
+        pthread_rwlock_unlock(&locks_[info->device]);
+        usleep(50);
+        pthread_rwlock_wrlock(&locks_[info->device]);
+    }
+    if (waiting) {
+        waiting_swapping_ += 1;
+    }
+    if (!info->swap_in) {
+        CHECK(info->dptr == nullptr);
+        CHECK(info->cpu_address != nullptr);
+        int old_device = 0;
+        CUDA_CALL(cudaGetDevice(&old_device));
+        SwapOut(info->size, info->device, false, async);
+        CHECK(free_memory_[info->device] > info->size);
+        pthread_rwlock_unlock(&locks_[info->device]);
+        DoSwap(info, false, async);
+        pthread_rwlock_wrlock(&locks_[info->device]);
+        CUDA_CALL(cudaSetDevice(old_device));
+        info->swap_count += 1;
+        info->swap_in = true;
+    }
+    info->is_swapping.clear(std::memory_order_release);
+}
+
 void Swap::SetAddr(handle_id_t handle_id, void* dptr, size_t size, int dev_id,
                    bool record) {
     //std::cout << "SetAddr " << handle_id << " " << dptr << std::endl;
@@ -518,26 +512,22 @@ void Swap::SetAddr(handle_id_t handle_id, void* dptr, size_t size, int dev_id,
                                      size);
     }
     if (dptr == nullptr) {
-        return ;
+        return;
     }
-    auto key = handle_id ^ size;
     pthread_rwlock_wrlock(&swap_lock_);
-    auto iter = swap_info_.find(key);
+    auto iter = swap_info_.find(handle_id);
     if (iter == swap_info_.end()) {
+        CHECK(dptr != nullptr);
+        SwapInfo* swap_info = new SwapInfo{handle_id, true, ATOMIC_FLAG_INIT, 0,
+                                           dev_id, dptr, nullptr, size};
+        swap_info_[handle_id] = swap_info;
         if (dev_id != -1) {
-            UpdateFree(dev_id);
-            CHECK(dptr != nullptr);
-            auto swap_info = new SwapInfo{handle_id, true, ATOMIC_FLAG_INIT, 0,
-                                          dev_id, dptr, nullptr, size};
-            swap_info_[key] = swap_info;
             pthread_rwlock_wrlock(&locks_[dev_id]);
+            UpdateFree(dev_id);
             lru_[dev_id].push_front(swap_info);
             swap_info->it = lru_[dev_id].begin();
             pthread_rwlock_unlock(&locks_[dev_id]);
         } else {
-            auto swap_info = new SwapInfo{handle_id, true, ATOMIC_FLAG_INIT, 0,
-                                          dev_id, dptr, nullptr, size};
-            swap_info_[key] = swap_info;
             swap_info->it = lru_[0].end();
         }
     } else {
@@ -554,76 +544,69 @@ void Swap::SetAddr(handle_id_t handle_id, void* dptr, size_t size, int dev_id,
 void Swap::DelAddr(handle_id_t handle_id, size_t size, bool preserve,
                    bool record) {
     //std::cout << "DelAddr " << handle_id << std::endl;
-    auto key = handle_id ^ size;
     pthread_rwlock_wrlock(&swap_lock_);
-    auto swap_info = swap_info_.at(key);
-    if (swap_info->device != -1) {
+    auto info = swap_info_.at(handle_id);
+    if (info->device != -1) {
         if (record) {
-            MemHistory::Get()->PutRecord(handle_id, swap_info->device,
+            MemHistory::Get()->PutRecord(handle_id, info->device,
                                          MemHistory::DEL_ADDR, size);
         }
-        pthread_rwlock_wrlock(&locks_[swap_info->device]);
-        if (swap_info->cpu_address != nullptr) {
-            delete swap_info->cpu_address;
+        pthread_rwlock_wrlock(&locks_[info->device]);
+        if (info->cpu_address != nullptr) {
+            delete info->cpu_address;
+            info->cpu_address;
         }
-        if (swap_info->swap_in) {
-            //std::cout << "DelAddr" << std::endl;
-            lru_[swap_info->device].erase(swap_info->it);
-            swap_info->it = lru_[swap_info->device].end();
+        auto& reserved_mem = reserved_mem_[info->device];
+        if (info->swap_in) {
+            lru_[info->device].erase(info->it);
+            info->it = lru_[info->device].end();
             if (preserve) {
-                CHECK(reserved_mem_[swap_info->device].find(swap_info->dptr)
-                      == reserved_mem_[swap_info->device].end());
-                reserved_mem_[swap_info->device][swap_info->dptr] =
-                        swap_info->size | (1L << 63);
+                CHECK(reserved_mem.find(info->dptr) == reserved_mem.end());
+                reserved_mem[info->dptr] = info->size | (1L << 63);
             }
         } else if (preserve) {
-            CHECK(reserved_mem_[swap_info->device].find(swap_info->dptr)
-                  == reserved_mem_[swap_info->device].end());
-            reserved_mem_[swap_info->device][swap_info->dptr] =
-                    swap_info->size | (0L << 63);
+            CHECK(reserved_mem.find(info->dptr) == reserved_mem.end());
+            reserved_mem[info->dptr] = info->size | (0L << 63);
         }
-        UpdateFree(swap_info->device);
-        pthread_rwlock_unlock(&locks_[swap_info->device]);
+        UpdateFree(info->device);
+        pthread_rwlock_unlock(&locks_[info->device]);
     }
-    delete swap_info;
-    swap_info_.erase(key);
+    delete info;
+    swap_info_.erase(handle_id);
     pthread_rwlock_unlock(&swap_lock_);
 };
 
 void* Swap::GetAddr(handle_id_t handle_id, size_t size, bool record) {
     //std::cout << "GetAddr " << handle_id << std::endl;
-    auto key = handle_id ^ size;
     pthread_rwlock_rdlock(&swap_lock_);
-    auto swap_info = swap_info_.at(key);
-    if (swap_info->device != -1) {
+    auto info = swap_info_.at(handle_id);
+    if (info->device != -1) {
         if (record) {
-            MemHistory::Get()->PutRecord(handle_id, swap_info->device,
+            MemHistory::Get()->PutRecord(handle_id, info->device,
                                          MemHistory::GET_ADDR, size);
         }
-        pthread_rwlock_wrlock(&locks_[swap_info->device]);
+        pthread_rwlock_wrlock(&locks_[info->device]);
         if (access_stats_.size() > 0) {
             access_stats_[handle_id] += 1;
         }
-        CHECK_EQ(swap_info->size, size);
-        CHECK_EQ(swap_info->handle_id, handle_id);
+        CHECK_EQ(info->size, size);
+        CHECK_EQ(info->handle_id, handle_id);
 
-        if (swap_info->it != lru_[swap_info->device].end()) {
-            lru_[swap_info->device].erase(swap_info->it);
+        if (info->it != lru_[info->device].end()) {
+            lru_[info->device].erase(info->it);
         }
-        lru_[swap_info->device].push_front(swap_info);
-        swap_info->it = lru_[swap_info->device].begin();
-
-        if (!swap_info->swap_in && do_swap_) {
+        lru_[info->device].push_front(info);
+        info->it = lru_[info->device].begin();
+        if (!info->swap_in && do_swap_) {
             if (record) {
                 cache_miss_ += 1;
             }
-            SwapIn(swap_info, !record);
+            SwapIn(info, !record);
         }
-
-        pthread_rwlock_unlock(&locks_[swap_info->device]);
+        pthread_rwlock_unlock(&locks_[info->device]);
     }
     pthread_rwlock_unlock(&swap_lock_);
-    return swap_info->dptr;
+    return info->dptr;
 };
 
 void Swap::Swapper(int device) {
@@ -640,12 +623,13 @@ void Swap::Swapper(int device) {
                (mhistory->record_idx >= curr_pos ||
                 (curr_pos - mhistory->record_idx) < look_ahead_)) {
             auto &h = mhistory->history[device][curr_pos];
-            auto info = swap_info_.at(h.id ^ h.size);
+            auto info = swap_info_.at(h.handle_id);
             if (h.type == MemHistory::GET_ADDR) {
-                Swap::Get()->GetAddr(h.id, h.size, false);
+                Swap::Get()->GetAddr(h.handle_id, h.size, false);
             } else {
                 std::cout << "The history item contains not only read item : "
                           << h.type << std::endl;
+                CHECK(false);
             }
             curr_pos += 1;
         }

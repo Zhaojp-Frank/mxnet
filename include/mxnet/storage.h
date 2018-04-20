@@ -28,7 +28,7 @@ class MemHistory {
 public:
     enum record_t {SET_ADDR, GET_ADDR, DEL_ADDR};
     struct MemRecord {
-        handle_id_t id;
+        handle_id_t handle_id;
         record_t type;
         timestamp_t time;
         size_t size;
@@ -37,10 +37,11 @@ public:
     ~MemHistory();
     static MemHistory* Get();
     static std::shared_ptr<MemHistory> _GetSharedRef();
-    void PutRecord(handle_id_t id, int device, record_t type, size_t size);
+    void PutRecord(handle_id_t handle_id, int device, record_t type,
+                   size_t size);
     void StartIteration();
     void StopIteration();
-    void CreateMacroOrder();
+    void Analyze();
     bool IterationStarted() { return iteration_started_; };
     bool HistoryRecorded() { return history[0].size() != 0 && !do_record_; };
     int GetNumDevice() { return num_device_; };
@@ -76,6 +77,7 @@ public:
     ~Swap();
     static Swap* Get();
     static std::shared_ptr<Swap> _GetSharedRef();
+    void DoSwap(SwapInfo* info, bool swap_out, bool async);
     void SwapOut(unsigned required_memory, int device, bool acquire_lock,
                  bool async);
     void SwapIn(SwapInfo *info, bool async);
@@ -86,6 +88,7 @@ public:
                  bool record=true);
     void* GetAddr(handle_id_t handle_id, size_t size,
                   bool record=true);
+    void AllocateReserved(size_t required, int device);
     bool FreeReserved(void *ptr, size_t size);
     bool CheckReservedAndFree(void *ptr, size_t size);
     void StartIteration();
@@ -126,14 +129,7 @@ class Storage {
 
   struct Handle {
     Handle() {
-        if (!handle_random) {
-            handle_gen = std::mt19937_64(handle_rd());
-            handle_random = true;
-            //std::cout << "Init random number seed." << std::endl;
-        }
-        //id_ = handle_dis(handle_gen);
-        id_ = ++base_id_;
-        //std::cout << "Handle id " << id_ << std::endl;
+        id_ = (base_id_.fetch_add(1, std::memory_order_relaxed)) + 1;
     }
 
     void Free(bool preserve) {
@@ -160,11 +156,7 @@ class Storage {
     Context ctx;
 
    private:
-    static std::random_device handle_rd;
-    static std::mt19937_64 handle_gen;
-    static std::uniform_int_distribution<unsigned long long> handle_dis;
-    static handle_id_t base_id_;
-    static bool handle_random;
+    static std::atomic<handle_id_t> base_id_;
     void* dptr_;
     handle_id_t id_;
   };
