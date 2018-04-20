@@ -287,6 +287,7 @@ Swap::Swap() {
     std::cout << "Initialize Swap" << std::endl;
     do_swap_ = dmlc::GetEnv("MXNET_DO_SWAP", 0);
     look_ahead_ = dmlc::GetEnv("MXNET_SWAPPER_LOOK_AHEAD", 100);
+    free_cpu_ = dmlc::GetEnv("MXNET_FREE_CPU_MEORY", false);
     swap_lock_ = PTHREAD_RWLOCK_INITIALIZER;
     swapper_began_ = false;
     lru_ = std::vector<std::list<SwapInfo*>>(8);
@@ -382,7 +383,7 @@ void Swap::DoSwap(SwapInfo* info, bool swap_out, bool async) {
     }
     if (swap_out) {
         if (info->cpu_address == nullptr) {
-            info->cpu_address = new char[int(info->size)];
+            info->cpu_address = (char*)malloc(info->size);
         }
         if (access_stats_.size() == 0 || 
                 (access_stats_[info->handle_id] <
@@ -418,6 +419,10 @@ void Swap::DoSwap(SwapInfo* info, bool swap_out, bool async) {
                                      cudaMemcpyHostToDevice));
             }
         }
+        if (free_cpu_) {
+            free(info->cpu_address);
+            info->cpu_address = nullptr;
+        }
     }
 }
 
@@ -447,8 +452,7 @@ void Swap::SwapOut(unsigned required_memory, int device,
             auto target = lru_[device].back();
             lru_[device].pop_back();
             if (target->dptr == nullptr || !target->swap_in) {
-                std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl
-                          << "(swap_info->dptr == nullptr || !target->swap_in)."
+                std::cout << "(swap_info->dptr == nullptr || !target->swap_in)."
                           << "This should happen when all iterations are done."
                           << "Current lru size is " << lru_[device].size()
                           << std::endl;
@@ -553,8 +557,8 @@ void Swap::DelAddr(handle_id_t handle_id, size_t size, bool preserve,
         }
         pthread_rwlock_wrlock(&locks_[info->device]);
         if (info->cpu_address != nullptr) {
-            delete info->cpu_address;
-            info->cpu_address;
+            free(info->cpu_address);
+            info->cpu_address = nullptr;
         }
         auto& reserved_mem = reserved_mem_[info->device];
         if (info->swap_in) {

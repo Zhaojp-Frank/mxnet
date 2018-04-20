@@ -106,6 +106,7 @@ private:
     cudaStream_t streams_[8];
     bool streams_init_[8];
     bool do_swap_;
+    bool free_cpu_;
     size_t swap_threshold_;
     bool should_stop_;
     bool swapper_began_;
