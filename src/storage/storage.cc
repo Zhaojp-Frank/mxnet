@@ -288,6 +288,11 @@ Swap::Swap() {
     do_swap_ = dmlc::GetEnv("MXNET_DO_SWAP", 0);
     look_ahead_ = dmlc::GetEnv("MXNET_SWAPPER_LOOK_AHEAD", 100);
     free_cpu_ = dmlc::GetEnv("MXNET_FREE_CPU_MEORY", false);
+    unsigned multiplier = dmlc::GetEnv("MXNET_SWAP_THRESHOLD_MULTIPLIER", 32);
+    std::cout << "MXNET_DO_SWAP = " << do_swap_ << std::endl;
+    std::cout << "MXNET_SWAPPER_LOOK_AHEAD = " << look_ahead_<< std::endl;
+    std::cout << "MXNET_FREE_CPU_MEMORY = " << free_cpu_ << std::endl;
+    std::cout << "MXNET_SWAP_THRESHOLD_MULTIPLIER= " << multiplier << std::endl;
     swap_lock_ = PTHREAD_RWLOCK_INITIALIZER;
     swapper_began_ = false;
     lru_ = std::vector<std::list<SwapInfo*>>(8);
@@ -301,10 +306,7 @@ Swap::Swap() {
     size_t fifo_size, heap_size;
     cudaDeviceGetLimit(&fifo_size, cudaLimitPrintfFifoSize);
     cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
-    unsigned swap_threshold_multiplier =
-        dmlc::GetEnv("MXNET_SWAP_THRESHOLD_MULTIPLIER", 32);
-    swap_threshold_ = (fifo_size + heap_size + 1024 * 1024) *
-                      swap_threshold_multiplier;
+    swap_threshold_ = (fifo_size + heap_size + 1024 * 1024) * multiplier;
 };
 
 Swap::~Swap() {
