@@ -47,6 +47,7 @@ public:
 
     std::vector<MemRecord> history[8];
     std::vector<MemRecord> macro_history[8];
+    std::unordered_map<handle_id_t, int> access_stats;
     size_t record_idx;
 
 private:
@@ -110,6 +111,7 @@ private:
     size_t cache_miss_;
     size_t waiting_swapping_;
     int num_device_;
+    std::unordered_map<handle_id_t, int> access_stats_;
 };
 
 
