@@ -217,7 +217,7 @@ void MemHistory::Analyze() {
         std::unordered_map<handle_id_t, MemRecord> members;
         for (auto& h : history[device]) {
             access_stats[h.handle_id] += 1;
-            if (h.time - previous_time > threshold) {
+            if (h.time - previous_time > threshold && members.size() > 0) {
                 std::vector<MemRecord> temp;
                 unsigned long time = members.begin()->second.time;
                 for (auto m : members) {
@@ -621,10 +621,8 @@ void Swap::Swapper(int device) {
     size_t curr_pos = 0;
     std::cout << "Execute Swapper()" << std::endl;
     auto mhistory = MemHistory::Get();
-    for (auto& it : mhistory->access_stats) {
-        access_stats_[it.first] = 0;
-    }
     while (!should_stop_) {
+        pthread_rwlock_rdlock(&swap_lock_);
         while (mhistory->history[device].size() > curr_pos &&
                (mhistory->record_idx >= curr_pos ||
                 (curr_pos - mhistory->record_idx) < look_ahead_)) {
@@ -639,16 +637,21 @@ void Swap::Swapper(int device) {
             }
             curr_pos += 1;
         }
+        pthread_rwlock_unlock(&swap_lock_);
         swapper_began_ = true;
         usleep(50);
     }
 }
 
 void Swap::StartIteration() {
-    num_device_ = MemHistory::Get()->GetNumDevice();
+    auto mhistory = MemHistory::Get();
+    num_device_ = mhistory->GetNumDevice();
     //cudaProfilerStart();
-    MemHistory::Get()->StartIteration();
-    if (MemHistory::Get()->HistoryRecorded() && do_swap_) {
+    mhistory->StartIteration();
+    if (mhistory->HistoryRecorded() && do_swap_) {
+        for (auto& it : mhistory->access_stats) {
+            access_stats_[it.first] = 0;
+        }
         should_stop_ = false;
         swapper_began_ = false;
         std::cout << "Prepare to execute Swapper()" << std::endl;
