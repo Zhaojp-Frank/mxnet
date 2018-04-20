@@ -287,7 +287,7 @@ Swap::Swap() {
     std::cout << "Initialize Swap" << std::endl;
     do_swap_ = dmlc::GetEnv("MXNET_DO_SWAP", 0);
     look_ahead_ = dmlc::GetEnv("MXNET_SWAPPER_LOOK_AHEAD", 100);
-    free_cpu_ = dmlc::GetEnv("MXNET_FREE_CPU_MEORY", false);
+    free_cpu_ = dmlc::GetEnv("MXNET_FREE_CPU_MEMORY", false);
     unsigned multiplier = dmlc::GetEnv("MXNET_SWAP_THRESHOLD_MULTIPLIER", 32);
     std::cout << "MXNET_DO_SWAP = " << do_swap_ << std::endl;
     std::cout << "MXNET_SWAPPER_LOOK_AHEAD = " << look_ahead_<< std::endl;
