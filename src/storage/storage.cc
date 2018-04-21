@@ -324,7 +324,7 @@ int Swap::UpdateFree(int device) {
 }
 
 bool Swap::FreeReserved(void *ptr, size_t size) {
-    int device;
+    int device = -1;
     CUDA_CALL(cudaGetDevice(&device));
     if (device < 0) {
         for (device = 0; device < mhistory_->GetNumDevice(); device++) {
@@ -338,6 +338,7 @@ bool Swap::FreeReserved(void *ptr, size_t size) {
             return false;
         }
     }
+    std::cout << "device " << device << std::endl;
     pthread_rwlock_wrlock(&locks_[device]);
     auto it = reserved_mem_[device].find(ptr);
     bool ret = true;
