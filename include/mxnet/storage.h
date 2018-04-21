@@ -33,6 +33,10 @@ public:
         timestamp_t time;
         size_t size;
     };
+    struct MemRecordSet {
+        std::vector<MemRecord> unique_records;
+        std::vector<MemRecord> all_records;
+    };
 
     ~MemHistory();
     static MemHistory* Get();
@@ -41,13 +45,15 @@ public:
                    size_t size);
     void StartIteration();
     void StopIteration();
+    void MakeRecordSet(std::unordered_map<handle_id_t, MemRecord>& members,
+                       MemRecordSet *record_set, int device);
     void Analyze();
     bool IterationStarted() { return iteration_started_; };
     bool HistoryRecorded() { return history[0].size() != 0 && !do_record_; };
     int GetNumDevice() { return num_device_; };
 
     std::vector<MemRecord> history[8];
-    std::vector<MemRecord> macro_history[8];
+    std::vector<MemRecordSet*> macro_history[8];
     std::unordered_map<handle_id_t, int> access_stats;
     size_t record_idx;
 
@@ -97,6 +103,8 @@ public:
 private:
     Swap();
     void Swapper(int device);
+    void SwapperLookahead(int device, size_t& curr_pos);
+    void SwapperMacroLookahead(int device, size_t& curr_pos);
     std::shared_ptr<MemHistory> mhistory_;
     std::unordered_map<handle_id_t, SwapInfo*> swap_info_;
     std::vector<std::unordered_map<void*, size_t>> reserved_mem_;

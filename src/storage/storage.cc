@@ -210,32 +210,45 @@ void MemHistory::StartIteration() {
     begin_time_ = high_resolution_clock::now();
 }
 
+void MemHistory::MakeRecordSet(std::unordered_map<handle_id_t, MemRecord>& members,
+                               MemRecordSet *record_set,
+                               int device) {
+    unsigned long time = members.begin()->second.time;
+    for (auto m : members) {
+        record_set->unique_records.push_back(
+            MemRecord{m.second.handle_id, m.second.type,
+                      time, m.second.size});
+    }
+    std::sort(record_set->unique_records.begin(),
+              record_set->unique_records.end(),
+              [](const MemRecord& a, const MemRecord& b) -> bool {
+                return a.size > b.size;
+              });
+    macro_history[device].push_back(record_set);
+}
+
 void MemHistory::Analyze() {
     unsigned threshold = dmlc::GetEnv("MXNET_MACRO_MEM_ORDER_THRESHOLD", 500);
     for (int device = 0; device < num_device_; device++) {
-        unsigned previous_time = 0;
         std::unordered_map<handle_id_t, MemRecord> members;
+        MemRecordSet *record_set = new MemRecordSet();
+        unsigned previous_time = 0;
         for (auto& h : history[device]) {
             access_stats[h.handle_id] += 1;
             if (h.time - previous_time > threshold && members.size() > 0) {
-                std::vector<MemRecord> temp;
-                unsigned long time = members.begin()->second.time;
-                for (auto m : members) {
-                    temp.push_back(MemRecord{m.second.handle_id, m.second.type,
-                                             time, m.second.size});
-                }
-                std::sort(temp.begin(), temp.end(),
-                          [](const MemRecord& a, const MemRecord& b) -> bool {
-                            return a.size > b.size;
-                          });
-                macro_history[device].insert(macro_history[device].end(),
-                                             temp.begin(), temp.end());
+                MakeRecordSet(members, record_set, device);
+                record_set = new MemRecordSet();
                 members.clear();
+            } else {
+                record_set->all_records.push_back(h);
             }
             if (members.find(h.handle_id) == members.end()) {
                 members[h.handle_id] = h;
             }
             previous_time = h.time;
+        }
+        if (members.size() > 0) {
+            MakeRecordSet(members, record_set, device);
         }
     }
 #if 0
@@ -338,7 +351,7 @@ bool Swap::FreeReserved(void *ptr, size_t size) {
             return false;
         }
     }
-    std::cout << "device " << device << std::endl;
+    //std::cout << "device " << device << std::endl;
     pthread_rwlock_wrlock(&locks_[device]);
     auto it = reserved_mem_[device].find(ptr);
     bool ret = true;
@@ -408,14 +421,16 @@ void Swap::DoSwap(SwapInfo* info, bool swap_out, bool async) {
                     mhistory_->access_stats[info->handle_id])) {
 
             if (async) {
-                CUDA_CALL(cudaMemcpyAsync(info->cpu_address, info->dptr,
-                                          info->size,
-                                          cudaMemcpyDeviceToHost,
-                                          streams_[info->device]));
-                CUDA_CALL(cudaStreamSynchronize(streams_[info->device]));
+                //CUDA_CALL(cudaMemcpyAsync(info->cpu_address, info->dptr,
+                                          //info->size,
+                                          //cudaMemcpyDeviceToHost,
+                                          //streams_[info->device]));
+                //CUDA_CALL(cudaStreamSynchronize(streams_[info->device]));
             } else {
-                CUDA_CALL(cudaMemcpy(info->cpu_address, info->dptr,
-                                     info->size, cudaMemcpyDeviceToHost));
+                //std::cout << " info->cpu_address " << (size_t)(info->cpu_address)
+                          //<< " info->dptr " << (size_t)(info->dptr) << std::endl;
+                //CUDA_CALL(cudaMemcpy(info->cpu_address, info->dptr,
+                                     //info->size, cudaMemcpyDeviceToHost));
             }
         }
         CUDA_CALL(cudaFree(info->dptr));
@@ -428,13 +443,13 @@ void Swap::DoSwap(SwapInfo* info, bool swap_out, bool async) {
         CHECK(info->cpu_address != nullptr);
         if (access_stats_.size() == 0 || access_stats_[info->handle_id] > 1) {
             if (async) {
-                CUDA_CALL(cudaMemcpyAsync(info->dptr, info->cpu_address,
-                                          info->size, cudaMemcpyHostToDevice,
-                                          streams_[info->device]));
-                CUDA_CALL(cudaStreamSynchronize(streams_[info->device]));
+                //CUDA_CALL(cudaMemcpyAsync(info->dptr, info->cpu_address,
+                                          //info->size, cudaMemcpyHostToDevice,
+                                          //streams_[info->device]));
+                //CUDA_CALL(cudaStreamSynchronize(streams_[info->device]));
             } else {
-                CUDA_CALL(cudaMemcpy(info->dptr, info->cpu_address, info->size,
-                                     cudaMemcpyHostToDevice));
+                //CUDA_CALL(cudaMemcpy(info->dptr, info->cpu_address, info->size,
+                                     //cudaMemcpyHostToDevice));
             }
         }
         if (free_cpu_) {
@@ -630,28 +645,54 @@ void* Swap::GetAddr(handle_id_t handle_id, size_t size, bool record) {
     return info->dptr;
 };
 
+void Swap::SwapperLookahead(int device, size_t& curr_pos) {
+    pthread_rwlock_rdlock(&swap_lock_);
+    while (mhistory_->history[device].size() > curr_pos &&
+           (mhistory_->record_idx >= curr_pos ||
+            (curr_pos - mhistory_->record_idx) < look_ahead_)) {
+        auto &h = mhistory_->history[device][curr_pos];
+        auto info = swap_info_.at(h.handle_id);
+        if (h.type == MemHistory::GET_ADDR) {
+            Swap::Get()->GetAddr(h.handle_id, h.size, false);
+        } else {
+            std::cout << "The history item contains not only read item : "
+                      << h.type << std::endl;
+            CHECK(false);
+        }
+        curr_pos += 1;
+    }
+    pthread_rwlock_unlock(&swap_lock_);
+}
+
+void Swap::SwapperMacroLookahead(int device, size_t& curr_pos) {
+    pthread_rwlock_rdlock(&swap_lock_);
+    while (mhistory_->history[device].size() > curr_pos &&
+           (mhistory_->record_idx >= curr_pos ||
+            (curr_pos - mhistory_->record_idx) < look_ahead_)) {
+        auto &h = mhistory_->history[device][curr_pos];
+        auto info = swap_info_.at(h.handle_id);
+        if (h.type == MemHistory::GET_ADDR) {
+            Swap::Get()->GetAddr(h.handle_id, h.size, false);
+        } else {
+            std::cout << "The history item contains not only read item : "
+                      << h.type << std::endl;
+            CHECK(false);
+        }
+        curr_pos += 1;
+    }
+    pthread_rwlock_unlock(&swap_lock_);
+}
+
 void Swap::Swapper(int device) {
-    cache_miss_ = 0;
-    waiting_swapping_ = 0;
     size_t curr_pos = 0;
     std::cout << "Execute Swapper()" << std::endl;
     while (!should_stop_) {
-        pthread_rwlock_rdlock(&swap_lock_);
-        while (mhistory_->history[device].size() > curr_pos &&
-               (mhistory_->record_idx >= curr_pos ||
-                (curr_pos - mhistory_->record_idx) < look_ahead_)) {
-            auto &h = mhistory_->history[device][curr_pos];
-            auto info = swap_info_.at(h.handle_id);
-            if (h.type == MemHistory::GET_ADDR) {
-                Swap::Get()->GetAddr(h.handle_id, h.size, false);
-            } else {
-                std::cout << "The history item contains not only read item : "
-                          << h.type << std::endl;
-                CHECK(false);
-            }
-            curr_pos += 1;
+        //if (true) {
+            //SwapperLookahead(device, curr_pos);
+        //}
+        if (true) {
+            SwapperMacroLookahead(device, curr_pos);
         }
-        pthread_rwlock_unlock(&swap_lock_);
         swapper_began_ = true;
         usleep(50);
     }
@@ -667,6 +708,8 @@ void Swap::StartIteration() {
         }
         should_stop_ = false;
         swapper_began_ = false;
+        cache_miss_ = 0;
+        waiting_swapping_ = 0;
         std::cout << "Prepare to execute Swapper()" << std::endl;
         for (int device = 0; device < num_device_; device++) {
             swapper_[device] = std::thread(&Swap::Swapper, this, device);
@@ -678,7 +721,7 @@ void Swap::StartIteration() {
 }
 
 void Swap::StopIteration() {
-    std::cout << "Swap address " << this << std::endl;
+    //std::cout << "Swap address " << this << std::endl;
     mhistory_->StopIteration();
     should_stop_ = true;
     if (swapper_began_) {
