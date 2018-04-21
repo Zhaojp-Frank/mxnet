@@ -97,6 +97,7 @@ public:
 private:
     Swap();
     void Swapper(int device);
+    std::shared_ptr<MemHistory> mhistory_;
     std::unordered_map<handle_id_t, SwapInfo*> swap_info_;
     std::vector<std::unordered_map<void*, size_t>> reserved_mem_;
     std::vector<std::list<SwapInfo*>> lru_;
