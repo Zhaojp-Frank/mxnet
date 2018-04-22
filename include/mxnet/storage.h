@@ -53,9 +53,10 @@ public:
     int GetNumDevice() { return num_device_; };
 
     std::vector<MemRecord> history[8];
-    std::vector<MemRecordSet*> macro_history[8];
+    std::vector<MemRecordSet*> set_history[8];
+    std::vector<int> set_accu_nrecords[8];
     std::unordered_map<handle_id_t, int> access_stats;
-    size_t record_idx;
+    std::atomic<int>curr_idx[8];
 
 private:
     MemHistory();
@@ -103,8 +104,8 @@ public:
 private:
     Swap();
     void Swapper(int device);
-    void SwapperLookahead(int device, size_t& curr_pos);
-    void SwapperMacroLookahead(int device, size_t& curr_pos);
+    void SwapperLookahead(int device, int& curr_pos);
+    void SwapperSetLookahead(int device, int& curr_pos);
     std::shared_ptr<MemHistory> mhistory_;
     std::unordered_map<handle_id_t, SwapInfo*> swap_info_;
     std::vector<std::unordered_map<void*, size_t>> reserved_mem_;
@@ -120,7 +121,7 @@ private:
     bool should_stop_;
     bool swapper_began_;
     std::thread swapper_[8];
-    size_t look_ahead_;
+    int look_ahead_;
     size_t cache_miss_;
     size_t waiting_swapping_;
     int num_device_;
