@@ -593,13 +593,14 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
     if (req != kNullOp) need_grad = true;
   }
   const int num_devices = ctx_map.size();
-  LOG(INFO) << "Num devices: " << num_devices;
   // TODO(minjie): Here has an implicit assumption.
   // The ctx_map is of form {"group:%d" % id : context object}
   // The default group name is "group:default".
   std::map<std::string, Context> ctx_map_with_default = ctx_map;
   ctx_map_with_default["group:default"] = default_ctx;
-  if (num_devices > 1 && need_grad) {
+  const int tofu_enabled = dmlc::GetEnv("TOFU_ENABLED", 0);
+  if (num_devices > 1 && tofu_enabled && need_grad) {
+    LOG(INFO) << "Num devices: " << num_devices;
     g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_devices);
     g.attrs["default_group"] = std::make_shared<nnvm::any>(std::string("group:default"));
     g.attrs["user_tiling_json"] = std::make_shared<nnvm::any>("");

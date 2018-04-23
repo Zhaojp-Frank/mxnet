@@ -125,6 +125,8 @@ class SliceChannelOp : public Operator {
 template<typename xpu>
 Operator *CreateOp(SliceChannelParam param);
 
+template<typename xpu>
+Operator *CreateBackwardOp(const SliceChannelParam& param);
 
 #if DMLC_USE_CXX11
 class SliceChannelProp : public OperatorProperty {
@@ -203,6 +205,13 @@ class SliceChannelProp : public OperatorProperty {
   }
 
   Operator* CreateOperator(Context ctx) const override;
+
+  Operator* CreateBackwardOperatorEx(
+      const Context& ctx,
+      const std::vector<TShape>& in_shape,
+      const std::vector<int>& in_type,
+      const std::vector<TShape>& out_shape,
+      const std::vector<int>& out_type) const override;
 
  private:
   SliceChannelParam param_;

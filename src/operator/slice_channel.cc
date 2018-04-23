@@ -13,10 +13,24 @@ template<>
 Operator* CreateOp<cpu>(SliceChannelParam param) {
   return new SliceChannelOp<cpu>(param);
 }
+template<>
+Operator* CreateBackwardOp<cpu>(const SliceChannelParam& param) {
+  return CreateOp<cpu>(param);
+}
 
 Operator* SliceChannelProp::CreateOperator(Context ctx) const {
   DO_BIND_DISPATCH(CreateOp, param_);
 }
+
+Operator* SliceChannelProp::CreateBackwardOperatorEx(
+    const Context& ctx,
+    const std::vector<TShape>& in_shape,
+    const std::vector<int>& in_type,
+    const std::vector<TShape>& out_shape,
+    const std::vector<int>& out_type) const {
+  DO_BIND_DISPATCH(CreateBackwardOp, param_);
+}
+
 
 DMLC_REGISTER_PARAMETER(SliceChannelParam);
 

@@ -1,5 +1,6 @@
 l=50
 
+export TOFU_ENABLED=1
 export TOFU_USE_BFS_LEVEL=1
 
 #echo "Single: "

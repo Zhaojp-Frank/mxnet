@@ -1,5 +1,7 @@
 n=2
 
+export TOFU_ENABLED=1
+
 #echo "Single: "
 #for b in 512 1024 2048 4096 8192
 #do

@@ -2,7 +2,8 @@ import mxnet as mx
 
 def add_args(parser):
     parser.add_argument('--num_layers', type=int, default=50, help='Number of resnet layers')
-    parser.add_argument('--wide_scale', type=int, default=1, help='Wide resnet scale')
+    parser.add_argument('--wide_scale', type=float, default=1.0, help='Wide resnet scale')
+    parser.add_argument('--workspace', type=int, default=256, help='Convolution workspace size')
 
 has_activation = True
 def Activation(data, **kwargs):
@@ -118,7 +119,7 @@ def resnet(units, num_stages, filter_list, num_classes, image_shape, bottle_neck
     fc1 = mx.symbol.FullyConnected(data=flat, num_hidden=num_classes, name='fc1', no_bias=True)
     return mx.symbol.SoftmaxOutput(data=fc1, name='softmax')
 
-def get_symbol(args, conv_workspace=256):
+def get_symbol(args):
     """
     Adapted from https://github.com/tornadomeet/ResNet/blob/master/train_resnet.py
     Original author Wei Wu
@@ -149,7 +150,8 @@ def get_symbol(args, conv_workspace=256):
         else:
             filter_list = [64, 64, 128, 256, 512]
             bottle_neck = False
-        filter_list = [i * args.wide_scale for i in filter_list]
+        filter_list = [int(i * args.wide_scale) for i in filter_list]
+        print(filter_list)
         num_stages = 4
         if num_layers == 18:
             units = [2, 2, 2, 2]
@@ -174,4 +176,4 @@ def get_symbol(args, conv_workspace=256):
                   num_classes = num_classes,
                   image_shape = image_shape,
                   bottle_neck = bottle_neck,
-                  workspace   = conv_workspace), (3, 224, 224), 1000
+                  workspace   = args.workspace), (3, 224, 224), 1000

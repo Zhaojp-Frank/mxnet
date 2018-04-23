@@ -17,6 +17,7 @@
 #include "./storage_manager.h"
 #include "../common/cuda_utils.h"
 
+//#define MXNET_USE_FAKE_GPU_STORAGE
 
 namespace mxnet {
 namespace storage {
@@ -41,6 +42,7 @@ class GPUPooledStorageManager final : public StorageManager {
     ReleaseAll();
   }
 
+  void* DirectAlloc(size_t size) override;
   void* Alloc(size_t size) override;
   void Free(void* ptr, size_t size) override;
 
@@ -64,12 +66,45 @@ class GPUPooledStorageManager final : public StorageManager {
   // percentage of reserved memory
   int reserve_;
   std::shared_ptr<Swap> swap;
+#ifdef MXNET_USE_FAKE_GPU_STORAGE
+  void *ptr_ = nullptr;
+#endif
   // memory pool
   std::unordered_map<size_t, std::vector<void*>> memory_pool_;
   DISALLOW_COPY_AND_ASSIGN(GPUPooledStorageManager);
 };  // class GPUPooledStorageManager
 
+void* GPUPooledStorageManager::DirectAlloc(size_t size) {
+#ifdef MXNET_USE_FAKE_GPU_STORAGE
+  void* ret = nullptr;
+  cudaError_t e = cudaMalloc(&ret, size);
+  if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
+    LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
+  }
+  used_memory_ += size;
+  return ret;
+#else
+  return Alloc(size);
+#endif
+}
+
+void* _Alloc() {
+  void* ret = nullptr;
+  cudaError_t e = cudaMalloc(&ret, 2L * 1024 * 1024 * 1024 * sizeof(float));
+  if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
+    LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
+  }
+  return ret;
+}
+
 void* GPUPooledStorageManager::Alloc(size_t size) {
+#ifdef MXNET_USE_FAKE_GPU_STORAGE
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (ptr_ == nullptr) {
+    ptr_ = _Alloc();
+  }
+  return ptr_;
+#else
   std::lock_guard<std::mutex> lock(mutex_);
   auto&& reuse_it = memory_pool_.find(size);
 
@@ -107,6 +142,7 @@ void* GPUPooledStorageManager::Alloc(size_t size) {
     reuse_pool.pop_back();
     return ret;
   }
+#endif
 }
 
 void GPUPooledStorageManager::Free(void* ptr, size_t size) {
