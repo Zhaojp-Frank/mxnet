@@ -1,34 +1,49 @@
-#include "./tofu_cached_copy.h"
-
+#include <dmlc/parameter.h>
+#include <mxnet/operator.h>
+#include <mxnet/operator_util.h>
+#include <mxnet/op_attr_types.h>
 #include <mxnet/resource.h>
 #include "../ndarray/ndarray_function.h"
+#include "../operator/operator_common.h"
 
 namespace mxnet {
 namespace exec {
 
-void TofuCachedCopy(const nnvm::NodeAttrs& attrs,
-                    const NDArray& from,
-                    NDArray* to,
-                    int priority) {
-  NDArray ret = *to;
-  int a = from.ctx().dev_mask();
-  int b = to->ctx().dev_mask();
-  CHECK(a == gpu::kDevMask && b == gpu::kDevMask);
+struct TofuCachedCopyParam : public dmlc::Parameter<TofuCachedCopyParam> {
+  int tensor_id;
+  TShape offset;
+  TShape size;
+  DMLC_DECLARE_PARAMETER(TofuCachedCopyParam) {
+    DMLC_DECLARE_FIELD(tensor_id).set_default(-1)
+      .describe("The global unique tensor id.");
+    DMLC_DECLARE_FIELD(offset).set_default(TShape())
+      .describe("The offset of the copy region.");
+    DMLC_DECLARE_FIELD(size).set_default(TShape())
+      .describe("The size of the copy region.");
+  }
+};
 
-  std::vector<Engine::VarHandle> const_vars;
-  if (from.var() != ret.var()) const_vars.push_back(from.var());
-  Engine::Get()->PushSync([from, ret](RunContext ctx) {
-      ret.CheckAndAlloc();
-      LOG(INFO) << "Called tofu copy op!!!";
-      TBlob tmp = ret.data();
-      ndarray::Copy<gpu, gpu>(from.data(), &tmp,
-                              from.ctx(), ret.ctx(), ctx);
-      // Wait GPU kernel to complete
-      ctx.get_stream<gpu>()->Wait();
-    }, from.ctx(), const_vars, {ret.var()},
-    from.dtype() != ret.dtype() ? FnProperty::kNormal : FnProperty::kCopyFromGPU,
-    priority, PROFILER_MESSAGE("CopyGPU2GPU"));
+DMLC_REGISTER_PARAMETER(TofuCachedCopyParam);
+
+void TofuCachedCopy(const nnvm::NodeAttrs& attrs,
+                    const OpContext& ctx,
+                    const std::vector<TBlob>& inputs,
+                    const std::vector<OpReqType>& req,
+                    const std::vector<TBlob>& outputs) {
+  CHECK_EQ(inputs.size(), 1);
+  CHECK_EQ(outputs.size(), 1);
+  const auto& param = nnvm::get<TofuCachedCopyParam>(attrs.parsed);
+  LOG(INFO) << "Called tofu copy op!!! tensor_id="
+    << param.tensor_id << " offset=" << param.offset
+    << " size=" << param.size;
 }
+
+NNVM_REGISTER_OP(_TofuCachedCopy)
+.set_num_inputs(1)
+.set_num_outputs(1)
+.set_attr_parser(op::ParamParser<TofuCachedCopyParam>)
+.set_attr<FCompute>("FCompute<cpu>", TofuCachedCopy)
+.set_attr<FCompute>("FCompute<gpu>", TofuCachedCopy);
 
 }  // namespace exec
 }  // namespace mxnet
