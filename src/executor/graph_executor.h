@@ -28,6 +28,7 @@ using nnvm::Graph;
 class GraphExecutor : public Executor {
  public:
   using Executor::MonitorCallback;
+  GraphExecutor();
   virtual ~GraphExecutor();
   void Forward(bool is_train) override;
   void PartialForward(bool is_train, int step, int *step_left) override;
@@ -84,6 +85,9 @@ class GraphExecutor : public Executor {
   void InitDataEntryMemory(const std::vector<NDArray>& shared_pool);
   // run ops from topo order start to end
   void RunOps(bool is_train, size_t topo_start, size_t topo_end);
+
+  std::string copy_op_name_ = "_CrossDeviceCopy";
+
   // internal graph
   nnvm::Graph graph_;
   // operator node
