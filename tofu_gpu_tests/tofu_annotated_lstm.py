@@ -72,7 +72,7 @@ def get_symbol(args):
                                          weight=cls_weight,
                                          no_bias=True,
                                          num_hidden=args.num_classes,
-                                         name='logits%d' % i)
+                                         name='logits%d' % seqidx)
             logits.append(mx.sym.SoftmaxOutput(pred))
     return mx.sym.Group(logits)
 
@@ -114,7 +114,6 @@ def test():
     else:
         default_ctx = mx.cpu(0)
     print(group2ctx)
-    default_ctx = mx.cpu(0)
 
     in_shapes = {}
     in_types = {}
@@ -152,7 +151,6 @@ def test():
                         args_grad=args_grad,
                         grad_req='write',
                         group2ctx=group2ctx)
-    sys.exit(0)
     feed_args(net, arg_arrays)
     all_time = []
     for i in range(num_loops):
