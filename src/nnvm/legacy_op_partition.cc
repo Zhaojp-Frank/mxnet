@@ -183,14 +183,6 @@ vector<SchemeRequest> CutFirstKDimsSchemes(
     const vector<TShape>& input_shapes,
     const vector<TShape>& output_shapes) {
   vector<SchemeRequest> reqs;
-  if (K == 1) {
-    for (auto s : input_shapes) {
-      LOG(INFO) << ">in shape: " << s;
-    }
-    for (auto s : output_shapes) {
-      LOG(INFO) << ">out shape: " << s;
-    }
-  }
   for (size_t i = 0; i < K; ++i) {
     SchemeRequest req;
     for (size_t j = 0; j < input_shapes.size(); ++j) {
@@ -856,6 +848,8 @@ void RegisterOpAlignedSchemes() {
         || name == "_backward_minimum" || name == "_backward_minimum_scalar"
         || name == "_power" || name == "_power_scalar"
         || name == "_backward_power" || name == "_backward_power_scalar"
+        || name == "SliceChannel" || name == "_backward_SliceChannel"
+        || name == "_grad_add"
         || name == "_copy") {
       op.set_attr<AType>(kAttrName, CutAllDimsSchemes);
     } else if (name == "Pooling" || name == "_backward_Pooling"
