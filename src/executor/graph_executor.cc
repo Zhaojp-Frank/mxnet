@@ -19,7 +19,6 @@
 #include "./graph_executor.h"
 #include "../engine/profiler.h"
 #include "../operator/p2pnet_common.h"
-#include "./tofu_cached_copy.h"
 
 //#define SPLIT_GRADIENT_TEST
 
@@ -1009,11 +1008,7 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
     OpNode& opnode = op_nodes_[nid];
     if (op_nodes_[nid].skip_exec_node) continue;
     opnode.exec->op_ctx.is_train = is_train;
-    if (inode.source->op()->name == "_TofuCachedCopy") {
-      TofuCachedCopy(inode.source->attrs,
-                     opnode.exec->in_array[0],
-                     &(opnode.exec->out_array[0]));
-    } else if (opnode.exec->exec_type() == Operator::kCrossDeviceCopy) {
+    if (opnode.exec->exec_type() == Operator::kCrossDeviceCopy) {
       CHECK_EQ(inode.inputs.size(), 1);
       CHECK_EQ(opnode.exec->in_array.size(), 1);
       CHECK_EQ(opnode.exec->out_array.size(), 1);
