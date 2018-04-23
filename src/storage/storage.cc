@@ -447,8 +447,8 @@ void Swap::DoSwap(SwapInfo* info, bool swap_out, bool async) {
                                           streams_[info->device]));
                 CUDA_CALL(cudaStreamSynchronize(streams_[info->device]));
             } else {
-                std::cout << " info->cpu_address " << (size_t)(info->cpu_address)
-                          << " info->dptr " << (size_t)(info->dptr) << std::endl;
+                //std::cout << " info->cpu_address " << (size_t)(info->cpu_address)
+                          //<< " info->dptr " << (size_t)(info->dptr) << std::endl;
                 CUDA_CALL(cudaMemcpy(info->cpu_address, info->dptr,
                                      info->size, cudaMemcpyDeviceToHost));
             }
@@ -668,11 +668,14 @@ void* Swap::GetAddr(handle_id_t handle_id, size_t size, bool record) {
 
 void Swap::SwapperLookahead(int device, int& lookahead_pos) {
     pthread_rwlock_rdlock(&swap_lock_);
+    bool do_it = false;
     while ((int)mhistory_->history[device].size() > lookahead_pos + 1 &&
-            (lookahead_pos - mhistory_->curr_idx[device]) < look_ahead_) {
+            ((lookahead_pos - mhistory_->curr_idx[device]) < look_ahead_ || do_it)) {
+        do_it = true;
         lookahead_pos += 1;
         auto &h = mhistory_->history[device][lookahead_pos];
         auto info = swap_info_.at(h.handle_id);
+        do_it &= (info->swap_in); // A heuristic.
         if (h.type == MemHistory::GET_ADDR) {
             Swap::Get()->GetAddr(h.handle_id, h.size, false);
         } else {
@@ -694,10 +697,12 @@ void Swap::SwapperSetLookahead(int device, int& lookahead_pos) {
         }
     }
     pthread_rwlock_rdlock(&swap_lock_);
+    bool do_it = false;
     while ((int)mhistory_->set_history[device].size() > lookahead_pos + 1 &&
-            lookahead_pos - curr_set < look_ahead_) {
+            (lookahead_pos - curr_set < look_ahead_ || do_it)) {
         lookahead_pos += 1;
         auto &set = mhistory_->set_history[device][lookahead_pos];
+        do_it = true;
         for (auto& h : set->unique_records) {
             auto info = swap_info_.at(h.handle_id);
             if (h.type == MemHistory::GET_ADDR) {
@@ -705,6 +710,7 @@ void Swap::SwapperSetLookahead(int device, int& lookahead_pos) {
                           //<< lookahead_pos << " "
                           //<< curr_set << " " << mhistory_->curr_idx[device]
                           //<< std::endl;
+                do_it &= (info->swap_in); // A heuristic.
                 Swap::Get()->GetAddr(h.handle_id, h.size, false);
             } else {
                 std::cout << "The history item contains not only read item : "
