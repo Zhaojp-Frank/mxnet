@@ -19,6 +19,7 @@
 #include "./graph_executor.h"
 #include "../engine/profiler.h"
 #include "../operator/p2pnet_common.h"
+#include "./tofu_cached_copy.h"
 
 //#define SPLIT_GRADIENT_TEST
 
@@ -260,7 +261,7 @@ Graph GraphExecutor::SplitDistributedGraph(Graph& g, const Context& default_ctx)
   g = nnvm::pass::SplitDistributedGraph(g, address_vec, default_ctx.dev_address,
                                         g.GetAttr<nnvm::ShapeVector>("shape"),
                                         g.GetAttr<nnvm::DTypeVector>("dtype"),
-                                        "_CrossDeviceCopy", "P2PNetInit",
+                                        copy_op_name_, "P2PNetInit",
                                         "P2PNetSend", "P2PNetRecv", "P2PNetSendSink",
                                         &num_forward_inputs_, &num_forward_outputs_);
   // Renews everything
@@ -409,7 +410,8 @@ Graph AssignContext(Graph g,
                     const std::vector<std::pair<OpReqType, NDArray> >& grad_store,
                     const std::vector<NDArray>& aux_states,
                     size_t num_forward_inputs,
-                    size_t num_forward_outputs) {
+                    size_t num_forward_outputs,
+                    const std::string& copy_op_name) {
   const auto& idx = g.indexed_graph();
   const auto& mutable_nodes = idx.mutable_input_nodes();
   // default use default context.
@@ -484,7 +486,7 @@ Graph AssignContext(Graph g,
     }
   }
   g.attrs["device"] = std::make_shared<dmlc::any>(std::move(device));
-  g = nnvm::pass::PlaceDevice(g, "__ctx_group__", device_map, "_CrossDeviceCopy");
+  g = nnvm::pass::PlaceDevice(g, "__ctx_group__", device_map, copy_op_name);
   LOG(INFO) << "Place device pass finished.";
   const auto& assigned_device = g.GetAttr<nnvm::DeviceVector>("device");
 
@@ -604,6 +606,7 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
     g.attrs["num_devices"] = std::make_shared<nnvm::any>(num_devices);
     g.attrs["default_group"] = std::make_shared<nnvm::any>(std::string("group:default"));
     g.attrs["user_tiling_json"] = std::make_shared<nnvm::any>("");
+    g.attrs["copy_op_name"] = std::make_shared<nnvm::any>(copy_op_name_);
     const std::string& tiling_type = dmlc::GetEnv("TOFU_TILING_TYPE",
                                                   std::string("kcuts"));
     if (tiling_type == "usertiling") {
@@ -624,7 +627,8 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
                     grad_store_,
                     aux_states,
                     num_forward_inputs_,
-                    num_forward_outputs_);
+                    num_forward_outputs_,
+                    copy_op_name_);
   const auto& idx = g.indexed_graph();
   const std::unordered_set<uint32_t>& mutable_nodes = idx.mutable_input_nodes();
   // Setup data entry and point input/output to proper arguments.
@@ -1005,7 +1009,11 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
     OpNode& opnode = op_nodes_[nid];
     if (op_nodes_[nid].skip_exec_node) continue;
     opnode.exec->op_ctx.is_train = is_train;
-    if (opnode.exec->exec_type() == Operator::kCrossDeviceCopy) {
+    if (inode.source->op()->name == "_TofuCachedCopy") {
+      TofuCachedCopy(inode.source->attrs,
+                     opnode.exec->in_array[0],
+                     &(opnode.exec->out_array[0]));
+    } else if (opnode.exec->exec_type() == Operator::kCrossDeviceCopy) {
       CHECK_EQ(inode.inputs.size(), 1);
       CHECK_EQ(opnode.exec->in_array.size(), 1);
       CHECK_EQ(opnode.exec->out_array.size(), 1);
@@ -1037,6 +1045,13 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
         this->monitor_callback_(name.c_str(), reinterpret_cast<void*>(cpy));
       }
     }
+  }
+}
+  
+GraphExecutor::GraphExecutor() {
+  const int use_cached_copy = dmlc::GetEnv("TOFU_USE_CACHED_COPY", 0);
+  if (use_cached_copy) {
+    copy_op_name_ = "_TofuCachedCopy";
   }
 }
 
