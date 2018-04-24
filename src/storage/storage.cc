@@ -310,6 +310,147 @@ void MemHistory::StopIteration() {
     do_record_ = false;
 }
 
+std::shared_ptr<Cache> Cache::_GetSharedRef() {
+    static std::shared_ptr<Cache> inst(new Cache());
+    return inst;
+}
+
+Cache* Cache::Get() {
+    static Cache *c = _GetSharedRef().get();
+    return c;
+}
+
+Cache::Cache() {
+    std::cout << "Initialize Cache" << std::endl;
+    mhistory_ = MemHistory::_GetSharedRef();
+    enabled_ = dmlc::GetEnv("MXNET_DO_CACHE", 0);
+    for (int i = 0; i < 8; i++) {
+        locks_[i] = PTHREAD_RWLOCK_INITIALIZER;
+    }
+}
+
+Cache::~Cache() {
+    std::cout << "Destroy Cache" << std::endl;
+}
+
+void Cache::Register(int tensor_id, TShape offset, void* output_dptr) {
+    if (mhistory_->IsRecording()) {
+        int device;
+        CUDA_CALL(cudaGetDevice(&device));
+        handle_id_t handle_id = dptr_to_handle_[device].at(output_dptr);
+        // Check if the cache_item exists.
+        unsigned long long key = tensor_id;
+        std::hash<index_t> dim_hash;
+        for (auto dim : offset) {
+            key ^= dim_hash(dim) + 0x9e3779b9 + (key << 6) +
+                   (key >> 2);
+        }
+        auto cache_it = key_to_cache_[device].find(key);
+        CacheItem *cache_item;
+        if (cache_it == key_to_cache_[device].end()) {
+            cache_item = new CacheItem{nullptr, false, 0};
+        } else {
+            cache_item = cache_it->second;
+        }
+        cache_item->all_handles.insert(handle_id);
+    }
+}
+
+bool Cache::Cached(void* dptr) {
+    int device;
+    CUDA_CALL(cudaGetDevice(&device));
+    pthread_rwlock_wrlock(&locks_[device]);
+    handle_id_t handle_id = dptr_to_handle_[device].at(dptr);
+    pthread_rwlock_unlock(&locks_[device]);
+    auto it = cache_[device].find(handle_id);
+    return (it != cache_[device].end() && it->second->cached);
+}
+
+void Cache::Release(void* dptr)
+{
+    if (!enabled_) {return;}
+
+    int device;
+    CUDA_CALL(cudaGetDevice(&device));
+    pthread_rwlock_wrlock(&locks_[device]);
+    auto handle_it = dptr_to_handle_[device].find(dptr);
+    if (handle_it == dptr_to_handle_[device].end()) {
+        pthread_rwlock_unlock(&locks_[device]);
+        return;
+    }
+    auto cache_it = cache_[device].find(handle_it->second);
+    auto temporary_it = temporary_items_[device].find(handle_it->second);
+    if (cache_it != cache_[device].end()) {
+        if (!cache_it->second->cached) {
+            CUDA_CALL(cudaFree(cache_it->second->dptr));
+        }
+    } else if (temporary_it != temporary_items_[device].end()) {
+        CUDA_CALL(cudaFree(temporary_it->second->dptr));
+        temporary_it->second->dptr = nullptr;
+        temporary_it->second->swap_in = false;
+    } else {
+        // Do nothing for all other entries
+    }
+    dptr_to_handle_[device].erase(dptr);
+    pthread_rwlock_unlock(&locks_[device]);
+}
+
+void Cache::SetAddr(SwapInfo *info, bool record) {
+    pthread_rwlock_rdlock(&locks_[info->device]);
+    auto temporary_it = temporary_items_[info->device].find(info->handle_id);
+    if (temporary_it != temporary_items_[info->device].end()) {
+        CUDA_CALL(cudaFree(temporary_it->second->dptr));
+        temporary_it->second->dptr = nullptr;
+        temporary_it->second->swap_in = false;
+    }
+    pthread_rwlock_unlock(&locks_[info->device]);
+}
+
+bool Cache::CacheIt(SwapInfo *info) {
+    return true;
+}
+
+void Cache::GetAddr(SwapInfo *info, bool record) {
+    // FIXME(fegin):
+    // 1. If the matrix is not temporary nor cached, simply return the address.
+    // 2. If the matrix is temporary, allocate it.
+    // 3. If the matrix is cached, simply return the address. (done)
+    // 4. If the matrix is a cache candidate, decide whether to cache it.
+    pthread_rwlock_wrlock(&locks_[info->device]);
+    auto cache_it = cache_[info->device].find(info->handle_id);
+    if (cache_it != cache_[info->device].end()) {
+        if (cache_it->second->cached) {
+            CHECK_EQ(info->size, cache_it->second->size);
+            info->dptr = cache_it->second->dptr;
+        } else {
+            cudaError_t e = cudaMalloc(&(info->dptr), info->size);
+            if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
+                LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
+            }
+            info->swap_in = true;
+            cache_it->second->size = info->size;
+            cache_it->second->dptr = info->dptr;
+        }
+        CacheIt(info);
+    } else if (!info->swap_in) { // Temporary.
+        cudaError_t e = cudaMalloc(&(info->dptr), info->size);
+        if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
+            LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
+        }
+        info->swap_in = true;
+    } else {
+        // Do nothing for all other data entries.
+        return;
+    }
+    dptr_to_handle_[info->device][info->dptr] = info->handle_id;
+    pthread_rwlock_unlock(&locks_[info->device]);
+}
+
+void Cache::DelAddr(SwapInfo *info, bool record) {
+    // FIXME(fegin): Do we need to do anything with DelAddr?
+    return;
+}
+
 std::shared_ptr<Swap> Swap::_GetSharedRef() {
     static std::shared_ptr<Swap> inst(new Swap());
     return inst;
@@ -323,11 +464,15 @@ Swap* Swap::Get() {
 Swap::Swap() {
     std::cout << "Initialize Swap" << std::endl;
     mhistory_ = MemHistory::_GetSharedRef();
+    cache_ = Cache::_GetSharedRef();
     do_swap_ = dmlc::GetEnv("MXNET_DO_SWAP", 0);
+    do_cache_ = dmlc::GetEnv("MXNET_DO_CACHE", 0);
+    CHECK(!(do_swap_ && do_cache_));
     look_ahead_ = dmlc::GetEnv("MXNET_SWAPPER_LOOK_AHEAD", 100);
     free_cpu_ = dmlc::GetEnv("MXNET_FREE_CPU_MEMORY", false);
     unsigned multiplier = dmlc::GetEnv("MXNET_SWAP_THRESHOLD_MULTIPLIER", 32);
     std::cout << "MXNET_DO_SWAP = " << do_swap_ << std::endl;
+    std::cout << "MXNET_DO_CACHE = " << do_cache_ << std::endl;
     std::cout << "MXNET_SWAPPER_LOOK_AHEAD = " << look_ahead_<< std::endl;
     std::cout << "MXNET_FREE_CPU_MEMORY = " << free_cpu_ << std::endl;
     std::cout << "MXNET_SWAP_THRESHOLD_MULTIPLIER= " << multiplier << std::endl;
@@ -509,7 +654,7 @@ void Swap::SwapOut(unsigned required_memory, int device,
             auto target = lru_[device].back();
             lru_[device].pop_back();
             if (target->dptr == nullptr || !target->swap_in) {
-                std::cout << "(swap_info->dptr == nullptr || !target->swap_in)."
+                std::cout << "(info->dptr == nullptr || !target->swap_in)."
                           << "This should happen when all iterations are done."
                           << "Current lru size is " << lru_[device].size()
                           << std::endl;
@@ -565,11 +710,20 @@ void Swap::SwapIn(SwapInfo *info, bool async=false) {
     info->is_swapping.clear(std::memory_order_release);
 }
 
+void Swap::SetAddr_Swap(SwapInfo *info, bool record) {
+    lru_[info->device].push_front(info);
+    info->it = lru_[info->device].begin();
+}
+
+void Swap::SetAddr_Cache(SwapInfo *info, bool record) {
+    cache_->SetAddr(info, record);
+}
+
 void Swap::SetAddr(handle_id_t handle_id, void* dptr, size_t size, int dev_id,
                    bool record) {
     //std::cout << "SetAddr " << handle_id << " " << dptr << std::endl;
     if (dev_id != -1 && record) {
-        mhistory_->PutRecord(handle_id, dev_id, MemHistory::DEL_ADDR, size);
+        mhistory_->PutRecord(handle_id, dev_id, MemHistory::SET_ADDR, size);
     }
     if (dptr == nullptr) {
         return;
@@ -578,17 +732,19 @@ void Swap::SetAddr(handle_id_t handle_id, void* dptr, size_t size, int dev_id,
     auto iter = swap_info_.find(handle_id);
     if (iter == swap_info_.end()) {
         CHECK(dptr != nullptr);
-        SwapInfo* swap_info = new SwapInfo{handle_id, true, ATOMIC_FLAG_INIT, 0,
+        SwapInfo* info = new SwapInfo{handle_id, true, ATOMIC_FLAG_INIT, 0,
                                            dev_id, dptr, nullptr, size};
-        swap_info_[handle_id] = swap_info;
+        swap_info_[handle_id] = info;
         if (dev_id != -1) {
             pthread_rwlock_wrlock(&locks_[dev_id]);
-            UpdateFree(dev_id);
-            lru_[dev_id].push_front(swap_info);
-            swap_info->it = lru_[dev_id].begin();
+            if (do_cache_) {
+                SetAddr_Cache(info, record);
+            } else {
+                SetAddr_Swap(info, record);
+            }
             pthread_rwlock_unlock(&locks_[dev_id]);
         } else {
-            swap_info->it = lru_[0].end();
+            info->it = lru_[0].end();
         }
     } else {
         std::cout << "SetAddr duplicated id " << handle_id << std::endl;
@@ -601,6 +757,29 @@ void Swap::SetAddr(handle_id_t handle_id, void* dptr, size_t size, int dev_id,
     pthread_rwlock_unlock(&swap_lock_);
 };
 
+void Swap::DelAddr_Swap(SwapInfo *info, bool preserve, bool record) {
+    if (info->cpu_address != nullptr) {
+        free(info->cpu_address);
+        info->cpu_address = nullptr;
+    }
+    auto& reserved_mem = reserved_mem_[info->device];
+    if (info->swap_in) {
+        lru_[info->device].erase(info->it);
+        info->it = lru_[info->device].end();
+        if (preserve) {
+            CHECK(reserved_mem.find(info->dptr) == reserved_mem.end());
+            reserved_mem[info->dptr] = info->size | (1L << 63);
+        }
+    } else if (preserve) {
+        CHECK(reserved_mem.find(info->dptr) == reserved_mem.end());
+        reserved_mem[info->dptr] = info->size | (0L << 63);
+    }
+}
+
+void Swap::DelAddr_Cache(SwapInfo *info, bool preserve, bool record) {
+    cache_->DelAddr(info, record);
+}
+
 void Swap::DelAddr(handle_id_t handle_id, size_t size, bool preserve,
                    bool record) {
     //std::cout << "DelAddr " << handle_id << std::endl;
@@ -612,29 +791,31 @@ void Swap::DelAddr(handle_id_t handle_id, size_t size, bool preserve,
                                  size);
         }
         pthread_rwlock_wrlock(&locks_[info->device]);
-        if (info->cpu_address != nullptr) {
-            free(info->cpu_address);
-            info->cpu_address = nullptr;
-        }
-        auto& reserved_mem = reserved_mem_[info->device];
-        if (info->swap_in) {
-            lru_[info->device].erase(info->it);
-            info->it = lru_[info->device].end();
-            if (preserve) {
-                CHECK(reserved_mem.find(info->dptr) == reserved_mem.end());
-                reserved_mem[info->dptr] = info->size | (1L << 63);
-            }
-        } else if (preserve) {
-            CHECK(reserved_mem.find(info->dptr) == reserved_mem.end());
-            reserved_mem[info->dptr] = info->size | (0L << 63);
-        }
-        UpdateFree(info->device);
         pthread_rwlock_unlock(&locks_[info->device]);
     }
     delete info;
     swap_info_.erase(handle_id);
     pthread_rwlock_unlock(&swap_lock_);
 };
+
+void Swap::GetAddr_Swap(SwapInfo *info, bool record) {
+    if (info->it != lru_[info->device].end()) {
+        lru_[info->device].erase(info->it);
+    }
+    lru_[info->device].push_front(info);
+    info->it = lru_[info->device].begin();
+    if (!info->swap_in && do_swap_) {
+        if (record) {
+            //std::cout << "Cache miss " << handle_id << " " << size << std::endl;
+            cache_miss_ += 1;
+        }
+        SwapIn(info, !record);
+    }
+}
+
+void Swap::GetAddr_Cache(SwapInfo *info, bool record) {
+    cache_->GetAddr(info, record);
+}
 
 void* Swap::GetAddr(handle_id_t handle_id, size_t size, bool record) {
     //std::cout << "GetAddr " << handle_id << std::endl;
@@ -651,18 +832,10 @@ void* Swap::GetAddr(handle_id_t handle_id, size_t size, bool record) {
         }
         CHECK_EQ(info->size, size);
         CHECK_EQ(info->handle_id, handle_id);
-
-        if (info->it != lru_[info->device].end()) {
-            lru_[info->device].erase(info->it);
-        }
-        lru_[info->device].push_front(info);
-        info->it = lru_[info->device].begin();
-        if (!info->swap_in && do_swap_) {
-            if (record) {
-                //std::cout << "Cache miss " << handle_id << " " << size << std::endl;
-                cache_miss_ += 1;
-            }
-            SwapIn(info, !record);
+        if (do_cache_) {
+            GetAddr_Cache(info, record);
+        } else {
+            GetAddr_Swap(info, record);
         }
         pthread_rwlock_unlock(&locks_[info->device]);
     }

@@ -24,6 +24,18 @@ namespace mxnet {
 using handle_id_t = unsigned long long;
 using timestamp_t = unsigned long long;
 
+struct SwapInfo {
+    handle_id_t handle_id;
+    bool swap_in;
+    std::atomic_flag is_swapping;
+    int swap_count;
+    int device;
+    void* dptr;
+    char* cpu_address;
+    size_t size;
+    std::list<SwapInfo*>::iterator it;
+};
+
 class MemHistory {
 public:
     enum record_t {SET_ADDR, GET_ADDR, DEL_ADDR};
@@ -50,6 +62,7 @@ public:
     void Analyze();
     bool IterationStarted() { return iteration_started_; };
     bool HistoryRecorded() { return history[0].size() != 0 && !do_record_; };
+    bool IsRecording() { return do_record_; };
     int GetNumDevice() { return num_device_; };
 
     std::vector<MemRecord> history[8];
@@ -68,19 +81,38 @@ private:
     int num_device_;
 };
 
+class Cache {
+public:
+    struct CacheItem {
+        void *dptr;
+        bool cached;
+        size_t size;
+        std::unordered_set<handle_id_t> all_handles;
+    };
+    ~Cache();
+    static std::shared_ptr<Cache> _GetSharedRef();
+    static Cache* Get();
+    void Register(int tensor_id, TShape offset, void* output_dptr);
+    bool Cached(void* dptr);
+    void Release(void* dptr);
+    bool CacheIt(SwapInfo *info);
+    void SetAddr(SwapInfo *info, bool record);
+    void GetAddr(SwapInfo *info, bool record);
+    void DelAddr(SwapInfo *info, bool record);
+
+private:
+    Cache();
+    bool enabled_ ;
+    std::shared_ptr<MemHistory> mhistory_;
+    std::unordered_map<unsigned long long, CacheItem*> key_to_cache_[8];
+    std::unordered_map<handle_id_t, CacheItem*> cache_[8];
+    std::unordered_map<handle_id_t, SwapInfo*> temporary_items_[8];
+    std::unordered_map<void*, handle_id_t> dptr_to_handle_[8];
+    pthread_rwlock_t locks_[8];
+};
+
 class Swap {
 public:
-    struct SwapInfo {
-        handle_id_t handle_id;
-        bool swap_in;
-        std::atomic_flag is_swapping;
-        int swap_count;
-        int device;
-        void* dptr;
-        char* cpu_address;
-        size_t size;
-        std::list<SwapInfo*>::iterator it;
-    };
     ~Swap();
     static Swap* Get();
     static std::shared_ptr<Swap> _GetSharedRef();
@@ -91,10 +123,16 @@ public:
     int UpdateFree(int device);
     void SetAddr(handle_id_t handle_id, void* dptr, size_t size, int dev_id,
                  bool record=true);
+    void SetAddr_Cache(SwapInfo *info, bool record);
+    void SetAddr_Swap(SwapInfo *info, bool record);
     void DelAddr(handle_id_t handle_id, size_t size, bool preserve,
                  bool record=true);
+    void DelAddr_Swap(SwapInfo *swap_info, bool preserve, bool record);
+    void DelAddr_Cache(SwapInfo *swap_info, bool preserve, bool record);
     void* GetAddr(handle_id_t handle_id, size_t size,
                   bool record=true);
+    void GetAddr_Cache(SwapInfo *info, bool record);
+    void GetAddr_Swap(SwapInfo *info, bool record);
     void AllocateReserved(size_t required, int device);
     bool FreeReserved(void *ptr, size_t size);
     bool CheckReservedAndFree(void *ptr, size_t size);
@@ -107,6 +145,7 @@ private:
     void SwapperLookahead(int device, int& curr_pos);
     void SwapperSetLookahead(int device, int& curr_pos);
     std::shared_ptr<MemHistory> mhistory_;
+    std::shared_ptr<Cache> cache_;
     std::unordered_map<handle_id_t, SwapInfo*> swap_info_;
     std::vector<std::unordered_map<void*, size_t>> reserved_mem_;
     std::vector<std::list<SwapInfo*>> lru_;
@@ -116,6 +155,7 @@ private:
     cudaStream_t streams_[8];
     bool streams_init_[8];
     bool do_swap_;
+    bool do_cache_;
     bool free_cpu_;
     size_t swap_threshold_;
     bool should_stop_;

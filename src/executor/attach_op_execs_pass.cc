@@ -6,6 +6,7 @@
 #include <mxnet/base.h>
 #include <mxnet/operator.h>
 #include <mxnet/op_attr_types.h>
+#include <mxnet/storage.h>
 #include <nnvm/graph_attr_types.h>
 #include "./exec_pass.h"
 #include "../nnvm/legacy_op_util.h"
@@ -36,6 +37,9 @@ class ForwardOpExecutor : public OpExecutor {
     this->Setup();
     op_ctx.run_ctx = rctx;
     op_->Forward(op_ctx, in_data_, req, out_data_, aux_data_);
+    for (auto& in_data : in_data_) {
+        Cache::Get()->Release(in_data.dptr_);
+    }
   }
 
   void Setup() override {

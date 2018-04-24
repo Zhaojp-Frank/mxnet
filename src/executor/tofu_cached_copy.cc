@@ -3,6 +3,7 @@
 #include <mxnet/operator_util.h>
 #include <mxnet/op_attr_types.h>
 #include <mxnet/resource.h>
+#include <mxnet/storage.h>
 #include "../ndarray/ndarray_function.h"
 #include "../operator/operator_common.h"
 
@@ -33,9 +34,13 @@ void TofuCachedCopy(const nnvm::NodeAttrs& attrs,
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(outputs.size(), 1);
   const auto& param = nnvm::get<TofuCachedCopyParam>(attrs.parsed);
-  LOG(INFO) << "Called tofu copy op!!! tensor_id="
-    << param.tensor_id << " offset=" << param.offset
-    << " size=" << param.size;
+  Cache::Get()->Register(param.tensor_id, param.offset, outputs[0].dptr_);
+  if (Cache::Get()->Cached(outputs[0].dptr_)) {
+      // outputs[0].dptr already contains the required data.
+  } else {
+      // FIXME(fegin): do copy
+      //ndarray::Copy<gpu, gpu>(from.data(), &tmp, from.ctx(), ret.ctx(), ctx);
+  }
 }
 
 NNVM_REGISTER_OP(_TofuCachedCopy)
