@@ -128,15 +128,15 @@ def test():
     arg_shapes, out_shapes, aux_shapes = net.infer_shape(**in_shapes)
     arg_types, out_types, aux_types = net.infer_type(**in_types)
 
-    # create ndarrays for all arguments.
-    arg_arrays = [mx.nd.zeros(shape, default_ctx, dtype=dtype)
-                  for name, shape, dtype in zip(net.list_arguments(), arg_shapes, arg_types)]
-    print('Num arguments: ', len(arg_arrays))
     # create gradient ndarray for all parameters.
     args_grad = {name : mx.nd.zeros(shape, default_ctx, dtype=dtype)
                  for name, shape, dtype in zip(net.list_arguments(), arg_shapes, arg_types)
                  if not name.startswith('data') and not name.endswith('label')}
     print('Argument grads: ', args_grad.keys())
+    # create ndarrays for all arguments.
+    arg_arrays = [args_grad[name] if name in args_grad else mx.nd.zeros(shape, default_ctx, dtype=dtype)
+                  for name, shape, dtype in zip(net.list_arguments(), arg_shapes, arg_types)]
+    print('Num arguments: ', len(arg_arrays))
     if args.use_momentum:
         assert False, "Momentum simulation is not required since this MXNet implementation \
                 is not able to do fully inplace gradient computation. An extra gradient \
