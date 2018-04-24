@@ -337,6 +337,7 @@ Cache::~Cache() {
 }
 
 void Cache::Register(int tensor_id, TShape offset, void* output_dptr) {
+    if (!enabled_) {return;}
     if (mhistory_->IsRecording()) {
         int device;
         CUDA_CALL(cudaGetDevice(&device));
@@ -360,6 +361,7 @@ void Cache::Register(int tensor_id, TShape offset, void* output_dptr) {
 }
 
 bool Cache::Cached(void* dptr) {
+    if (!enabled_) {return false;}
     int device;
     CUDA_CALL(cudaGetDevice(&device));
     pthread_rwlock_wrlock(&locks_[device]);
@@ -467,16 +469,16 @@ bool Cache::CacheIt(SwapInfo *info) {
     CUDA_CALL(cudaGetDevice(&device));
     CHECK_EQ(device, info->device);
     CUDA_CALL(cudaMemGetInfo(&free, &total));
-    int limit = mhistory_->set_history[info->device].size();
-    auto curr_cache = cache_[info->device].at(info->handle_id);
+    auto curr_cache = cache_[device].at(info->handle_id);
     bool cache_curr = false;
+    int limit = mhistory_->set_history[device].size();
     for (int i = processed_cache_idx_ + 1;
             i < limit && free > cache_threshold_ ; i++) {
         auto set = mhistory_->set_history[device][i];
         processed_cache_idx_ = i - 1;
         for (auto& h : set->unique_records) {
-            auto it = cache_[info->device].find(h.handle_id);
-            if (it == cache_[info->device].end()) {
+            auto it = cache_[device].find(h.handle_id);
+            if (it == cache_[device].end()) {
                 continue;
             }
             if (it->second->loading.test_and_set(std::memory_order_acquire)) {
@@ -501,9 +503,9 @@ bool Cache::CacheIt(SwapInfo *info) {
                 if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
                     LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
                 }
-                pthread_rwlock_wrlock(&swap_locks_[info->device]);
-                swap_queues_[info->device].push_back(it->second);
-                pthread_rwlock_unlock(&swap_locks_[info->device]);
+                pthread_rwlock_wrlock(&swap_locks_[device]);
+                swap_queues_[device].push_back(it->second);
+                pthread_rwlock_unlock(&swap_locks_[device]);
             }
         }
     }
