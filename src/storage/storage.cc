@@ -514,11 +514,6 @@ bool Cache::CacheIt(SwapInfo *info) {
 }
 
 void Cache::GetAddr(SwapInfo *info, bool record) {
-    // FIXME(fegin):
-    // 1. If the matrix is not temporary nor cached, simply return the address.
-    // 2. If the matrix is temporary, allocate it.
-    // 3. If the matrix is cached, simply return the address. (done)
-    // 4. If the matrix is a cache candidate, decide whether to cache it.
     pthread_rwlock_wrlock(&locks_[info->device]);
     auto cache_it = cache_[info->device].find(info->handle_id);
     if (cache_it != cache_[info->device].end()) {
@@ -543,6 +538,7 @@ void Cache::GetAddr(SwapInfo *info, bool record) {
         info->swap_in = true;
     } else {
         // Do nothing for all other data entries.
+        pthread_rwlock_unlock(&locks_[info->device]);
         return;
     }
     dptr_to_handle_[info->device][info->dptr] = info->handle_id;
@@ -573,10 +569,12 @@ Swap::Swap() {
     CHECK(!(do_swap_ && do_cache_));
     look_ahead_ = dmlc::GetEnv("MXNET_SWAPPER_LOOK_AHEAD", 100);
     free_cpu_ = dmlc::GetEnv("MXNET_FREE_CPU_MEMORY", false);
+    swapper_select_ = dmlc::GetEnv("MXNET_SWAPPER_SELECT", 0);
     unsigned multiplier = dmlc::GetEnv("MXNET_SWAP_THRESHOLD_MULTIPLIER", 32);
     std::cout << "MXNET_DO_SWAP = " << do_swap_ << std::endl;
     std::cout << "MXNET_DO_CACHE = " << do_cache_ << std::endl;
     std::cout << "MXNET_SWAPPER_LOOK_AHEAD = " << look_ahead_<< std::endl;
+    std::cout << "MXNET_SWAPPER_SELECT = " << swapper_select_<< std::endl;
     std::cout << "MXNET_FREE_CPU_MEMORY = " << free_cpu_ << std::endl;
     std::cout << "MXNET_SWAP_THRESHOLD_MULTIPLIER= " << multiplier << std::endl;
     swap_lock_ = PTHREAD_RWLOCK_INITIALIZER;
@@ -894,6 +892,11 @@ void Swap::DelAddr(handle_id_t handle_id, size_t size, bool preserve,
                                  size);
         }
         pthread_rwlock_wrlock(&locks_[info->device]);
+        if (do_cache_) {
+            DelAddr_Cache(info, preserve, record);
+        } else {
+            DelAddr_Swap(info, preserve, record);
+        }
         pthread_rwlock_unlock(&locks_[info->device]);
     }
     delete info;
@@ -1010,11 +1013,12 @@ void Swap::Swapper(int device) {
     int lookahead_pos = -1;
     std::cout << "Execute Swapper()" << std::endl;
     while (!should_stop_) {
-        //if (true) {
-            //SwapperLookahead(device, lookahead_pos);
-        //}
-        if (true) {
+        if (swapper_select_ == 0) {
+            SwapperLookahead(device, lookahead_pos);
+        } else if (swapper_select_ == 1) {
             SwapperSetLookahead(device, lookahead_pos);
+        } else {
+            CHECK(false);
         }
         swapper_began_ = true;
         usleep(5);

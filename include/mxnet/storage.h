@@ -176,6 +176,7 @@ private:
     bool swapper_began_;
     std::thread swapper_[8];
     int look_ahead_;
+    int swapper_select_;
     size_t cache_miss_;
     size_t waiting_swapping_;
     int num_device_;
