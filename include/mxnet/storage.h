@@ -85,13 +85,16 @@ class Cache {
 public:
     struct CacheItem {
         void *dptr;
-        bool cached;
         size_t size;
+        bool cached;
+        std::atomic_flag loading;
         std::unordered_set<handle_id_t> all_handles;
     };
     ~Cache();
     static std::shared_ptr<Cache> _GetSharedRef();
     static Cache* Get();
+    void StartIteration();
+    void StopIteration();
     void Register(int tensor_id, TShape offset, void* output_dptr);
     bool Cached(void* dptr);
     void Release(void* dptr);
@@ -102,13 +105,24 @@ public:
 
 private:
     Cache();
-    bool enabled_ ;
+    void Loader(int device);
+    bool enabled_;
+    bool ready_;
+    bool should_stop_;
+    int processed_cache_idx_;
+    int num_device_;
+    size_t cache_threshold_;
     std::shared_ptr<MemHistory> mhistory_;
+    std::list<CacheItem*> swap_queues_[8];
+    std::thread swapper_[8];
     std::unordered_map<unsigned long long, CacheItem*> key_to_cache_[8];
     std::unordered_map<handle_id_t, CacheItem*> cache_[8];
     std::unordered_map<handle_id_t, SwapInfo*> temporary_items_[8];
     std::unordered_map<void*, handle_id_t> dptr_to_handle_[8];
     pthread_rwlock_t locks_[8];
+    pthread_rwlock_t swap_locks_[8];
+    cudaStream_t streams_[8];
+    bool streams_init_;
 };
 
 class Swap {

@@ -324,8 +324,11 @@ Cache::Cache() {
     std::cout << "Initialize Cache" << std::endl;
     mhistory_ = MemHistory::_GetSharedRef();
     enabled_ = dmlc::GetEnv("MXNET_DO_CACHE", 0);
+    cache_threshold_ = dmlc::GetEnv("MXNET_CACHE_THRESHOLD", 1024 * 1024 * 32);
+    streams_init_ = false;
     for (int i = 0; i < 8; i++) {
         locks_[i] = PTHREAD_RWLOCK_INITIALIZER;
+        swap_locks_[i] = PTHREAD_RWLOCK_INITIALIZER;
     }
 }
 
@@ -348,7 +351,7 @@ void Cache::Register(int tensor_id, TShape offset, void* output_dptr) {
         auto cache_it = key_to_cache_[device].find(key);
         CacheItem *cache_item;
         if (cache_it == key_to_cache_[device].end()) {
-            cache_item = new CacheItem{nullptr, false, 0};
+            cache_item = new CacheItem{nullptr, 0, false, ATOMIC_FLAG_INIT};
         } else {
             cache_item = cache_it->second;
         }
@@ -406,8 +409,108 @@ void Cache::SetAddr(SwapInfo *info, bool record) {
     pthread_rwlock_unlock(&locks_[info->device]);
 }
 
+void Cache::StartIteration() {
+    ready_ = !(mhistory_->IsRecording() || cache_[0].size() == 0);
+    num_device_ = mhistory_->GetNumDevice();
+    if (ready_) {
+        if (!streams_init_) {
+            for (int device = 0; device < num_device_; device++) {
+                cudaStreamCreate(&streams_[device]);
+            }
+            streams_init_ = true;
+        }
+        processed_cache_idx_ = -1;
+        should_stop_ = false;
+        for (int device = 0; device < num_device_; device++) {
+            swapper_[device] = std::thread(&Cache::Loader, this, device);
+        }
+    }
+}
+
+void Cache::StopIteration() {
+    should_stop_ = true;
+    if (ready_) {
+        for (int device = 0; device < num_device_; device++) {
+            swapper_[device].join();
+        }
+    }
+    ready_ = false;
+}
+
+void Cache::Loader(int device) {
+    CacheItem *item;
+    while (!should_stop_) {
+        pthread_rwlock_wrlock(&swap_locks_[device]);
+        if (swap_queues_[device].size() == 0) {
+            item = nullptr;
+        } else {
+            item = swap_queues_[device].front();
+            swap_queues_[device].pop_front();
+        }
+        pthread_rwlock_unlock(&swap_locks_[device]);
+        // FIXME(fegin): Prefetch
+        if (item == nullptr) {
+            usleep(30);
+        }
+        item->cached = true;
+        item->loading.clear();
+    }
+
+}
+
 bool Cache::CacheIt(SwapInfo *info) {
-    return true;
+    if (!ready_) {
+        return false;
+    }
+    size_t free = 10000000000, total = 0;
+    int device;
+    CUDA_CALL(cudaGetDevice(&device));
+    CHECK_EQ(device, info->device);
+    CUDA_CALL(cudaMemGetInfo(&free, &total));
+    int limit = mhistory_->set_history[info->device].size();
+    auto curr_cache = cache_[info->device].at(info->handle_id);
+    bool cache_curr = false;
+    for (int i = processed_cache_idx_ + 1;
+            i < limit && free > cache_threshold_ ; i++) {
+        auto set = mhistory_->set_history[device][i];
+        processed_cache_idx_ = i - 1;
+        for (auto& h : set->unique_records) {
+            auto it = cache_[info->device].find(h.handle_id);
+            if (it == cache_[info->device].end()) {
+                continue;
+            }
+            if (it->second->loading.test_and_set(std::memory_order_acquire)) {
+                continue;
+            }
+            if (it->second->cached) {
+                continue;
+            }
+            if (free <= cache_threshold_) {
+                it->second->loading.clear();
+                break;
+            }
+            if (it->second->size > cache_threshold_) {
+                it->second->loading.clear();
+                break;
+            }
+            if (it->second == curr_cache) {
+                cache_curr = true;
+                it->second->loading.clear();
+            } else {
+                cudaError_t e = cudaMalloc(&(it->second->dptr), it->second->size);
+                if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
+                    LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
+                }
+                pthread_rwlock_wrlock(&swap_locks_[info->device]);
+                swap_queues_[info->device].push_back(it->second);
+                pthread_rwlock_unlock(&swap_locks_[info->device]);
+            }
+        }
+    }
+    if (!cache_curr) {
+        curr_cache->cached = false;
+    }
+    return cache_curr;
 }
 
 void Cache::GetAddr(SwapInfo *info, bool record) {
@@ -922,6 +1025,7 @@ void Swap::StartIteration() {
     num_device_ = mhistory_->GetNumDevice();
     //cudaProfilerStart();
     mhistory_->StartIteration();
+    cache_->StartIteration();
 #if 1
     if (mhistory_->HistoryRecorded() && do_swap_) {
         for (auto& it : mhistory_->access_stats) {
@@ -945,6 +1049,7 @@ void Swap::StartIteration() {
 void Swap::StopIteration() {
     //std::cout << "Swap address " << this << std::endl;
     mhistory_->StopIteration();
+    cache_->StopIteration();
     should_stop_ = true;
     if (swapper_began_) {
         size_t size = 0;
