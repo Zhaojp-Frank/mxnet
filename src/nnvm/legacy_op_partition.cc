@@ -205,8 +205,8 @@ vector<SchemeRequest> CutAllDimsSchemes(
     const vector<TShape>& input_shapes,
     const vector<TShape>& output_shapes) {
   vector<SchemeRequest> reqs;
-  CHECK_GT(input_shapes.size(), 0);
-  for (size_t i = 0; i < input_shapes[0].ndim(); ++i) {
+  CHECK_GT(output_shapes.size(), 0);
+  for (size_t i = 0; i < output_shapes[0].ndim(); ++i) {
     SchemeRequest req;
     for (size_t j = 0; j < input_shapes.size(); ++j) {
       CHECK_LT(i, input_shapes[j].ndim());
@@ -849,8 +849,8 @@ void RegisterOpAlignedSchemes() {
         || name == "_power" || name == "_power_scalar"
         || name == "_backward_power" || name == "_backward_power_scalar"
         || name == "SliceChannel" || name == "_backward_SliceChannel"
-        || name == "_grad_add"
-        || name == "_copy") {
+        || name == "LSTMCell" || name == "_backward_LSTMCell"
+        || name == "_grad_add" || name == "_copy" || name == "_zeros") {
       op.set_attr<AType>(kAttrName, CutAllDimsSchemes);
     } else if (name == "Pooling" || name == "_backward_Pooling"
         || name == "Flatten" || name == "_backward_Flatten"

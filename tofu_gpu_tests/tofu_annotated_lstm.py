@@ -34,13 +34,19 @@ def lstm(num_hidden, indata, prev_state, param, seqidx, layeridx):
     gates = i2h + h2h
     slice_gates = mx.sym.SliceChannel(gates, num_outputs=4,
                                       name="t%d_l%d_slice" % (seqidx, layeridx))
-    with mx.AttrScope(elemwise_group=('%d-%d' % (layeridx, seqidx))):
-        in_gate = mx.sym.Activation(slice_gates[0], act_type="sigmoid")
-        in_transform = mx.sym.Activation(slice_gates[1], act_type="tanh")
-        forget_gate = mx.sym.Activation(slice_gates[2], act_type="sigmoid")
-        out_gate = mx.sym.Activation(slice_gates[3], act_type="sigmoid")
-        next_c = (forget_gate * prev_state.c) + (in_gate * in_transform)
-        next_h = out_gate * mx.sym.Activation(next_c, act_type="tanh")
+    #with mx.AttrScope(elemwise_group=('%d-%d' % (layeridx, seqidx))):
+    #    in_gate = mx.sym.Activation(slice_gates[0], act_type="sigmoid")
+    #    in_transform = mx.sym.Activation(slice_gates[1], act_type="tanh")
+    #    forget_gate = mx.sym.Activation(slice_gates[2], act_type="sigmoid")
+    #    out_gate = mx.sym.Activation(slice_gates[3], act_type="sigmoid")
+    #    next_c = (forget_gate * prev_state.c) + (in_gate * in_transform)
+    #    next_h = out_gate * mx.sym.Activation(next_c, act_type="tanh")
+    next_c, next_h = mx.sym.LSTMCell(prev_c=prev_state.c,
+                                     in_gate=slice_gates[0],
+                                     trans_gate=slice_gates[1],
+                                     forget_gate=slice_gates[2],
+                                     out_gate=slice_gates[3],
+                                     name='lstm%d-%d' % (layeridx, seqidx))
     return LSTMState(c=next_c, h=next_h)
 
 def get_symbol(args):
@@ -134,7 +140,7 @@ def test():
                  if not name.startswith('data') and not name.endswith('label')}
     print('Argument grads: ', args_grad.keys())
     # create ndarrays for all arguments.
-    arg_arrays = [args_grad[name] if name in args_grad else mx.nd.zeros(shape, default_ctx, dtype=dtype)
+    arg_arrays = [mx.nd.zeros(shape, default_ctx, dtype=dtype)
                   for name, shape, dtype in zip(net.list_arguments(), arg_shapes, arg_types)]
     print('Num arguments: ', len(arg_arrays))
     if args.use_momentum:
