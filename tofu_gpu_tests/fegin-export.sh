@@ -1,0 +1,17 @@
+#export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/ubuntu/scratch/cudnn/cuda/lib64
+
+export PYTHONPATH=/home/fegin/mxnet/python
+
+#export MXNET_ENGINE_TYPE=NaiveEngine
+export MXNET_SWAPPER_LOOK_AHEAD=50
+export MXNET_SWAP_THRESHOLD_MULTIPLIER=64
+export MXNET_FREE_CPU_MEMORY=0
+export MXNET_DO_SWAP=0
+export MXNET_DO_CACHE=0
+export MXNET_SWAPPER_SELECT=0
+export MXNET_MEM_RECORD_ITERATION=3
+
+export TOFU_FAKE_VAR_SPLIT_CONCAT=1
+export TOFU_TILING_TYPE=datapar
+export TOFU_USE_CACHED_COPY=0
+export TOFU_ENABLED=1
