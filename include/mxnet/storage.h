@@ -170,6 +170,7 @@ private:
     bool streams_init_[8];
     bool do_swap_;
     bool do_cache_;
+    bool no_copy_;
     bool free_cpu_;
     size_t swap_threshold_;
     bool should_stop_;

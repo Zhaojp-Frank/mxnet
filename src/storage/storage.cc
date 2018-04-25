@@ -572,6 +572,7 @@ Swap::Swap() {
     look_ahead_ = dmlc::GetEnv("MXNET_SWAPPER_LOOK_AHEAD", 100);
     free_cpu_ = dmlc::GetEnv("MXNET_FREE_CPU_MEMORY", false);
     swapper_select_ = dmlc::GetEnv("MXNET_SWAPPER_SELECT", 0);
+    no_copy_ = dmlc::GetEnv("MXNET_SWAP_NO_COPY", 0);
     unsigned multiplier = dmlc::GetEnv("MXNET_SWAP_THRESHOLD_MULTIPLIER", 32);
     std::cout << "MXNET_DO_SWAP = " << do_swap_ << std::endl;
     std::cout << "MXNET_DO_CACHE = " << do_cache_ << std::endl;
@@ -685,24 +686,30 @@ void Swap::DoSwap(SwapInfo* info, bool swap_out, bool async) {
         cudaStreamCreate(&streams_[info->device]);
     }
     if (swap_out) {
-        if (info->cpu_address == nullptr) {
+        if (!no_copy_ && info->cpu_address == nullptr) {
             info->cpu_address = (char*)malloc(info->size);
+            if (info->cpu_address == nullptr) {
+                std::cout << "Size = " << info->size << std::endl;
+                CHECK(false);
+            }
         }
         if (access_stats_.size() == 0 ||
                 (access_stats_[info->handle_id] <
                     mhistory_->access_stats[info->handle_id])) {
             //std::cout << "Swap out " << info->handle_id << " " << info->size << std::endl;
             if (async) {
-                CUDA_CALL(cudaMemcpyAsync(info->cpu_address, info->dptr,
-                                          info->size,
-                                          cudaMemcpyDeviceToHost,
-                                          streams_[info->device]));
-                CUDA_CALL(cudaStreamSynchronize(streams_[info->device]));
+                if (!no_copy_) {
+                    CUDA_CALL(cudaMemcpyAsync(info->cpu_address, info->dptr,
+                                              info->size,
+                                              cudaMemcpyDeviceToHost,
+                                              streams_[info->device]));
+                    CUDA_CALL(cudaStreamSynchronize(streams_[info->device]));
+                }
             } else {
-                //std::cout << " info->cpu_address " << (size_t)(info->cpu_address)
-                          //<< " info->dptr " << (size_t)(info->dptr) << std::endl;
-                CUDA_CALL(cudaMemcpy(info->cpu_address, info->dptr,
-                                     info->size, cudaMemcpyDeviceToHost));
+                if (!no_copy_) {
+                    CUDA_CALL(cudaMemcpy(info->cpu_address, info->dptr,
+                                         info->size, cudaMemcpyDeviceToHost));
+                }
             }
         }
         CUDA_CALL(cudaFree(info->dptr));
@@ -712,16 +719,22 @@ void Swap::DoSwap(SwapInfo* info, bool swap_out, bool async) {
         if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
             LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
         }
-        CHECK(info->cpu_address != nullptr);
+        if (!no_copy_) {
+            CHECK(info->cpu_address != nullptr);
+        }
         if (access_stats_.size() == 0 || access_stats_[info->handle_id] > 1) {
             if (async) {
-                CUDA_CALL(cudaMemcpyAsync(info->dptr, info->cpu_address,
-                                          info->size, cudaMemcpyHostToDevice,
-                                          streams_[info->device]));
-                CUDA_CALL(cudaStreamSynchronize(streams_[info->device]));
+                if (!no_copy_) {
+                    CUDA_CALL(cudaMemcpyAsync(info->dptr, info->cpu_address,
+                                              info->size, cudaMemcpyHostToDevice,
+                                              streams_[info->device]));
+                    CUDA_CALL(cudaStreamSynchronize(streams_[info->device]));
+                }
             } else {
-                CUDA_CALL(cudaMemcpy(info->dptr, info->cpu_address, info->size,
-                                     cudaMemcpyHostToDevice));
+                if (!no_copy_) {
+                    CUDA_CALL(cudaMemcpy(info->dptr, info->cpu_address, info->size,
+                                         cudaMemcpyHostToDevice));
+                }
             }
         }
         if (free_cpu_) {
@@ -798,7 +811,9 @@ void Swap::SwapIn(SwapInfo *info, bool async=false) {
     }
     if (!info->swap_in) {
         CHECK(info->dptr == nullptr);
-        CHECK(info->cpu_address != nullptr);
+        if (!no_copy_) {
+            CHECK(info->cpu_address != nullptr);
+        }
         int old_device = 0;
         CUDA_CALL(cudaGetDevice(&old_device));
         SwapOut(info->size, info->device, false, async);

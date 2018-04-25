@@ -583,11 +583,11 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
   // setup gradient
   nnvm::Graph g = InitFullGraph(symbol, grad_req_type, arg_grad_store);
   g = InferShapeType(g, in_args, aux_states);
-  std::string json = nnvm::pass::SaveJSON(g);
-  std::ofstream json_file;
-  json_file.open("graph.json");
-  json_file << json;
-  json_file.close();
+  //std::string json = nnvm::pass::SaveJSON(g);
+  //std::ofstream json_file;
+  //json_file.open("graph.json");
+  //json_file << json;
+  //json_file.close();
   // Call partition pass here.
   bool need_grad = false;
   for (OpReqType req : grad_req_type) {
