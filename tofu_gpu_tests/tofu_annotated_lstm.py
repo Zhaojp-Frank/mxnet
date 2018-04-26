@@ -65,7 +65,8 @@ def get_symbol(args):
                 next_state = lstm(args.hidden_size, indata=hidden,
                                   prev_state=last_states[i],
                                   param=param_cells[i],
-                                  seqidx=seqidx, layeridx=i)
+                                  seqidx=seqidx, layeridx=i,
+                                  )
                 hidden = next_state.h
                 last_states[i] = next_state
             pred = mx.sym.FullyConnected(data=hidden,
@@ -134,7 +135,7 @@ def test():
                  if not name.startswith('data') and not name.endswith('label')}
     print('Argument grads: ', args_grad.keys())
     # create ndarrays for all arguments.
-    arg_arrays = [args_grad[name] if name in args_grad else mx.nd.zeros(shape, default_ctx, dtype=dtype)
+    arg_arrays = [mx.nd.zeros(shape, default_ctx, dtype=dtype)
                   for name, shape, dtype in zip(net.list_arguments(), arg_shapes, arg_types)]
     print('Num arguments: ', len(arg_arrays))
     if args.use_momentum:
@@ -155,6 +156,7 @@ def test():
     all_time = []
     for i in range(num_loops):
         print('=> loop %d' % i);
+        mx.base.start_iteration()
         st_l = time.time()
         if i == cold_skip + 1:
             t0 = time.time()
@@ -163,6 +165,7 @@ def test():
         for name, grad in args_grad.items():
             #print(name, grad.asnumpy())
             grad.wait_to_read()
+        mx.base.stop_iteration()
         ed_l = time.time()
         print('=> loop duration %f' % float(ed_l - st_l))
         if (i >= cold_skip):

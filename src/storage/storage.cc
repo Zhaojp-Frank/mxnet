@@ -640,6 +640,9 @@ bool Swap::FreeReserved(void *ptr, size_t size) {
 }
 
 bool Swap::CheckReservedAndFree(void *ptr, size_t size) {
+    if (!do_swap_) {
+        return true;
+    }
     int device;
     CUDA_CALL(cudaGetDevice(&device));
     pthread_rwlock_wrlock(&locks_[device]);
@@ -687,7 +690,11 @@ void Swap::DoSwap(SwapInfo* info, bool swap_out, bool async) {
     }
     if (swap_out) {
         if (!no_copy_ && info->cpu_address == nullptr) {
-            info->cpu_address = (char*)malloc(info->size);
+            if (free_cpu_) {
+                info->cpu_address = (char*)malloc(info->size);
+            } else {
+                cudaHostAlloc(&(info->cpu_address), info->size, 0);
+            }
             if (info->cpu_address == nullptr) {
                 std::cout << "Size = " << info->size << std::endl;
                 CHECK(false);
@@ -696,7 +703,7 @@ void Swap::DoSwap(SwapInfo* info, bool swap_out, bool async) {
         if (access_stats_.size() == 0 ||
                 (access_stats_[info->handle_id] <
                     mhistory_->access_stats[info->handle_id])) {
-            //std::cout << "Swap out " << info->handle_id << " " << info->size << std::endl;
+            std::cout << "Swap out " << info->handle_id << " " << info->size << std::endl;
             if (async) {
                 if (!no_copy_) {
                     CUDA_CALL(cudaMemcpyAsync(info->cpu_address, info->dptr,
@@ -738,7 +745,11 @@ void Swap::DoSwap(SwapInfo* info, bool swap_out, bool async) {
             }
         }
         if (free_cpu_) {
-            free(info->cpu_address);
+            if (free_cpu_) {
+                free(info->cpu_address);
+            } else {
+                cudaFreeHost(info->cpu_address);
+            }
             info->cpu_address = nullptr;
         }
     }
@@ -876,8 +887,15 @@ void Swap::SetAddr(handle_id_t handle_id, void* dptr, size_t size, int dev_id,
 };
 
 void Swap::DelAddr_Swap(SwapInfo *info, bool preserve, bool record) {
+    if (!do_swap_) {
+        return;
+    }
     if (info->cpu_address != nullptr) {
-        free(info->cpu_address);
+        if (free_cpu_) {
+            free(info->cpu_address);
+        } else {
+            cudaFreeHost(info->cpu_address);
+        }
         info->cpu_address = nullptr;
     }
     auto& reserved_mem = reserved_mem_[info->device];
@@ -941,7 +959,7 @@ void Swap::GetAddr_Cache(SwapInfo *info, bool record) {
 }
 
 void* Swap::GetAddr(handle_id_t handle_id, size_t size, bool record) {
-    //std::cout << "GetAddr " << handle_id << std::endl;
+    std::cout << "GetAddr " << handle_id << " " << record << std::endl;
     pthread_rwlock_rdlock(&swap_lock_);
     auto info = swap_info_.at(handle_id);
     if (info->device != -1) {
@@ -1030,6 +1048,7 @@ void Swap::Swapper(int device) {
     int lookahead_pos = -1;
     std::cout << "Execute Swapper()" << std::endl;
     while (!should_stop_) {
+        swapper_began_ = true;
         if (swapper_select_ == 0) {
             SwapperLookahead(device, lookahead_pos);
         } else if (swapper_select_ == 1) {
@@ -1037,8 +1056,7 @@ void Swap::Swapper(int device) {
         } else {
             CHECK(false);
         }
-        swapper_began_ = true;
-        usleep(5);
+        usleep(1);
     }
 }
 
