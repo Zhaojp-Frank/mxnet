@@ -864,19 +864,5 @@ void RegisterOpAlignedSchemes() {
   }
 }
 
-void TofuFusedConvert(
-    const nnvm::NodeAttrs&,
-    const OpContext&,
-    const std::vector<TBlob>&,
-    const std::vector<OpReqType>&,
-    const std::vector<TBlob>&) {
-  // TODO: DO NOTHING.
-}
-
-NNVM_REGISTER_OP(_TofuFusedConvert)
-.set_num_outputs(1)
-.describe("Operator used for tensor scheme conversion.")
-.set_attr<FCompute>("FCompute<gpu>", TofuFusedConvert);
-
 }  // namespace op
 }  // namespace mxnet
