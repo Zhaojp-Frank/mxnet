@@ -742,6 +742,19 @@ void NDArray::SyncCopyToCPU(void *data, size_t size) const {
   }
 }
 
+void NDArray::Reset() {
+  Engine::Get()->PushSync([this] (RunContext ctx) {
+      if (!ptr_->static_data && !ptr_->delay_alloc) {
+        Storage::Handle new_shandle;
+        new_shandle.size = ptr_->shandle.size;
+        new_shandle.ctx = ptr_->shandle.ctx;
+        Storage::Get()->Free(ptr_->shandle);
+        ptr_->shandle = new_shandle;
+        ptr_->delay_alloc = true;
+      }
+    }, this->ctx(), {}, { this->var() });
+}
+
 #if MXNET_PREDICT_ONLY == 0
 // register API function
 // those with underscore will be registered at NDArray

@@ -28,8 +28,10 @@ class OpExecutor {
  public:
   /*! \brief input arrays */
   std::vector<NDArray> in_array;
+  std::vector<bool> in_array_is_temp;
   /*! \brief output data arrays */
   std::vector<NDArray> out_array;
+  std::vector<bool> out_array_is_temp;
   /*! \brief output requirement on each array */
   std::vector<OpReqType> req;
   /*! \brief runtime op context, contains allocated resources */
