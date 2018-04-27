@@ -573,6 +573,8 @@ Swap::Swap() {
     free_cpu_ = dmlc::GetEnv("MXNET_FREE_CPU_MEMORY", false);
     swapper_select_ = dmlc::GetEnv("MXNET_SWAPPER_SELECT", 0);
     no_copy_ = dmlc::GetEnv("MXNET_SWAP_NO_COPY", 0);
+    infinite_cpu_memory_ = dmlc::GetEnv("MXNET_SWAP_INF_CPU_MEM", 0);
+    cpu_address_ = nullptr;
     unsigned multiplier = dmlc::GetEnv("MXNET_SWAP_THRESHOLD_MULTIPLIER", 32);
     std::cout << "MXNET_DO_SWAP = " << do_swap_ << std::endl;
     std::cout << "MXNET_DO_CACHE = " << do_cache_ << std::endl;
@@ -691,9 +693,24 @@ void Swap::DoSwap(SwapInfo* info, bool swap_out, bool async) {
     if (swap_out) {
         if (!no_copy_ && info->cpu_address == nullptr) {
             if (free_cpu_) {
-                info->cpu_address = (char*)malloc(info->size);
+                if (infinite_cpu_memory_) {
+                    if (cpu_address_ == nullptr) {
+                        cpu_address_ = (char*)malloc(4L*1024*1024*1024);
+                    }
+                    info->cpu_address = (char*)cpu_address_;
+                } else {
+                    info->cpu_address = (char*)malloc(info->size);
+                }
             } else {
-                cudaHostAlloc(&(info->cpu_address), info->size, 0);
+                if (infinite_cpu_memory_) {
+                    if (cpu_address_ == nullptr) {
+                        std::cout << "Infinite cpu memory" << std::endl;
+                        cudaHostAlloc(&cpu_address_, 4L*1024*1024*1024, 0);
+                    }
+                    info->cpu_address = (char*)cpu_address_;
+                } else {
+                    cudaHostAlloc(&info->cpu_address, 0);
+                }
             }
             if (info->cpu_address == nullptr) {
                 std::cout << "Size = " << info->size << std::endl;
@@ -896,10 +913,12 @@ void Swap::DelAddr_Swap(SwapInfo *info, bool preserve, bool record) {
         return;
     }
     if (info->cpu_address != nullptr) {
-        if (free_cpu_) {
-            free(info->cpu_address);
-        } else {
-            cudaFreeHost(info->cpu_address);
+        if (!infinite_cpu_memory_) {
+            if (free_cpu_) {
+                free(info->cpu_address);
+            } else {
+                cudaFreeHost(info->cpu_address);
+            }
         }
         info->cpu_address = nullptr;
     }
@@ -1137,9 +1156,9 @@ void Swap::SwapperSetLookahead_Resource(int device, int& lookahead_pos) {
                 }
             }
         }
-        if (lookahead_pos - curr_set > 3) {
+        //if (lookahead_pos - curr_set > 3) {
             swapper_began_ = true;
-        }
+        //}
     }
     if (has_done) {
         //std::cout << "<<<<<SwapperSetLookahead end." << std::endl;
