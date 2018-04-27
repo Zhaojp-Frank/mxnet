@@ -582,6 +582,7 @@ Swap::Swap() {
     std::cout << "MXNET_SWAPPER_SELECT = " << swapper_select_<< std::endl;
     std::cout << "MXNET_FREE_CPU_MEMORY = " << free_cpu_ << std::endl;
     std::cout << "MXNET_SWAP_THRESHOLD_MULTIPLIER= " << multiplier << std::endl;
+    std::cout << "MXNET_SWAP_INF_CPU_MEM= " << infinite_cpu_memory_ << std::endl;
     swap_lock_ = PTHREAD_RWLOCK_INITIALIZER;
     swapper_began_ = false;
     lru_ = std::vector<std::list<SwapInfo*>>(8);
@@ -709,7 +710,7 @@ void Swap::DoSwap(SwapInfo* info, bool swap_out, bool async) {
                     }
                     info->cpu_address = (char*)cpu_address_;
                 } else {
-                    cudaHostAlloc(&info->cpu_address, 0);
+                    cudaHostAlloc(&info->cpu_address, info->size, 0);
                 }
             }
             if (info->cpu_address == nullptr) {

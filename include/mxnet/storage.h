@@ -185,7 +185,7 @@ private:
     size_t htod_times_;
     size_t dtoh_bytes_;
     size_t dtoh_times_;
-    size_t cpu_address_;
+    void*  cpu_address_;
     bool infinite_cpu_memory_;
     int num_device_;
     std::unordered_map<handle_id_t, int> access_stats_;
