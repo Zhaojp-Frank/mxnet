@@ -37,7 +37,7 @@ class ForwardOpExecutor : public OpExecutor {
     op_->Forward(op_ctx, in_data_, req, out_data_, aux_data_);
   }
 
-  void Setup() override {
+  void Setup() {
     in_data_.clear(); aux_data_.clear();
     for (size_t i = 0; i < in_array.size(); ++i) {
       if (!std::binary_search(aux_index_.begin(), aux_index_.end(), i)) {
@@ -74,7 +74,7 @@ class BackwardOpExecutor : public OpExecutor {
     op_->Backward(op_ctx, out_grad_, in_data_, out_data_,
                   req, in_grad_, aux_data_);
   }
-  void Setup() override {
+  void Setup() {
     size_t arg_top = 0, aux_top = 0;
     aux_data_.resize(aux_index_.size());
     for (size_t i = 0; i < in_array.size(); ++i) {
@@ -134,7 +134,7 @@ class FComputeExecutor : public OpExecutor {
     op_ctx.run_ctx = rctx;
     fcompute_(attrs_, op_ctx, in_data_, req, out_data_);
   }
-  void Setup() override {
+  void Setup() {
     in_data_.resize(in_array.size());
     out_data_.resize(out_array.size());
     auto get_blob =  [](const NDArray& nd) {

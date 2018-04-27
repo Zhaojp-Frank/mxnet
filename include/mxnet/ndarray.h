@@ -343,6 +343,11 @@ class NDArray {
                    std::vector<NDArray>* data,
                    std::vector<std::string>* keys);
 
+  // Reset the internal storage handler; reset it to delay alloc status;
+  // Shape and type information and engine variables are reused.
+  // This allows reallocate the space without recreating a new engine variable.
+  void Reset();
+
  private:
   /*! \brief the real data chunk that backs NDArray */
   struct Chunk {
