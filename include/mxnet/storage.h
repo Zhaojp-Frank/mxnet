@@ -158,6 +158,7 @@ private:
     void Swapper(int device);
     void SwapperLookahead(int device, int& curr_pos);
     void SwapperSetLookahead(int device, int& curr_pos);
+    void SwapperSetLookahead_Resource(int device, int& lookahead_pos);
     std::shared_ptr<MemHistory> mhistory_;
     std::shared_ptr<Cache> cache_;
     std::unordered_map<handle_id_t, SwapInfo*> swap_info_;
@@ -180,6 +181,10 @@ private:
     int swapper_select_;
     size_t cache_miss_;
     size_t waiting_swapping_;
+    size_t htod_bytes_;
+    size_t htod_times_;
+    size_t dtoh_bytes_;
+    size_t dtoh_times_;
     int num_device_;
     std::unordered_map<handle_id_t, int> access_stats_;
 };
