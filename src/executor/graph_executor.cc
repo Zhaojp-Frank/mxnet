@@ -72,6 +72,7 @@ void EnableP2P(const std::vector<Context>& devs) {
 }  // namespace
 
 GraphExecutor::~GraphExecutor() {
+  LOG(FATAL) << "Force termination temporarily to avoid hanging.";
   for (auto& n : op_nodes_) {
     if (n.cached_opr != nullptr) {
       Engine::Get()->DeleteOperator(n.cached_opr);
