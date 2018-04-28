@@ -77,24 +77,29 @@ void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
   Engine::Get()->PushSync([op_exec, param] (RunContext ctx) {
     auto& ret = op_exec->out_array[0];
     ret.CheckAndAlloc();
-    for (size_t i = 0; i < op_exec->in_array.size(); ++i) {
-      const auto& f = op_exec->in_array[i];
-      if (f.ctx().dev_id == ret.ctx().dev_id) {
-        // Ignored.
-      } else {
-        mshadow::Stream<gpu> *s = static_cast<mshadow::Stream<gpu>*>(ctx.stream);
-        CHECK(s != NULL) << "need stream in GPU context";
-        size_t copy_size = param.sizes[i].Size() * mshadow::mshadow_sizeof(ret.data().type_flag_);
-        cudaMemcpyPeerAsync(ret.data().dptr_,
-                            ret.ctx().dev_id,
-                            f.data().dptr_,
-                            f.ctx().dev_id,
-                            copy_size,
-                            s->stream_);
+    if (param.is_reduction && param.ignore_reduction) {
+      // Do nothing.
+      //LOG(INFO) << "Reduction ignored!!!";
+    } else {
+      for (size_t i = 0; i < op_exec->in_array.size(); ++i) {
+        const auto& f = op_exec->in_array[i];
+        if (f.ctx().dev_id == ret.ctx().dev_id) {
+          // Ignored.
+        } else {
+          mshadow::Stream<gpu> *s = static_cast<mshadow::Stream<gpu>*>(ctx.stream);
+          CHECK(s != NULL) << "need stream in GPU context";
+          size_t copy_size = param.sizes[i].Size() * mshadow::mshadow_sizeof(ret.data().type_flag_);
+          cudaMemcpyPeerAsync(ret.data().dptr_,
+                              ret.ctx().dev_id,
+                              f.data().dptr_,
+                              f.ctx().dev_id,
+                              copy_size,
+                              s->stream_);
+        }
       }
+      // Wait GPU kernel to complete
+      ctx.get_stream<gpu>()->Wait();
     }
-    // Wait GPU kernel to complete
-    ctx.get_stream<gpu>()->Wait();
 
     // Clear all temp input ndarrays.
     for (size_t i = 0; i < op_exec->in_array.size(); ++i) {
