@@ -40,6 +40,12 @@ def lstm(num_hidden, indata, prev_state, param, seqidx, layeridx):
     out_gate = mx.sym.Activation(slice_gates[3], act_type="sigmoid")
     next_c = (forget_gate * prev_state.c) + (in_gate * in_transform)
     next_h = out_gate * mx.sym.Activation(next_c, act_type="tanh")
+    #next_c, next_h = mx.sym.LSTMCell(prev_c=prev_state.c,
+    #                                 in_gate=slice_gates[0],
+    #                                 trans_gate=slice_gates[1],
+    #                                 forget_gate=slice_gates[2],
+    #                                 out_gate=slice_gates[3],
+    #                                 name='lstm%d-%d' % (layeridx, seqidx))
     return LSTMState(c=next_c, h=next_h)
 
 def get_symbol(args):
@@ -114,9 +120,9 @@ def test():
     #group2ctx = {'group:%d' % i : mx.gpu(i) for i in range(args.num_gpus)}
     group2ctx = {}
     group2ctx['data'] = mx.gpu(0)
-    group2ctx['output'] = mx.gpu(args.num_gpus - 1)
     for i in range(args.num_layers):
-        group2ctx['layer%d' % i] = mx.gpu(i // (args.num_layers // args.num_gpus))
+        group2ctx['layer%d' % i] = mx.gpu(i // max(1, args.num_layers // args.num_gpus))
+    group2ctx['output'] = mx.gpu(args.num_gpus - 1)
     print(group2ctx)
     default_ctx = mx.cpu(0)
 

@@ -77,7 +77,6 @@ void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
   Engine::Get()->PushSync([op_exec, param] (RunContext ctx) {
     auto& ret = op_exec->out_array[0];
     ret.CheckAndAlloc();
-    return;
     for (size_t i = 0; i < op_exec->in_array.size(); ++i) {
       const auto& f = op_exec->in_array[i];
       if (f.ctx().dev_id == ret.ctx().dev_id) {
