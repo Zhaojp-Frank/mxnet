@@ -72,21 +72,37 @@ void EnableP2P(const std::vector<Context>& devs) {
 }  // namespace
 
 GraphExecutor::~GraphExecutor() {
-  LOG(FATAL) << "Force termination temporarily to avoid hanging.";
+  //LOG(FATAL) << "Force termination temporarily to avoid hanging.";
   for (auto& n : op_nodes_) {
     if (n.cached_opr != nullptr) {
       Engine::Get()->DeleteOperator(n.cached_opr);
     }
   }
+  LOG(INFO) <<"Pushed all delete operator";
 }
 
 void GraphExecutor::Forward(bool is_train) {
   DFGEProfiler::Get().Begin();
   DFGEProfiler::Get().Write(-1, false, false);
+
+  // Re-wire temp arrays to the op executors.
+  /*const auto& idx = graph_.indexed_graph();
+  for (uint32_t eid = 0; eid < idx.num_node_entries(); ++eid) {
+    if (is_temp_entry_[eid]) {
+      CHECK(!temp_2_opnode_loc_[eid].empty());
+      for (NDArray* ndptr : temp_2_opnode_loc_[eid]) {
+        //LOG(INFO) << "Temp eid=" << eid << " => " << ndptr << " " << ndptr->shape();
+        //CHECK_EQ(ndptr->shape(), data_entry_[eid].shape());
+        *ndptr = data_entry_[eid];
+      }
+    }
+  }*/
+
   RunOps(is_train, 0, num_forward_nodes_);
 }
 
 void GraphExecutor::PartialForward(bool is_train, int step, int *step_left) {
+  LOG(FATAL) << "Not supported right now!";
   size_t sstep = static_cast<size_t>(step);
   if (sstep >= num_forward_nodes_) {
     *step_left = 0; return;
@@ -110,6 +126,12 @@ void GraphExecutor::Backward(const std::vector<NDArray>& head_grads) {
     }
   }
   RunOps(true, num_forward_nodes_, idx.num_nodes());
+  // Reset all temporary ndarrays so their memory could be released.
+  //for (uint32_t eid = 0; eid < idx.num_node_entries(); ++eid) {
+    //if (is_temp_entry_[eid]) {
+      //data_entry_[eid].Reset();
+    //}
+  //}
 }
 
 void GraphExecutor::Print(std::ostream &os) const {  // NOLINT(*)
@@ -803,10 +825,10 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
     }
   }
 
-  LOG(INFO) << "[WARNING!!!] Init fake data for all entries (for more stable benchmark).";
-  for (size_t i = 0; i < data_entry_.size(); ++i) {
-    SetValueOp(0.0, &(data_entry_[i]));
-  }
+  //LOG(INFO) << "[WARNING!!!] Init fake data for all entries (for more stable benchmark).";
+  //for (size_t i = 0; i < data_entry_.size(); ++i) {
+    //SetValueOp(0.0, &(data_entry_[i]));
+  //}
 }
 
 std::vector<int> GraphExecutor::CalcPriority() {
@@ -844,11 +866,7 @@ void GraphExecutor::InitCachedOps() {
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
     if (inode.source->is_variable()) continue;
-#if MXNET_USE_PROFILER
     op_nodes_[nid].opr_name = inode.source->op()->name.c_str();
-#else
-    op_nodes_[nid].opr_name = nullptr;
-#endif
     if (skip_plus_node.at(nid)) {
       op_nodes_[nid].skip_exec_node = true; continue;
     }
@@ -1001,9 +1019,6 @@ void GraphExecutor::InitCachedOps() {
       }
       op::P2PNetDebugger::Get().PrintTime("Begin executing %s", name.c_str());
       DFGEProfiler::Get().Write(nid, is_gpu, is_async);
-      for (auto& nd : exec->in_array) {
-        nd.CheckAndAlloc();
-      }
       for (auto& nd : exec->out_array) {
         nd.CheckAndAlloc();
       }
@@ -1029,11 +1044,11 @@ void GraphExecutor::InitCachedOps() {
         //}
         
         // Clear all temp input ndarrays. 
-        for (size_t i = 0; i < exec->in_array.size(); ++i) {
-          if (exec->in_array_is_temp[i]) {
-            exec->in_array[i] = NDArray();
-          }
-        }
+        //for (size_t i = 0; i < exec->in_array.size(); ++i) {
+          //if (exec->in_array_is_temp[i]) {
+            //exec->in_array[i] = NDArray();
+          //}
+        //}
         on_complete();
         DFGEProfiler::Get().Write(nid, is_gpu, is_async);
       }
@@ -1049,7 +1064,7 @@ void GraphExecutor::InitCachedOps() {
     }
     op_nodes_[nid].cached_opr = Engine::Get()->NewOperator(
         exec_fun, use_vars, mutate_vars, prop,
-        PROFILER_MESSAGE(op_nodes_[nid].opr_name));
+        op_nodes_[nid].opr_name);
   }
 
 }
@@ -1059,29 +1074,17 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
       nnvm::Op::GetAttr<nnvm::FListOutputNames>("FListOutputNames");
   const auto& idx = graph_.indexed_graph();
 
-  // Re-wire temp arrays to the op executors.
-  for (uint32_t eid = 0; eid < idx.num_node_entries(); ++eid) {
-    if (is_temp_entry_[eid]) {
-      CHECK(!temp_2_opnode_loc_[eid].empty());
-      for (NDArray* ndptr : temp_2_opnode_loc_[eid]) {
-        //LOG(INFO) << "Temp eid=" << eid << " => " << ndptr << " " << ndptr->shape();
-        //CHECK_EQ(ndptr->shape(), data_entry_[eid].shape());
-        *ndptr = data_entry_[eid];
-      }
-    }
-  }
-
   for (size_t nid = topo_start; nid < topo_end; ++nid) {
     const auto& inode = idx[nid];
     if (inode.source->is_variable()) continue;
     OpNode& opnode = op_nodes_[nid];
     if (op_nodes_[nid].skip_exec_node) continue;
     opnode.exec->op_ctx.is_train = is_train;
+    // Schedule op to run.
     if (inode.source->op() == nnvm::Op::Get("_TofuFusedConvert")) {
-      op::TofuCopyFromTo(inode.source->attrs,
-                         opnode.exec->in_array,
-                         &(opnode.exec->out_array[0]));
+      op::TofuCopyFromTo(inode.source->attrs, opnode.exec);
     } else if (inode.source->op() == nnvm::Op::Get("_TofuFusedConvertNoComm")) {
+      LOG(FATAL) << "Disabled for now!";
       op::TofuCopyFromToNoComm(inode.source->attrs,
                                opnode.exec->in_array,
                                &(opnode.exec->out_array[0]));
@@ -1100,7 +1103,7 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
     } else {
       LOG(FATAL) << "Not accessed";
     }
-
+    // Monitor
     if (monitor_callback_) {
       std::vector<std::string> output_names;
       const auto& node = idx[nid].source;
@@ -1116,13 +1119,6 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
         std::string name = inode.source->attrs.name + "_" + output_names[i];
         this->monitor_callback_(name.c_str(), reinterpret_cast<void*>(cpy));
       }
-    }
-  }
-
-  // Reset all temporary ndarrays so their memory could be released.
-  for (uint32_t eid = 0; eid < idx.num_node_entries(); ++eid) {
-    if (is_temp_entry_[eid]) {
-      data_entry_[eid].Reset();
     }
   }
 }

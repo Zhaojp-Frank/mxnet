@@ -3,6 +3,7 @@
 #include <mxnet/base.h>
 #include <mxnet/op_attr_types.h>
 #include <nnvm/scheme.h>
+#include "./tofu_op.h"
 
 using namespace std;
 
@@ -45,13 +46,13 @@ void TofuDoNothing(
 }
 
 void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
-                    const vector<NDArray>& from,
-                    NDArray* to,
+                    std::shared_ptr<exec::OpExecutor> op_exec,
                     int priority) {
-  NDArray ret = *to;
+  const auto& from = op_exec->in_array;
+  const auto& to = op_exec->out_array[0];
   CHECK_GT(from.size(), 0);
   int a = from[0].ctx().dev_mask();
-  int b = to->ctx().dev_mask();
+  int b = to.ctx().dev_mask();
   CHECK(a == gpu::kDevMask && b == gpu::kDevMask);
   std::vector<Engine::VarHandle> const_vars;
   for (const auto& f : from) {
@@ -62,10 +63,12 @@ void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
   const vector<TShape>& sizes = param.sizes;
   CHECK_EQ(offsets.size(), from.size());
   CHECK_EQ(sizes.size(), from.size());
-  Engine::Get()->PushSync([from, ret, param](RunContext ctx) {
+  Engine::Get()->PushSync([op_exec, param] (RunContext ctx) {
+    auto& ret = op_exec->out_array[0];
     ret.CheckAndAlloc();
-    for (size_t i = 0; i < from.size(); ++i) {
-      const auto& f = from[i];
+    return;
+    for (size_t i = 0; i < op_exec->in_array.size(); ++i) {
+      const auto& f = op_exec->in_array[i];
       if (f.ctx().dev_id == ret.ctx().dev_id) {
         // Ignored.
       } else {
@@ -77,13 +80,21 @@ void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
                             f.data().dptr_,
                             f.ctx().dev_id,
                             copy_size,
-                        s->stream_);
+                            s->stream_);
       }
     }
     // Wait GPU kernel to complete
     ctx.get_stream<gpu>()->Wait();
-  }, ret.ctx(), const_vars, {ret.var()},
-  FnProperty::kCopyFromGPU,
+
+    // Clear all temp input ndarrays.
+    //for (size_t i = 0; i < op_exec->in_array.size(); ++i) {
+      //if (op_exec->in_array_is_temp[i]) {
+        //op_exec->in_array[i] = NDArray();
+      //}
+    //}
+  }, to.ctx(), const_vars, {to.var()},
+  FnProperty::kNormal,
+  //FnProperty::kCopyFromGPU,
   priority,
   PROFILER_MESSAGE("TofuFusedConvert"));
 }
@@ -91,7 +102,7 @@ void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
 void TofuCopyFromToNoComm(const nnvm::NodeAttrs& attrs,
                           const std::vector<NDArray>& from,
                           NDArray* to,
-                          int priority = 0) {
+                          int priority) {
   // Do nothing.
 }
 

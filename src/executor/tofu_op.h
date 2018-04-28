@@ -3,13 +3,15 @@
 
 #include <nnvm/node.h>
 #include <mxnet/ndarray.h>
+#include "./exec_pass.h"
 
 namespace mxnet {
 namespace op {
+
 void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
-                    const std::vector<NDArray>& from,
-                    NDArray* to,
+                    std::shared_ptr<exec::OpExecutor> op_exec,
                     int priority = 0);
+
 void TofuCopyFromToNoComm(const nnvm::NodeAttrs& attrs,
                           const std::vector<NDArray>& from,
                           NDArray* to,
