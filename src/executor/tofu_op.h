@@ -3,6 +3,7 @@
 
 #include <nnvm/node.h>
 #include <mxnet/ndarray.h>
+#include <mxnet/engine.h>
 #include "./exec_pass.h"
 
 namespace mxnet {
@@ -10,6 +11,7 @@ namespace op {
 
 void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
                     std::shared_ptr<exec::OpExecutor> op_exec,
+                    Engine::VarHandle finish_var,
                     int priority = 0);
 
 void TofuCopyFromToNoComm(const nnvm::NodeAttrs& attrs,

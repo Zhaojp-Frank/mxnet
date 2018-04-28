@@ -73,12 +73,14 @@ void EnableP2P(const std::vector<Context>& devs) {
 
 GraphExecutor::~GraphExecutor() {
   //LOG(FATAL) << "Force termination temporarily to avoid hanging.";
-  for (auto& n : op_nodes_) {
+  const auto& idx = graph_.indexed_graph();
+  for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
+    //const nnvm::Node* node = idx[nid].source;
+    auto& n = op_nodes_[nid];
     if (n.cached_opr != nullptr) {
       Engine::Get()->DeleteOperator(n.cached_opr);
     }
   }
-  LOG(INFO) <<"Pushed all delete operator";
 }
 
 void GraphExecutor::Forward(bool is_train) {
@@ -86,7 +88,7 @@ void GraphExecutor::Forward(bool is_train) {
   DFGEProfiler::Get().Write(-1, false, false);
 
   // Re-wire temp arrays to the op executors.
-  /*const auto& idx = graph_.indexed_graph();
+  const auto& idx = graph_.indexed_graph();
   for (uint32_t eid = 0; eid < idx.num_node_entries(); ++eid) {
     if (is_temp_entry_[eid]) {
       CHECK(!temp_2_opnode_loc_[eid].empty());
@@ -96,7 +98,7 @@ void GraphExecutor::Forward(bool is_train) {
         *ndptr = data_entry_[eid];
       }
     }
-  }*/
+  }
 
   RunOps(is_train, 0, num_forward_nodes_);
 }
@@ -127,11 +129,11 @@ void GraphExecutor::Backward(const std::vector<NDArray>& head_grads) {
   }
   RunOps(true, num_forward_nodes_, idx.num_nodes());
   // Reset all temporary ndarrays so their memory could be released.
-  //for (uint32_t eid = 0; eid < idx.num_node_entries(); ++eid) {
-    //if (is_temp_entry_[eid]) {
-      //data_entry_[eid].Reset();
-    //}
-  //}
+  for (uint32_t eid = 0; eid < idx.num_node_entries(); ++eid) {
+    if (is_temp_entry_[eid]) {
+      data_entry_[eid].Reset();
+    }
+  }
 }
 
 void GraphExecutor::Print(std::ostream &os) const {  // NOLINT(*)
@@ -810,11 +812,11 @@ void GraphExecutor::InitDataEntryMemory(const std::vector<NDArray>& shared_pool)
       // TofuTempMemory; still allocate; will replace it later.
       data_entry_[eid] = NDArray(vshape[eid], data_context[eid], true, vdtype[eid]);
       is_temp_entry_[eid] = true;
-    } else if (storage_id == -2) {
+    //} else if (storage_id == -2) {
       // This entry represents an output but no external memory is used to store
       // the result. This means the output is not required, but we still allocate
       // a buffer for that.
-      data_entry_[eid] = NDArray(vshape[eid], data_context[eid], false, vdtype[eid]);
+      //data_entry_[eid] = NDArray(vshape[eid], data_context[eid], false, vdtype[eid]);
     } else {
       CHECK_GE(storage_id, 0)
           << "Do not support runtime shape op yet. Entryid="
@@ -928,15 +930,15 @@ void GraphExecutor::InitCachedOps() {
     op_nodes_[e.node_id].exec->req[e.index] =
         grad_store_[j - num_forward_outputs_].first;
   }
-  std::vector<Engine::VarHandle> finish_vars(idx.num_nodes());
   DFGEProfiler::Get().Begin();
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
-    finish_vars[nid] = Engine::Get()->NewVariable();
+    op_nodes_[nid].finish_var = Engine::Get()->NewVariable();
     if (inode.source->is_variable()) continue;
     if (op_nodes_[nid].skip_exec_node) continue;
-    auto& exec = op_nodes_[nid].exec;
+    if (inode.source->op() == nnvm::Op::Get("_TofuFusedConvert")) continue;
 
+    auto& exec = op_nodes_[nid].exec;
     std::vector<uint32_t> inplace_inputs;
     for (uint32_t index = 0; index < inode.source->num_outputs(); ++index) {
       uint32_t eid = idx.entry_id(nid, index);
@@ -962,7 +964,7 @@ void GraphExecutor::InitCachedOps() {
     for (auto & depend_node : inode.source->control_deps) {
       const uint32_t depend_nid = idx.node_id(depend_node.get());
       CHECK_LT(depend_nid, nid);
-      use_vars.push_back(finish_vars[depend_nid]);
+      use_vars.push_back(op_nodes_[depend_nid].finish_var);
     }
     for (auto& r : exec->op_ctx.requested) {
       all_vars.push_back(r.var);
@@ -972,7 +974,7 @@ void GraphExecutor::InitCachedOps() {
       all_vars.push_back(nd.var());
       mutate_vars.push_back(nd.var());
     }
-    mutate_vars.push_back(finish_vars[nid]);
+    mutate_vars.push_back(op_nodes_[nid].finish_var);
     auto dedup = [] (std::vector<Engine::VarHandle>& vars) {  // NOLINT(*)
       std::sort(vars.begin(), vars.end());
       vars.resize(std::unique(vars.begin(), vars.end()) - vars.begin());
@@ -1044,11 +1046,11 @@ void GraphExecutor::InitCachedOps() {
         //}
         
         // Clear all temp input ndarrays. 
-        //for (size_t i = 0; i < exec->in_array.size(); ++i) {
-          //if (exec->in_array_is_temp[i]) {
-            //exec->in_array[i] = NDArray();
-          //}
-        //}
+        for (size_t i = 0; i < exec->in_array.size(); ++i) {
+          if (exec->in_array_is_temp[i]) {
+            exec->in_array[i] = NDArray();
+          }
+        }
         on_complete();
         DFGEProfiler::Get().Write(nid, is_gpu, is_async);
       }
@@ -1082,7 +1084,9 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
     opnode.exec->op_ctx.is_train = is_train;
     // Schedule op to run.
     if (inode.source->op() == nnvm::Op::Get("_TofuFusedConvert")) {
-      op::TofuCopyFromTo(inode.source->attrs, opnode.exec);
+      op::TofuCopyFromTo(inode.source->attrs,
+                         opnode.exec,
+                         opnode.finish_var);
     } else if (inode.source->op() == nnvm::Op::Get("_TofuFusedConvertNoComm")) {
       LOG(FATAL) << "Disabled for now!";
       op::TofuCopyFromToNoComm(inode.source->attrs,

@@ -30,7 +30,7 @@ def test():
     parser.add_argument('--cold_skip', type=int, default=5, help='Number of loops skipped for warm up.')
     parser.add_argument('-f', '--host_file', type=str,
                         help='Host file that contains addresses of all workers.')
-    parser.add_argument('--use_momentum', type=int, default=1, help='Whether to simulate memory consumption with momentum.')
+    parser.add_argument('--use_momentum', type=int, default=0, help='Whether to simulate memory consumption with momentum.')
 
     args, _ = parser.parse_known_args()
 
@@ -101,11 +101,6 @@ def test():
         for name, grad in args_grad.items():
             #print(name, grad.asnumpy())
             grad.wait_to_read()
-        # XXX(minjie): Currently, the last output is used to synchronize all send nodes.
-        # Send nodes may not appear on the dependency path of the local graph.
-        # We need make sure all send nodes have finished before the end of the iteration.
-        if len(outputs) > 0:
-            outputs[-1].wait_to_read()
         ed_l = time.time()
         print('=> loop duration %f' % float(ed_l - st_l))
         if (i >= cold_skip):

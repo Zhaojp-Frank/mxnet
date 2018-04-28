@@ -47,13 +47,9 @@ class ThreadedEnginePerDevice : public ThreadedEngine {
     // GPU tasks will be created lazily
   }
   ~ThreadedEnginePerDevice() noexcept(false) {
-    LOG(INFO) << "1111111111";
     gpu_normal_workers_.Clear();
-    LOG(INFO) << "2222222222";
     gpu_copy_workers_.Clear();
-    LOG(INFO) << "3333333333";
     cpu_normal_workers_.Clear();
-    LOG(INFO) << "4444444444";
     cpu_priority_worker_.reset(nullptr);
   }
 

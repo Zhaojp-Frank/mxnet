@@ -59,6 +59,7 @@ class GraphExecutor : public Executor {
     bool skip_exec_node{false};
     // cached operator handle
     Engine::OprHandle cached_opr{nullptr};
+    Engine::VarHandle finish_var;
   };
   // internal initialization of the graph.
   Graph InitGraph(nnvm::Symbol symbol,

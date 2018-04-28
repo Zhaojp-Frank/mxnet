@@ -45,8 +45,19 @@ void TofuDoNothing(
   // Do nothing. 
 }
 
+void TofuFakeOut(
+    const nnvm::NodeAttrs& attrs,
+    const OpContext& ctx,
+    const std::vector<TBlob>& inputs,
+    const std::vector<OpReqType>& reqs,
+    const std::vector<TBlob>& outputs) {
+  // Do nothing. 
+  //LOG(INFO) << "FAKE OUT";
+}
+
 void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
                     std::shared_ptr<exec::OpExecutor> op_exec,
+                    Engine::VarHandle finish_var,
                     int priority) {
   const auto& from = op_exec->in_array;
   const auto& to = op_exec->out_array[0];
@@ -87,12 +98,12 @@ void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
     ctx.get_stream<gpu>()->Wait();
 
     // Clear all temp input ndarrays.
-    //for (size_t i = 0; i < op_exec->in_array.size(); ++i) {
-      //if (op_exec->in_array_is_temp[i]) {
-        //op_exec->in_array[i] = NDArray();
-      //}
-    //}
-  }, to.ctx(), const_vars, {to.var()},
+    for (size_t i = 0; i < op_exec->in_array.size(); ++i) {
+      if (op_exec->in_array_is_temp[i]) {
+        op_exec->in_array[i] = NDArray();
+      }
+    }
+  }, to.ctx(), const_vars, {to.var(), finish_var},
   FnProperty::kNormal,
   //FnProperty::kCopyFromGPU,
   priority,
@@ -124,8 +135,8 @@ NNVM_REGISTER_OP(_TofuFakeVar)
 
 NNVM_REGISTER_OP(_TofuFakeOut)
  .set_num_outputs(1)
- .set_attr<FCompute>("FCompute<cpu>", TofuDoNothing)
- .set_attr<FCompute>("FCompute<gpu>", TofuDoNothing) ;
+ .set_attr<FCompute>("FCompute<cpu>", TofuFakeOut)
+ .set_attr<FCompute>("FCompute<gpu>", TofuFakeOut) ;
 
 }  // namespace op
 }  // namespace mxnet
