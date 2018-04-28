@@ -346,7 +346,7 @@ class NDArray {
   // Reset the internal storage handler; reset it to delay alloc status;
   // Shape and type information and engine variables are reused.
   // This allows reallocate the space without recreating a new engine variable.
-  void Reset();
+  void Reset(uint32_t eid);
 
  private:
   /*! \brief the real data chunk that backs NDArray */

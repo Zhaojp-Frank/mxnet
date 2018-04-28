@@ -107,6 +107,14 @@ void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
   //FnProperty::kCopyFromGPU,
   priority,
   PROFILER_MESSAGE("TofuFusedConvert"));
+
+  //std::ostringstream oss;
+  //oss << "use=[";
+  //for (auto& v : const_vars) oss << v << " ";
+  //oss << "] mutate=[" << to.var() << " " << finish_var;
+  //oss << "]";
+  //LOG(INFO) << "TofuFusedConvert " << oss.str();
+
 }
 
 void TofuCopyFromToNoComm(const nnvm::NodeAttrs& attrs,

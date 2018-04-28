@@ -131,7 +131,7 @@ void GraphExecutor::Backward(const std::vector<NDArray>& head_grads) {
   // Reset all temporary ndarrays so their memory could be released.
   for (uint32_t eid = 0; eid < idx.num_node_entries(); ++eid) {
     if (is_temp_entry_[eid]) {
-      data_entry_[eid].Reset();
+      data_entry_[eid].Reset(eid);
     }
   }
 }
@@ -867,6 +867,7 @@ void GraphExecutor::InitCachedOps() {
   // setup the array and requirements.
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
+    //LOG(INFO) << "Node#" << nid << " " << inode.source->attrs.name;
     if (inode.source->is_variable()) continue;
     op_nodes_[nid].opr_name = inode.source->op()->name.c_str();
     if (skip_plus_node.at(nid)) {
@@ -890,7 +891,7 @@ void GraphExecutor::InitCachedOps() {
       const uint32_t eid = idx.entry_id(inode.inputs[index]);
       if (is_temp_entry_[eid]) {
         temp_2_opnode_loc_[eid].push_back(exec->in_array.data() + index);
-        //LOG(INFO) << "iEntry#" << eid << " => " << (exec->in_array.data() + index) << " " << &(exec->in_array[index]) << " " << exec->in_array[index].shape();
+        //LOG(INFO) << "iEntry#" << eid << " => " << exec->in_array[index].var() << " " << exec->in_array[index].shape();
         exec->in_array_is_temp.push_back(true);
       } else {
         exec->in_array_is_temp.push_back(false);
@@ -916,7 +917,7 @@ void GraphExecutor::InitCachedOps() {
       const uint32_t eid = idx.entry_id(nid, index);
       if (is_temp_entry_[eid]) {
         temp_2_opnode_loc_[eid].push_back(exec->out_array.data() + index);
-        //LOG(INFO) << "oEntry#" << eid << " => " << (exec->out_array.data() + index) << " " << &(exec->out_array[index]) << " " << exec->out_array[index].shape();
+        //LOG(INFO) << "oEntry#" << eid << " => " << exec->out_array[index].var() << " " << exec->out_array[index].shape();
         exec->out_array_is_temp.push_back(true);
       } else {
         exec->out_array_is_temp.push_back(false);
@@ -936,7 +937,7 @@ void GraphExecutor::InitCachedOps() {
     op_nodes_[nid].finish_var = Engine::Get()->NewVariable();
     if (inode.source->is_variable()) continue;
     if (op_nodes_[nid].skip_exec_node) continue;
-    if (inode.source->op() == nnvm::Op::Get("_TofuFusedConvert")) continue;
+    //if (inode.source->op() == nnvm::Op::Get("_TofuFusedConvert")) continue;
 
     auto& exec = op_nodes_[nid].exec;
     std::vector<uint32_t> inplace_inputs;
@@ -958,6 +959,9 @@ void GraphExecutor::InitCachedOps() {
         auto& nd = exec->in_array[i];
         all_vars.push_back(nd.var());
         use_vars.push_back(nd.var());
+      } else {
+        auto& nd = exec->in_array[i];
+        mutate_vars.push_back(nd.var());
       }
     }
     // Handle control dependencies.
@@ -1067,8 +1071,15 @@ void GraphExecutor::InitCachedOps() {
     op_nodes_[nid].cached_opr = Engine::Get()->NewOperator(
         exec_fun, use_vars, mutate_vars, prop,
         op_nodes_[nid].opr_name);
-  }
 
+    //std::ostringstream oss;
+    //oss << "use=[";
+    //for (auto& v : use_vars) oss << v << " ";
+    //oss << "] mutate=[";
+    //for (auto& v : mutate_vars) oss << v << " ";
+    //oss << "]";
+    //LOG(INFO) << "Node #nid=" << nid << " " << idx[nid].source->attrs.name << " " << oss.str();
+  }
 }
 
 void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {

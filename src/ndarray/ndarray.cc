@@ -742,8 +742,8 @@ void NDArray::SyncCopyToCPU(void *data, size_t size) const {
   }
 }
 
-void NDArray::Reset() {
-  Engine::Get()->PushSync([this] (RunContext ctx) {
+void NDArray::Reset(uint32_t eid) {
+  Engine::Get()->PushSync([this, eid] (RunContext ctx) {
       if (!ptr_->static_data && !ptr_->delay_alloc) {
         Storage::Handle new_shandle;
         new_shandle.size = ptr_->shandle.size;
