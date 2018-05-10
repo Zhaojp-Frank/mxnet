@@ -73,6 +73,15 @@ def test():
     args_grad = {name : mx.nd.zeros(shape, default_ctx, dtype=dtype)
                  for name, shape, dtype in zip(net.list_arguments(), arg_shapes, arg_types)
                  if name != 'data' and not name.endswith('label')}
+    '''
+    size = 0
+    for name, shape in zip(net.list_arguments(), arg_shapes):
+        if 'weight' in name:
+            size += np.prod(shape) * 4
+        print (name, np.prod(shape))
+    print('size {}'.format(size / 1024.0 / 1024.0 / 1024.0))
+    assert False
+    '''
     print('Argument grads: ', args_grad.keys())
     if args.use_momentum:
         args_mom = {name : mx.nd.zeros(shape, default_ctx, dtype=dtype)

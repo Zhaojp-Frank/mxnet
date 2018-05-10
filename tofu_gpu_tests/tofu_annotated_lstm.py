@@ -137,6 +137,15 @@ def test():
     # create ndarrays for all arguments.
     arg_arrays = [mx.nd.zeros(shape, default_ctx, dtype=dtype)
                   for name, shape, dtype in zip(net.list_arguments(), arg_shapes, arg_types)]
+    '''
+    size = 0
+    for name, shape in zip(net.list_arguments(), arg_shapes):
+        if 'weight' in name:
+            size += np.prod(shape) * 4
+        print (name, np.prod(shape))
+    print('size {}'.format(size / 1024.0 / 1024.0 / 1024.0))
+    assert False
+    '''
     print('Num arguments: ', len(arg_arrays))
     if args.use_momentum:
         assert False, "Momentum simulation is not required since this MXNet implementation \
