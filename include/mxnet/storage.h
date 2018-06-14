@@ -27,13 +27,10 @@
 
 #include <atomic>
 #include <memory>
-#include "./swap.h"
 #include "./base.h"
+#include "./swap.h"
 
 namespace mxnet {
-
-using handle_id_t = unsigned long long;
-using timestamp_t = unsigned long long;
 
 /*!
  * \brief Storage manager across multiple devices.
