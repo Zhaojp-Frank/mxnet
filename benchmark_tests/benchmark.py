@@ -1,14 +1,8 @@
-# pylint: skip-file
-from __future__ import print_function
-
 import mxnet as mx
 import numpy as np
 import os, sys,time
-import pickle as pickle
 import logging
 import argparse
-
-rng = np.random.RandomState(seed=42)
 
 def feed_args(net, arg_arrays):
     names = net.list_arguments()
@@ -17,13 +11,10 @@ def feed_args(net, arg_arrays):
             arr[:] = 0.0
 
 def test():
-    has_mpi = False
-    logging.basicConfig(level=logging.DEBUG)
-
     print(sys.argv)
-    parser = argparse.ArgumentParser("Tofu GPU test")
-    parser.add_argument('model', type=str, help='The model to bested.')
-    parser.add_argument('--batch_size', type=int, help='Batch size', default=128)
+    parser = argparse.ArgumentParser("Benchmark Tests")
+    parser.add_argument('model', type=str, default="resnet", help='The model to be tested.')
+    parser.add_argument('--batch_size', type=int, default=128, help='Batch size')
     parser.add_argument('--num_gpus', type=int, default=1, help='Number of GPUs')
     parser.add_argument('--num_loops', type=int, default=30, help='Number of benchmarking loops.')
     parser.add_argument('--cold_skip', type=int, default=5, help='Number of loops skipped for warm up.')
@@ -66,15 +57,7 @@ def test():
     args_grad = {name : mx.nd.zeros(shape, default_ctx, dtype=dtype)
                  for name, shape, dtype in zip(net.list_arguments(), arg_shapes, arg_types)
                  if name != 'data' and not name.endswith('label')}
-    '''
-    size = 0
-    for name, shape in zip(net.list_arguments(), arg_shapes):
-        if 'weight' in name:
-            size += np.prod(shape) * 4
-        print (name, np.prod(shape))
-    print('size {}'.format(size / 1024.0 / 1024.0 / 1024.0))
-    assert False
-    '''
+
     print('Argument grads: ', args_grad.keys())
     if args.use_momentum:
         args_mom = {name : mx.nd.zeros(shape, default_ctx, dtype=dtype)
