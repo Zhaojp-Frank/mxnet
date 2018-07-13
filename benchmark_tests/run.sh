@@ -1,6 +1,5 @@
 LAYERS=269
 WIDE_SCALE=4
-
 export PYTHONPATH=/home/karl/debug_naive/incubator-mxnet/python
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
 
