@@ -3,8 +3,10 @@
 
 #include <pthread.h>
 #include <unordered_map>
+#include <map>
 #include <memory>
 #include <stack>
+#include <string>
 #include <mxnet/gpu_swap_history.h>
 #include <mxnet/mem_mgr.h>
 #if MXNET_USE_CUDA
@@ -20,6 +22,7 @@ struct SwapInfo {
   void* dptr;
   char* cpu_address;
   size_t size;
+  size_t swap_count;
 };
 
 class Swap {
@@ -36,13 +39,16 @@ public:
   int UpdateFree(int device); 
   void LockSwap();
   void UnlockSwap();
+  void PrintHandles();
 
 private:
   Swap();
   std::unordered_map<handle_id_t, SwapInfo*> swap_info_;
   std::unordered_set<handle_id_t> swappable_handles_[NUMBER_OF_GPU];
+  std::map<size_t, std::unordered_set<handle_id_t> > divided_handles_[NUMBER_OF_GPU];
   std::stack<handle_id_t> locked_handles_[NUMBER_OF_GPU];
   std::vector<size_t> free_memory_;
+  std::string swap_algorithm_;
   std::shared_ptr<MemHistory> memory_history_;
   std::shared_ptr<MemoryManager> memory_manager_;
   pthread_rwlock_t swap_lock_;

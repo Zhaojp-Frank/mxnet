@@ -27,7 +27,8 @@ MemHistory::MemHistory() {
   std::cout << "Swap Algorithm: " << swap_algorithm_ << std::endl;
   if(swap_algorithm_ == "LRU"){
     DoDecide = &MemHistory::LRU;
-  } else if(swap_algorithm_ == "NaiveHistory") {
+  } else if(swap_algorithm_ == "NaiveHistory" 
+      || swap_algorithm_ == "SizeHistory" ) {
     DoDecide = &MemHistory::NaiveHistoryBased;
   } else {
     std::cout << "Unknown Algorithm Name: " << swap_algorithm_ << std::endl;
@@ -90,7 +91,7 @@ void MemHistory::PutRecord(handle_id_t handle_id, int device,
 }
 
 // LRU: Swapout the least recently used handle
-handle_id_t MemHistory::LRU(std::unordered_set<handle_id_t> handles, int device) {
+handle_id_t MemHistory::LRU(std::unordered_set<handle_id_t> handles, int device, void* arg) {
   handle_id_t victim = -1;
   while(lru_list[device].size() != 0 &&
     handles.find(lru_list[device].back()) == handles.end()) {
@@ -112,7 +113,7 @@ handle_id_t MemHistory::LRU(std::unordered_set<handle_id_t> handles, int device)
 // NaiveHistory: assume iterations remain the same; choose the handle
 // whose next reference is furthest in the future as victim.
 handle_id_t MemHistory::NaiveHistoryBased(
-  std::unordered_set<handle_id_t> handles, int device) {
+  std::unordered_set<handle_id_t> handles, int device, void* arg) {
   size_t latest_step = 0;
   handle_id_t latest_id = 0;
   for(auto &id : handles) {
@@ -129,13 +130,9 @@ handle_id_t MemHistory::NaiveHistoryBased(
       */
       return id;
     } 
-    /*
-    else if(it != history[device][id].begin() &&
-        std::prev(it) != history[device][id].begin() &&
-        record_idx[device] - std::prev(it)->record_step < 10){
+    else if( arg != nullptr && it->record_step - record_idx[device] < *(size_t*)arg) {
       continue;
     }
-    */
     if(it->record_step > latest_step) {
       latest_step = it->record_step;
       latest_id = id;
@@ -145,12 +142,13 @@ handle_id_t MemHistory::NaiveHistoryBased(
 
 }
 
-handle_id_t MemHistory::DecideVictim(std::unordered_set<handle_id_t> handles, int device) {
+handle_id_t MemHistory::DecideVictim(std::unordered_set<handle_id_t> handles, int device, 
+    void* arg) {
   std::lock_guard<std::mutex> lock(mutex_[device]);
   if (iteration_idx_ <= 2) {
-    return MemHistory::LRU(handles, device);
+    return MemHistory::LRU(handles, device, nullptr);
   } else {
-    return (this->*DoDecide)(handles, device);
+    return (this->*DoDecide)(handles, device, arg);
   }
 }
 
@@ -202,6 +200,12 @@ void MemHistory::StartIteration() {
     //  usleep(1);
   }
   begin_time_ = high_resolution_clock::now();
+  // Log variables
+  num_swap_in = 0;
+  num_swap_out = 0;
+  swap_in_total = 0;
+  swap_out_total = 0;
+  num_get_addr = 0;
 }
 
 void MemHistory::StopIteration() {
@@ -212,6 +216,11 @@ void MemHistory::StopIteration() {
     Prefetch::Get()->StopPrefetching();
   }
   ++iteration_idx_;
+  std::cout << "num_get_addr " << num_get_addr << std::endl
+    << "num_swap_in: " << num_swap_in << " " 
+    << "total: " << swap_in_total << std::endl
+    << "num_swap_out " << num_swap_out << " " 
+    << "total: " << swap_out_total << std::endl;
 }
 
 } // namespace mxnet
