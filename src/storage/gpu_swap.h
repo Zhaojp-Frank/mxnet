@@ -40,8 +40,6 @@ public:
   void DelAddr(handle_id_t handle_id);
   void FreeAddr(handle_id_t handle_id);
   void* GetAddr(handle_id_t handle_id, bool prefetch = false);
-  // Update size of free space for the device.
-  int UpdateFree(int device); 
   void LockSwap();
   void UnlockSwap();
   void PrintHandles();

@@ -92,6 +92,7 @@ def test():
             all_time.append(float(ed_l - st_l))
             if i == 2:
                 t0 = time.time()
+
     t1 = time.time()
 
     duration = t1 - t0
