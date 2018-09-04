@@ -11,6 +11,20 @@ import pprint
 import signal
 import subprocess
 import sys
+import time
+
+
+def sigint_handler(signum, frame):
+    print('Ctrl + C has been pressed.')
+    print('Killing the subprocess.')
+    os.killpg(os.getpgid(sigint_handler.proc.pid), signal.SIGINT)
+    time.sleep(1)
+    sys.exit(0)
+
+
+def register_sigint(proc):
+    sigint_handler.proc = proc
+    signal.signal(signal.SIGINT, sigint_handler)
 
 
 def run_script(args):
@@ -35,7 +49,9 @@ def run_script(args):
     options.append(args.model)
     proc = subprocess.Popen(['python', 'benchmark.py'] + options, env=envs,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            bufsize=1, universal_newlines=True)
+                            bufsize=1, universal_newlines=True,
+                            preexec_fn=os.setsid)
+    register_sigint(proc)
     with open(log_name, 'w') as fp:
         while True:
             line = proc.stdout.readline()
