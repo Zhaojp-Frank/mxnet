@@ -121,7 +121,7 @@ def test():
     group2ctx = {}
     group2ctx['data'] = mx.gpu(0)
     for i in range(args.num_layers):
-        group2ctx['layer%d' % i] = mx.gpu(i // max(1, args.num_layers // args.num_gpus))
+        group2ctx['layer%d' % i] = mx.gpu((i // max(1, args.num_layers // args.num_gpus)) % args.num_gpus)
     group2ctx['output'] = mx.gpu(args.num_gpus - 1)
     print(group2ctx)
     default_ctx = mx.cpu(0)

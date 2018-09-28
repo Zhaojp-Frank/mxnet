@@ -12,12 +12,9 @@ namespace op {
 void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
                     std::shared_ptr<exec::OpExecutor> op_exec,
                     Engine::VarHandle finish_var,
-                    int priority = 0);
+                    int priority = 0,
+                    bool ignore_comm = false);
 
-void TofuCopyFromToNoComm(const nnvm::NodeAttrs& attrs,
-                          const std::vector<NDArray>& from,
-                          NDArray* to,
-                          int priority = 0);
 }  // namespace op
 }  // namespace mxnet
 

@@ -1099,10 +1099,10 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
                          opnode.exec,
                          opnode.finish_var);
     } else if (inode.source->op() == nnvm::Op::Get("_TofuFusedConvertNoComm")) {
-      LOG(FATAL) << "Disabled for now!";
-      op::TofuCopyFromToNoComm(inode.source->attrs,
-                               opnode.exec->in_array,
-                               &(opnode.exec->out_array[0]));
+      op::TofuCopyFromTo(inode.source->attrs,
+                         opnode.exec,
+                         opnode.finish_var,
+                         0, true);
     } else if (opnode.exec->exec_type() == Operator::kCrossDeviceCopy) {
       CHECK_EQ(inode.inputs.size(), 1);
       CHECK_EQ(opnode.exec->in_array.size(), 1);

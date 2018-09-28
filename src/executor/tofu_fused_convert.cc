@@ -58,7 +58,8 @@ void TofuFakeOut(
 void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
                     std::shared_ptr<exec::OpExecutor> op_exec,
                     Engine::VarHandle finish_var,
-                    int priority) {
+                    int priority,
+                    bool ignore_comm) {
   const auto& from = op_exec->in_array;
   const auto& to = op_exec->out_array[0];
   CHECK_GT(from.size(), 0);
@@ -74,12 +75,13 @@ void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
   const vector<TShape>& sizes = param.sizes;
   CHECK_EQ(offsets.size(), from.size());
   CHECK_EQ(sizes.size(), from.size());
-  Engine::Get()->PushSync([op_exec, param] (RunContext ctx) {
+  Engine::Get()->PushSync([op_exec, param, ignore_comm] (RunContext ctx) {
     auto& ret = op_exec->out_array[0];
     ret.CheckAndAlloc();
-    if (param.is_reduction && param.ignore_reduction) {
+    if (ignore_comm ||
+        (param.is_reduction && param.ignore_reduction)) {
       // Do nothing.
-      //LOG(INFO) << "Reduction ignored!!!";
+      //LOG(INFO) << "Comm ignored!!!";
     } else {
       for (size_t i = 0; i < op_exec->in_array.size(); ++i) {
         const auto& f = op_exec->in_array[i];
@@ -120,13 +122,6 @@ void TofuCopyFromTo(const nnvm::NodeAttrs& attrs,
   //oss << "]";
   //LOG(INFO) << "TofuFusedConvert " << oss.str();
 
-}
-
-void TofuCopyFromToNoComm(const nnvm::NodeAttrs& attrs,
-                          const std::vector<NDArray>& from,
-                          NDArray* to,
-                          int priority) {
-  // Do nothing.
 }
 
 NNVM_REGISTER_OP(_TofuFusedConvert)
