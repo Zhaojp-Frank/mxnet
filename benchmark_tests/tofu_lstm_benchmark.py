@@ -167,6 +167,7 @@ def test():
                         args_grad=args_grad,
                         grad_req='write',
                         group2ctx=group2ctx)
+    executor.save_graph('lstm.graph')
     feed_args(net, arg_arrays)
     import time
     time.sleep(10)

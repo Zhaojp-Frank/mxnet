@@ -1701,6 +1701,9 @@ MXNET_DLL int MXExecutorReshape(int partial_shaping,
 MXNET_DLL int MXExecutorSetMonitorCallback(ExecutorHandle handle,
                                            ExecutorMonitorCallback callback,
                                            void* callback_handle);
+
+MXNET_DLL int MXExecutorSaveGraphToFile(ExecutorHandle handle,
+                                        const char *fname);
 //--------------------------------------------
 // Part 5: IO Interface
 //--------------------------------------------
