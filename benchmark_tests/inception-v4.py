@@ -30,7 +30,7 @@ def Inception_stem(data, name=None):
   c2 = Conv(concat, num_filter=64, kernel=(1,1), name='%s_conv5_1*1'%name)
   c2 = Conv(c2, num_filter=96, kernel=(3,3), name='%s_conv6_3*3'%name)
 
-  c1 = Conv(concat, num_filter=64, kernel=(1, 1), name='%s_conv7_1*1' %name)
+  c1 = Conv(concat, num_filter=64, kernel=(1, 1), name='%s_conv7_1*1'%name)
   c1 = Conv(c1, num_filter=64, kernel=(7,1), pad=(3,0), name='%s_conv8_7*1'%name)
   c1 = Conv(c1, num_filter=64, kernel=(1,7), pad=(0,3), name='%s_conv9_1*7'%name)
   c1 = Conv(c1, num_filter=96, kernel=(3,3), name='%s_conv10_3*3'%name)
@@ -86,17 +86,17 @@ def InceptionB(data, name=None):
 def InceptionC(data, name=None):
   pool = mx.sym.Pooling(data, kernel=(3,3), pad=(1,1), pool_type='avg', name='%s_avgpool_1'%name)
   c1 = Conv(pool, 256, name='%s_conv1_1*1'%name)
-  c2 = Conv(data, 256, name='%s_conv2_1*1' %name)
-  c3 = Conv(data, 384, name='%s_conv3_1*1' %name)
+  c2 = Conv(data, 256, name='%s_conv2_1*1'%name)
+  c3 = Conv(data, 384, name='%s_conv3_1*1'%name)
 
-  c3_1 = Conv(c3, 256, kernel=(1, 3), pad=(0, 1), name='%s_conv4_3*1' %name)
-  c3_2 = Conv(c3, 256, kernel=(3, 1), pad=(1, 0), name='%s_conv5_1*3' %name)
+  c3_1 = Conv(c3, 256, kernel=(1, 3), pad=(0, 1), name='%s_conv4_3*1'%name)
+  c3_2 = Conv(c3, 256, kernel=(3, 1), pad=(1, 0), name='%s_conv5_1*3'%name)
 
-  c4 = Conv(data, 384, name='%s_conv6_1*1' %name)
-  c4 = Conv(c4, 448, kernel=(1, 3), pad=(0, 1), name='%s_conv7_1*3' %name)
-  c4 = Conv(c4, 512, kernel=(3, 1), pad=(1, 0), name='%s_conv8_3*1' %name)
-  c4_1 = Conv(c4, 256, kernel=(3, 1), pad=(1, 0), name='%s_conv9_1*3' %name)
-  c4_2 = Conv(c4, 256, kernel=(1, 3), pad=(0, 1), name='%s_conv10_3*1' %name)
+  c4 = Conv(data, 384, name='%s_conv6_1*1'%name)
+  c4 = Conv(c4, 448, kernel=(1, 3), pad=(0, 1), name='%s_conv7_1*3'%name)
+  c4 = Conv(c4, 512, kernel=(3, 1), pad=(1, 0), name='%s_conv8_3*1'%name)
+  c4_1 = Conv(c4, 256, kernel=(3, 1), pad=(1, 0), name='%s_conv9_1*3'%name)
+  c4_2 = Conv(c4, 256, kernel=(1, 3), pad=(0, 1), name='%s_conv10_3*1'%name)
 
   concat = mx.sym.Concat(*[c1, c2, c3_1, c3_2, c4_1, c4_2], name='%s_concat'%name)
 
@@ -106,11 +106,11 @@ def InceptionC(data, name=None):
 
 def ReductionA(data, name=None):
   pool = mx.sym.Pooling(data, kernel=(3,3), stride=(2,2), pool_type='max', name='%s_maxpool_1'%name)
-  c1 = Conv(data, 384, kernel=(3, 3), stride=(2, 2), name='%s_conv1_3*3' %name)
+  c1 = Conv(data, 384, kernel=(3, 3), stride=(2, 2), name='%s_conv1_3*3'%name)
 
-  c2 = Conv(data, 192, name='%s_conv2_1*1' %name)
-  c2 = Conv(c2, 224, kernel=(3, 3), pad=(1, 1), name='%s_conv3_3*3' %name)
-  c2 = Conv(c2, 256, kernel=(3, 3), stride=(2, 2), pad=(0, 0), name='%s_conv4_3*3' %name)
+  c2 = Conv(data, 192, name='%s_conv2_1*1'%name)
+  c2 = Conv(c2, 224, kernel=(3, 3), pad=(1, 1), name='%s_conv3_3*3'%name)
+  c2 = Conv(c2, 256, kernel=(3, 3), stride=(2, 2), pad=(0, 0), name='%s_conv4_3*3'%name)
 
   concat = mx.sym.concat(*[pool, c1, c2], name='%s_concat_1'%name)
 
@@ -120,13 +120,13 @@ def ReductionA(data, name=None):
 
 def ReductionB(data, name=None):
   pool = mx.sym.Pooling(data, kernel=(3,3), stride=(2,2), pool_type='max', name='%s_maxpool_1'%name)
-  c1 = Conv(data, 192, name='%s_conv1_1*1' %name)
-  c1 = Conv(c1, 192, kernel=(3, 3), stride=(2, 2), name='%s_conv2_3*3' %name)
+  c1 = Conv(data, 192, name='%s_conv1_1*1'%name)
+  c1 = Conv(c1, 192, kernel=(3, 3), stride=(2, 2), name='%s_conv2_3*3'%name)
 
-  c2 = Conv(data, 256, name='%s_conv3_1*1' %name)
-  c2 = Conv(c2, 256, kernel=(1, 7), pad=(0, 3), name='%s_conv4_1*7' %name)
-  c2 = Conv(c2, 320, kernel=(7, 1), pad=(3, 0), name='%s_conv5_7*1' %name)
-  c2 = Conv(c2, 320, kernel=(3, 3), stride=(2, 2), name='%s_conv6_3*3' %name)
+  c2 = Conv(data, 256, name='%s_conv3_1*1'%name)
+  c2 = Conv(c2, 256, kernel=(1, 7), pad=(0, 3), name='%s_conv4_1*7'%name)
+  c2 = Conv(c2, 320, kernel=(7, 1), pad=(3, 0), name='%s_conv5_7*1'%name)
+  c2 = Conv(c2, 320, kernel=(3, 3), stride=(2, 2), name='%s_conv6_3*3'%name)
 
   concat = mx.sym.concat(*[pool, c1, c2], name='%s_concat_1'%name)
 
