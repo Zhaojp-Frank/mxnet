@@ -86,6 +86,26 @@ class BuddyMemoryManager : public MemoryManager {
     std::array<std::mutex, 16> mutex_;
 }; // Class BuddyMemoryManager
 
+class FakeMemoryManager : public MemoryManager {
+  public:
+    cudaError_t MemGetInfo(int device_id, size_t* total, size_t* free);
+    bool TryAllocate(int device_id, size_t size);
+
+    friend std::shared_ptr<MemoryManager> GetMemoryManagerRef();
+
+  protected:
+    cudaError_t MallocInternal(void*& devptr, size_t size, int device_id);
+    cudaError_t FreeInternal(void* devptr, int device_id);
+    void StatisticsInternal();
+
+  private:
+    FakeMemoryManager();
+    ~FakeMemoryManager();
+    
+    std::vector<void*> ptrs_;
+}; // Class BuddyMemoryManager
+
+
 //class SlabMemoryManager : public MemoryManager {
   //public:
     //cudaError_t MemGetInfo(int device_id, size_t* total, size_t* free);

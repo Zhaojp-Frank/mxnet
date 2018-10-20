@@ -170,6 +170,63 @@ void BuddyMemoryManager::StatisticsInternal() {
   }
 }
 
+FakeMemoryManager::FakeMemoryManager() {
+  std::cout << "Initializing Fake Memory Manager" << std::endl;
+  ptrs_.resize(NUMBER_OF_GPU);
+  for (size_t device = 0; device < NUMBER_OF_GPU; device++) {
+    size_t avail, total;
+    CUDA_CALL(cudaSetDevice(device));
+    CUDA_CALL(cudaMemGetInfo(&avail, &total));
+    avail = static_cast<size_t>(avail * kGPUUtilRatio);
+    void* memory = nullptr;
+    while (cudaMalloc((void**)&memory, avail) == cudaErrorMemoryAllocation) {
+      avail -= kMB;
+      if (avail == 0) {
+        break;
+      }
+    }
+    CHECK(avail > 0);
+    ptrs_[device] = memory;
+    std::cout << "Fake system No." << device << " initialized with size = "
+              << GBString(avail) << std::endl;
+  }
+  std::cout << "Fake Memory Manager initialization completed" << std::endl;
+}
+
+FakeMemoryManager::~FakeMemoryManager() {
+  for (size_t device = 0; device < NUMBER_OF_GPU; device++) {
+    CUDA_CALL(cudaSetDevice(device));
+    CUDA_CALL(cudaFree((void*)ptrs_[device]));
+    ptrs_[device] = nullptr;
+    std::cout << "Fake system No." << device << " destructed" << std::endl;
+  }
+  std::cout << "Destroy Fake Memory Allocator" << std::endl;
+}
+
+cudaError_t FakeMemoryManager::MemGetInfo(int device_id, size_t* total,
+                                          size_t* free) {
+  *total = ~1;
+  *free = ~1;
+  return cudaSuccess;
+}
+
+bool FakeMemoryManager::TryAllocate(int device_id, size_t size) {
+  return true;
+}
+
+cudaError_t FakeMemoryManager::MallocInternal(void*& devptr, size_t size,
+                                              int device_id) {
+  devptr = ptrs_[device_id];
+  return cudaSuccess;
+}
+
+cudaError_t FakeMemoryManager::FreeInternal(void* devptr, int device_id) {
+  return cudaSuccess;
+}
+
+void FakeMemoryManager::StatisticsInternal() {
+}
+
 /*
 SlabMemoryManager::SlabMemoryManager() {
   std::cout << "Initializing Memory Manager" << std::endl;
@@ -242,6 +299,8 @@ std::shared_ptr<MemoryManager> GetMemoryManagerRef() {
       inst.reset(dynamic_cast<MemoryManager*>(new CudaMemoryManager()));
     } else if (mem_mgr_type == "Buddy") {
       inst.reset(dynamic_cast<MemoryManager*>(new BuddyMemoryManager()));
+    } else if (mem_mgr_type == "FAKE") {
+      inst.reset(dynamic_cast<MemoryManager*>(new FakeMemoryManager()));
     }
     set = true;
   }
