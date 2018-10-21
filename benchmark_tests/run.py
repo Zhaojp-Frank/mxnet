@@ -44,6 +44,16 @@ def run_script(args):
         log_name = 'TBD'
         options = []
         raise NotImplementedError
+    elif args.model == 'inception-v4':
+        log_name = './log_{}_{}_{}_{}_{}'.format(
+                        args.model, args.batch_size,
+                        envs['MXNET_SWAP_ALGORITHM'],
+                        envs['MXNET_PREFETCH_ALGORITHM'],
+                        envs['MXNET_PREFETCH_STEP_AHEAD'])
+        options = ['--num_gpus={}'.format(args.num_gpus),
+                   '--num_loops={}'.format(args.num_loops),
+                   '--batch_size={}'.format(args.batch_size)]
+
     else:
         raise NotImplementedError
     options.append(args.model)
