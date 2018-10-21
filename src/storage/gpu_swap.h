@@ -57,6 +57,7 @@ private:
   pthread_rwlock_t locks_[NUMBER_OF_GPU];
   bool swap_locked_;
   bool swap_async_;
+  bool infinite_memory_;
   cudaStream_t streams_[NUMBER_OF_GPU];
 }; // Class Swap
 

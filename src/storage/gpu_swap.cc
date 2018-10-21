@@ -21,6 +21,7 @@ Swap::Swap() {
   memory_manager_ = GetMemoryManagerRef();
   swap_lock_ = PTHREAD_RWLOCK_INITIALIZER;
   swap_async_ = dmlc::GetEnv("MXNET_SWAP_ASYNC", true);
+  infinite_memory_ = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
   for (int i = 0; i < NUMBER_OF_GPU; ++i) {
     locks_[i] = PTHREAD_RWLOCK_INITIALIZER;
     // TODO(fegin): This and other cuda related code should be protected
@@ -58,10 +59,12 @@ void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
     target->swap_count++;
     memory_history_->DevHistory(device_id).num_swap_out++;
     memory_history_->DevHistory(device_id).swap_out_total += target->size;
-    if (target->cpu_address == nullptr) {
-      target->cpu_address = new char[int(target->size)];
+    if (!infinite_memory_) {
+        if (target->cpu_address == nullptr) {
+          target->cpu_address = new char[int(target->size)];
+        }
+        CHECK(target->cpu_address != nullptr);
     }
-    CHECK(target->cpu_address != nullptr);
     CHECK(target->swapped_in);
     CHECK(!target->is_swapping.test_and_set(std::memory_order_acquire));
     CHECK(target->dptr != nullptr);
@@ -69,14 +72,16 @@ void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
     swappable_handles_[device_id].erase(victim);
     divided_handles_[device_id][target->size].erase(victim);
     pthread_rwlock_unlock(&swap_lock_);
-    if (async) {
-      memory_manager_->MemcpyAsync(device_id, target->cpu_address,
-          target->dptr, target->size, cudaMemcpyDeviceToHost,
-          streams_[device_id]);
-      memory_manager_->StreamSynchronize(device_id, streams_[device_id]);
-    } else {
-      memory_manager_->Memcpy(device_id, target->cpu_address, target->dptr,
-          target->size, cudaMemcpyDeviceToHost);
+    if (!infinite_memory_) {
+        if (async) {
+          memory_manager_->MemcpyAsync(device_id, target->cpu_address,
+              target->dptr, target->size, cudaMemcpyDeviceToHost,
+              streams_[device_id]);
+          memory_manager_->StreamSynchronize(device_id, streams_[device_id]);
+        } else {
+          memory_manager_->Memcpy(device_id, target->cpu_address, target->dptr,
+              target->size, cudaMemcpyDeviceToHost);
+        }
     }
     memory_manager_->Free(target->dptr, device_id);
     pthread_rwlock_wrlock(&swap_lock_);
@@ -98,7 +103,7 @@ void Swap::SwapIn(SwapInfo *info, bool async) {
   }
   if (!info->swapped_in) {
     CHECK(!info->swapped_in);
-    CHECK(info->cpu_address != nullptr);
+    CHECK(info->cpu_address != nullptr || infinite_memory_);
     //std::cout << "SwapIn "<< info->handle_id << " " << info->size << " "
     //          << info->swap_count << std::endl;
     SwapOut(info->size, info->device_id, async);
@@ -106,17 +111,19 @@ void Swap::SwapIn(SwapInfo *info, bool async) {
     memory_history_->DevHistory(info->device_id).num_swap_in++;
     memory_history_->DevHistory(info->device_id).swap_in_total += info->size;
     memory_manager_->Malloc(info->dptr, info->size, info->device_id);
-    if (async) {
-      memory_manager_->MemcpyAsync(info->device_id, info->dptr,
-          info->cpu_address, info->size, cudaMemcpyHostToDevice,
-          streams_[info->device_id]);
-      memory_manager_->StreamSynchronize(info->device_id,
-          streams_[info->device_id]);
-    } else {
-      memory_manager_->Memcpy(info->device_id, info->dptr, info->cpu_address,
-                             info->size, cudaMemcpyHostToDevice);
+    if (!infinite_memory_) {
+        if (async) {
+          memory_manager_->MemcpyAsync(info->device_id, info->dptr,
+              info->cpu_address, info->size, cudaMemcpyHostToDevice,
+              streams_[info->device_id]);
+          memory_manager_->StreamSynchronize(info->device_id,
+              streams_[info->device_id]);
+        } else {
+          memory_manager_->Memcpy(info->device_id, info->dptr, info->cpu_address,
+                                 info->size, cudaMemcpyHostToDevice);
+        }
+        delete info->cpu_address;
     }
-    delete info->cpu_address;
     info->cpu_address = nullptr;
     pthread_rwlock_wrlock(&swap_lock_);
     info->swapped_in = true;

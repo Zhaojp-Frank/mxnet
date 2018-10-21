@@ -113,7 +113,13 @@ BuddyMemoryManager::BuddyMemoryManager() {
     size_t avail, total;
     CUDA_CALL(cudaSetDevice(device));
     CUDA_CALL(cudaMemGetInfo(&avail, &total));
-    avail = static_cast<size_t>(avail * kGPUUtilRatio);
+    bool infinite_memory = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
+    if (infinite_memory) {
+        avail = static_cast<size_t>(avail * 0.8);
+    } else {
+        float ratio = dmlc::GetEnv("MXNET_GPU_UTIL_RATIO", kGPUUtilRatio);
+        avail = static_cast<size_t>(avail * ratio);
+    }
     void* memory = nullptr;
     while (cudaMalloc((void**)&memory, avail) == cudaErrorMemoryAllocation) {
       avail -= kMB;
@@ -177,7 +183,8 @@ FakeMemoryManager::FakeMemoryManager() {
     size_t avail, total;
     CUDA_CALL(cudaSetDevice(device));
     CUDA_CALL(cudaMemGetInfo(&avail, &total));
-    avail = static_cast<size_t>(avail * kGPUUtilRatio);
+    float ratio = dmlc::GetEnv("MXNET_GPU_UTIL_RATIO", kGPUUtilRatio);
+    avail = static_cast<size_t>(avail * ratio);
     void* memory = nullptr;
     while (cudaMalloc((void**)&memory, avail) == cudaErrorMemoryAllocation) {
       avail -= kMB;
@@ -235,7 +242,8 @@ SlabMemoryManager::SlabMemoryManager() {
     size_t avail, total;
     CUDA_CALL(cudaSetDevice(device));
     CUDA_CALL(cudaMemGetInfo(&avail, &total));
-    avail = static_cast<size_t>(avail * kGPUUtilRatio);
+    float ratio = dmlc::GetEnv("MXNET_GPU_UTIL_RATIO", kGPUUtilRatio);
+    avail = static_cast<size_t>(avail * ratio);
     void* memory = nullptr;
     while (cudaMalloc((void**)&memory, avail) == cudaErrorMemoryAllocation) {
       avail -= kMB;
@@ -294,6 +302,10 @@ std::shared_ptr<MemoryManager> GetMemoryManagerRef() {
   if (!set) {
     std::string mem_mgr_type = dmlc::GetEnv("MXNET_MEM_MGR_TYPE",
                                             std::string("CUDA"));
+    bool infinite_memory = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
+    if (infinite_memory) {
+        mem_mgr_type = "Buddy";
+    }
     std::cout << "MXNET_MEM_MGR_TYPE: " << mem_mgr_type << std::endl;
     if (mem_mgr_type == "CUDA") {
       inst.reset(dynamic_cast<MemoryManager*>(new CudaMemoryManager()));
