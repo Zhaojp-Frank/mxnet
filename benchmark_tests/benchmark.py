@@ -1,4 +1,5 @@
 import mxnet as mx
+from mxnet import profiler
 import numpy as np
 import os, sys,time
 import logging
@@ -11,6 +12,8 @@ def feed_args(net, arg_arrays):
             arr[:] = 0.0
 
 def test():
+    profiler.set_config(profile_all=True, aggregate_stats=True,
+            filename='profile_output.json')
     mx.base.swap_start_iteration()
     print(sys.argv)
     parser = argparse.ArgumentParser("Benchmark Tests")
@@ -73,6 +76,8 @@ def test():
     #t0 = time.time()
     for i in range(num_loops):
         print('=> loop %d' % i);
+        if i == 3:
+            profiler.set_state('run')
         mx.base.swap_start_iteration()
         st_l = time.time()
         outputs = executor.forward()
@@ -87,6 +92,8 @@ def test():
         mx.base.swap_stop_iteration()
         ed_l = time.time()
         mx.base.swap_statistics()
+        if i == 3:
+            profiler.set_state('stop')
 
         print('=> loop duration %f\n' % float(ed_l - st_l))
         if i > 1:
