@@ -20,7 +20,7 @@ Prefetch::Prefetch() {
                                       std::string("NaiveHistory"));
   steps_ahead_ = dmlc::GetEnv("MXNET_PREFETCH_STEP_AHEAD", 100);
   bool infinite_memory = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
-  if (!infinite_memory) {
+  if (infinite_memory) {
       prefetch_algorithm_ = "NoPrefetch";
   }
   history_ = MemoryHistory::_GetSharedRef();
