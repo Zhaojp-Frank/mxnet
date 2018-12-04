@@ -58,7 +58,9 @@ private:
   pthread_rwlock_t locks_[NUMBER_OF_GPU];
   bool swap_locked_;
   bool swap_async_;
-  cudaStream_t streams_[NUMBER_OF_GPU];
+  bool infinite_memory_;
+  cudaStream_t streams_out_[NUMBER_OF_GPU];
+  cudaStream_t streams_in_[NUMBER_OF_GPU];
 }; // Class Swap
 
 } // namespace mxnet

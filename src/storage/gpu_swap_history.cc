@@ -23,6 +23,10 @@ MemoryHistory::MemoryHistory() {
   iteration_idx_ = 0;
   swap_algorithm_ = dmlc::GetEnv("MXNET_SWAP_ALGORITHM", std::string("LRU"));
   adaptive_history_ = dmlc::GetEnv("MXNET_ADAPTIVE_HISTORY", false);
+  bool infinite_memory = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
+  if (infinite_memory) {
+      swap_algorithm_ = "SizeHistory";
+  }
   dev_history_.resize(NUMBER_OF_GPU);
   std::cout << "Swap Algorithm: " << swap_algorithm_ << std::endl;
   if (swap_algorithm_ == "LRU") {

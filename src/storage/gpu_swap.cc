@@ -21,11 +21,13 @@ Swap::Swap() {
   memory_manager_ = GetMemoryManagerRef();
   swap_lock_ = PTHREAD_RWLOCK_INITIALIZER;
   swap_async_ = dmlc::GetEnv("MXNET_SWAP_ASYNC", true);
+  infinite_memory_ = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
   for (int i = 0; i < NUMBER_OF_GPU; ++i) {
     locks_[i] = PTHREAD_RWLOCK_INITIALIZER;
     // TODO(fegin): This and other cuda related code should be protected
     //              by MXNET_USE_CUDA.
-    cudaStreamCreate(&streams_[i]);
+    cudaStreamCreate(&streams_out_[i]);
+    cudaStreamCreate(&streams_in_[i]);
   }
   swap_locked_ = false;
   std::cout << "SWAP_ASYNC=" << swap_async_ << std::endl;
@@ -58,10 +60,13 @@ void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
     target->swap_count++;
     memory_history_->DevHistory(device_id).num_swap_out++;
     memory_history_->DevHistory(device_id).swap_out_total += target->size;
-    if (target->cpu_address == nullptr) {
-      target->cpu_address = new char[int(target->size)];
+    if (!infinite_memory_) {
+      if (target->cpu_address == nullptr) {
+        //target->cpu_address = new char[int(target->size)];
+        cudaHostAlloc((void**)&(target->cpu_address), target->size, 0);
+      }
+      CHECK(target->cpu_address != nullptr);
     }
-    CHECK(target->cpu_address != nullptr);
     CHECK(target->swapped_in);
     CHECK(!target->is_swapping.test_and_set(std::memory_order_acquire));
     CHECK(target->dptr != nullptr);
@@ -72,14 +77,16 @@ void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
     //std::cout << "SwapOut start" << std::endl;
     std::chrono::time_point<std::chrono::steady_clock> stime, etime;
     stime = std::chrono::steady_clock::now();
-    if (async) {
-      memory_manager_->MemcpyAsync(device_id, target->cpu_address,
-          target->dptr, target->size, cudaMemcpyDeviceToHost,
-          streams_[device_id]);
-      memory_manager_->StreamSynchronize(device_id, streams_[device_id]);
-    } else {
-      memory_manager_->Memcpy(device_id, target->cpu_address, target->dptr,
-          target->size, cudaMemcpyDeviceToHost);
+    if(!infinite_memory_) {
+      if (async) {
+        memory_manager_->MemcpyAsync(device_id, target->cpu_address,
+            target->dptr, target->size, cudaMemcpyDeviceToHost,
+            streams_[device_id]);
+        memory_manager_->StreamSynchronize(device_id, streams_[device_id]);
+      } else {
+        memory_manager_->Memcpy(device_id, target->cpu_address, target->dptr,
+            target->size, cudaMemcpyDeviceToHost);
+      }
     }
     memory_manager_->Free(target->dptr, device_id);
     etime = std::chrono::steady_clock::now();
@@ -106,7 +113,7 @@ void Swap::SwapIn(SwapInfo *info, bool async) {
   }
   if (!info->swapped_in) {
     CHECK(!info->swapped_in);
-    CHECK(info->cpu_address != nullptr);
+    CHECK(info->cpu_address != nullptr || infinite_memory_);
     //std::cout << "SwapIn "<< info->handle_id << " " << info->size << " "
     //          << info->swap_count << std::endl;
     SwapOut(info->size, info->device_id, async);
@@ -117,18 +124,23 @@ void Swap::SwapIn(SwapInfo *info, bool async) {
     memory_history_->DevHistory(info->device_id).num_swap_in++;
     memory_history_->DevHistory(info->device_id).swap_in_total += info->size;
     memory_manager_->Malloc(info->dptr, info->size, info->device_id);
-    if (async) {
-      memory_manager_->MemcpyAsync(info->device_id, info->dptr,
-          info->cpu_address, info->size, cudaMemcpyHostToDevice,
-          streams_[info->device_id]);
-      memory_manager_->StreamSynchronize(info->device_id,
-          streams_[info->device_id]);
-    } else {
-      memory_manager_->Memcpy(info->device_id, info->dptr, info->cpu_address,
-                             info->size, cudaMemcpyHostToDevice);
+    if (!infinite_memory_) {
+#if 1
+      if (async) {
+        memory_manager_->MemcpyAsync(info->device_id, info->dptr,
+            info->cpu_address, info->size, cudaMemcpyHostToDevice,
+            streams_in_[info->device_id]);
+        memory_manager_->StreamSynchronize(info->device_id,
+              streams_in_[info->device_id]);
+      } else {
+        memory_manager_->Memcpy(info->device_id, info->dptr, info->cpu_address,
+                                info->size, cudaMemcpyHostToDevice);
+      }
+#endif
+      // delete info->cpu_address;
     }
-    delete info->cpu_address;
-    info->cpu_address = nullptr;
+    //delete info->cpu_address;
+    //info->cpu_address = nullptr;
     etime = std::chrono::steady_clock::now();
     std::chrono::duration<size_t, std::micro> duration 
       = std::chrono::duration_cast<std::chrono::microseconds>(etime - stime);
@@ -193,7 +205,8 @@ void Swap::FreeAddr(handle_id_t handle_id) {
     memory_manager_->Free(info->dptr, info->device_id);
   }
   if (info->cpu_address != nullptr) {
-    delete info->cpu_address;
+    //delete info->cpu_address;
+    cudaFreeHost(info->cpu_address);
   }
   delete info;
   swap_info_.erase(handle_id);
@@ -217,7 +230,8 @@ void Swap::DelAddr(handle_id_t handle_id) {
     }
   }
   if (info->cpu_address != nullptr) {
-    delete info->cpu_address;
+    //delete info->cpu_address;
+    cudaFreeHost(info->cpu_address);
   }
   delete info;
   swap_info_.erase(handle_id);

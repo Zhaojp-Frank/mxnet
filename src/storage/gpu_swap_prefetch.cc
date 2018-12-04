@@ -19,6 +19,10 @@ Prefetch::Prefetch() {
   prefetch_algorithm_ = dmlc::GetEnv("MXNET_PREFETCH_ALGORITHM",
                                       std::string("NaiveHistory"));
   steps_ahead_ = dmlc::GetEnv("MXNET_PREFETCH_STEP_AHEAD", 100);
+  bool infinite_memory = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
+  if (infinite_memory) {
+      prefetch_algorithm_ = "NoPrefetch";
+  }
   history_ = MemoryHistory::_GetSharedRef();
   lookahead_pos_.resize(NUMBER_OF_GPU);
   prefetcher_.resize(NUMBER_OF_GPU);
