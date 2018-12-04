@@ -21,6 +21,7 @@ MemoryHistory::MemoryHistory() {
   is_recording_ = false;
   pre_recording_ = false;
   iteration_idx_ = 0;
+  no_compute_ = dmlc::GetEnv("MXNET_NO_COMPUTE", false);
   swap_algorithm_ = dmlc::GetEnv("MXNET_SWAP_ALGORITHM", std::string("LRU"));
   adaptive_history_ = dmlc::GetEnv("MXNET_ADAPTIVE_HISTORY", false);
   bool infinite_memory = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);

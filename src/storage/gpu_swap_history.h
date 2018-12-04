@@ -74,6 +74,7 @@ public:
   bool IterationStarted() {return iteration_started_;}
   bool IsPreRecording() {return pre_recording_;}
   bool IsRecording() {return is_recording_;}
+  bool IsNoCompute() {return no_compute_;}
   DeviceHistory& DevHistory(int device) {return dev_history_[device];}
   size_t GetIterationIdx() {return iteration_idx_;}
   void PreRecord(handle_id_t handle_id, record_t op, DeviceHistory& history);
@@ -103,6 +104,7 @@ private:
   bool iteration_started_;
   bool is_recording_;
   bool pre_recording_;
+  bool no_compute_;
   size_t iteration_idx_;
   bool adaptive_history_;
   std::string swap_algorithm_;

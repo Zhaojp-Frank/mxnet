@@ -125,7 +125,8 @@ class StatefulComputeExecutor : public StorageFallbackOpExecutor {
 #endif
     PreFCompute(is_gpu);
     Prefetch::Get()->SignalStartComputing();
-    fcompute_(state_, op_ctx, in_data_, req, out_data_);
+    if(!MemoryHistory::Get()->IsNoCompute())
+      fcompute_(state_, op_ctx, in_data_, req, out_data_);
     PostFCompute(is_gpu);
   }
 
@@ -164,7 +165,8 @@ class StatefulComputeExExecutor : public OpExecutor {
 #if MXNET_USE_MKLDNN == 1
     InvalidateOutputs(out_array, req);
 #endif
-    fcompute_(state_, op_ctx, in_array, req, out_array);
+    if(!MemoryHistory::Get()->IsNoCompute())
+      fcompute_(state_, op_ctx, in_array, req, out_array);
   }
 
   void Setup() override {}
@@ -205,7 +207,8 @@ class FComputeExecutor : public StorageFallbackOpExecutor {
 #endif
     PreFCompute(is_gpu);
     Prefetch::Get()->SignalStartComputing();
-    fcompute_(attrs_, op_ctx, in_data_, req, out_data_);
+    if(!MemoryHistory::Get()->IsNoCompute())
+      fcompute_(attrs_, op_ctx, in_data_, req, out_data_);
     PostFCompute(is_gpu);
   }
 
@@ -234,7 +237,8 @@ class FComputeExExecutor : public OpExecutor {
 #if MXNET_USE_MKLDNN == 1
     InvalidateOutputs(out_array, req);
 #endif
-    fcompute_(attrs_, op_ctx, in_array, req, out_array);
+    if(!MemoryHistory::Get()->IsNoCompute())
+      fcompute_(attrs_, op_ctx, in_array, req, out_array);
   }
 
   void Setup() override {}
