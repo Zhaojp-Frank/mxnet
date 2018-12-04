@@ -1396,6 +1396,7 @@ void GraphExecutor::InitCachedOps() {
     auto& exec = op_nodes_[nid].exec;
     bool is_async = op_nodes_[nid].exec->exec_type() == ExecType::kAsync;
     bool is_gpu = op_nodes_[nid].ctx.dev_mask() == gpu::kDevMask;
+    auto& name = inode.source->attrs.name;
 
     // the variables
     std::vector<Engine::VarHandle> use_vars, mutate_vars;
@@ -1425,12 +1426,15 @@ void GraphExecutor::InitCachedOps() {
         on_complete();
       }, Context::CPU(), {}, all_vars, FnProperty::kNormal, 0,
       "SetupExec");
-    auto exec_fun = [exec, is_async, is_gpu] (
+    auto exec_fun = [exec, is_async, is_gpu, name] (
         RunContext ctx, Engine::CallbackOnComplete on_complete) {
       if (is_async) {
         exec->op_ctx.async_on_complete = on_complete;
       }
       Swap::Get()->LockSwap();
+      std::chrono::time_point<std::chrono::steady_clock> stime, etime;
+      stime = std::chrono::steady_clock::now();
+      //std::cout << name << " starts" << std::endl;
       exec->Run(ctx, is_gpu);
       // call on complete only if it is async op
       if (!is_async) {
@@ -1439,6 +1443,12 @@ void GraphExecutor::InitCachedOps() {
           // Wait GPU kernel to finish.
           //Prefetch::Get()->SignalStartComputing();
           ctx.get_stream<gpu>()->Wait();
+          etime = std::chrono::steady_clock::now();
+          std::chrono::duration<size_t, std::micro> duration
+            = std::chrono::duration_cast<std::chrono::microseconds>(etime - stime);
+          //std::cout << name << " stoped, optime: " << duration.count() << "ns" << std::endl;
+          // FIXME(Sotskin): Device id cannot be passed in this way
+          Swap::Get()->RecordOpTime(name, duration.count(), 0);
           Prefetch::Get()->SignalStopComputing();
           Swap::Get()->UnlockSwap();
         #else

@@ -9,6 +9,7 @@
 #include <vector>
 #include <thread>
 #include <mutex>
+#include <ctime>
 
 #if MXNET_USE_CUDA
 #include <cuda_runtime.h>
@@ -50,6 +51,7 @@ public:
     std::unordered_map<handle_id_t, std::list<handle_id_t>::iterator> lru_map;
     size_t curr_idx;
     // Statistics
+    std::map<std::string, size_t> op_time;
     size_t prefetch_count;
     size_t cache_miss;
     size_t num_swap_in;
@@ -57,6 +59,9 @@ public:
     size_t swap_in_total;
     size_t swap_out_total;
     size_t num_get_addr;
+    size_t swap_in_time;
+    size_t swap_out_time;
+    size_t op_time_total;
   };
   static const size_t kBeginRecordAt = 2;
 

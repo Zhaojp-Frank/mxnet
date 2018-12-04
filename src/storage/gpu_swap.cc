@@ -69,6 +69,9 @@ void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
     swappable_handles_[device_id].erase(victim);
     divided_handles_[device_id][target->size].erase(victim);
     pthread_rwlock_unlock(&swap_lock_);
+    //std::cout << "SwapOut start" << std::endl;
+    std::chrono::time_point<std::chrono::steady_clock> stime, etime;
+    stime = std::chrono::steady_clock::now();
     if (async) {
       memory_manager_->MemcpyAsync(device_id, target->cpu_address,
           target->dptr, target->size, cudaMemcpyDeviceToHost,
@@ -79,6 +82,11 @@ void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
           target->size, cudaMemcpyDeviceToHost);
     }
     memory_manager_->Free(target->dptr, device_id);
+    etime = std::chrono::steady_clock::now();
+    std::chrono::duration<size_t, std::micro> duration 
+      = std::chrono::duration_cast<std::chrono::microseconds>(etime - stime);
+    //std::cout << "SwapOut end, memtime: " << duration.count() << " ns" << std::endl;
+    memory_history_->DevHistory(device_id).swap_out_time += duration.count();
     pthread_rwlock_wrlock(&swap_lock_);
     target->is_swapping.clear(std::memory_order_release);
   }
@@ -103,6 +111,9 @@ void Swap::SwapIn(SwapInfo *info, bool async) {
     //          << info->swap_count << std::endl;
     SwapOut(info->size, info->device_id, async);
     pthread_rwlock_unlock(&swap_lock_);
+    //std::cout << "SwapIn start:" << std::endl;
+    std::chrono::time_point<std::chrono::steady_clock> stime, etime;
+    stime = std::chrono::steady_clock::now();
     memory_history_->DevHistory(info->device_id).num_swap_in++;
     memory_history_->DevHistory(info->device_id).swap_in_total += info->size;
     memory_manager_->Malloc(info->dptr, info->size, info->device_id);
@@ -118,6 +129,11 @@ void Swap::SwapIn(SwapInfo *info, bool async) {
     }
     delete info->cpu_address;
     info->cpu_address = nullptr;
+    etime = std::chrono::steady_clock::now();
+    std::chrono::duration<size_t, std::micro> duration 
+      = std::chrono::duration_cast<std::chrono::microseconds>(etime - stime);
+    //std::cout << "SwapIn end, memtime: " << duration.count() << " ns" << std::endl;
+    memory_history_->DevHistory(info->device_id).swap_in_time += duration.count();
     pthread_rwlock_wrlock(&swap_lock_);
     info->swapped_in = true;
     swappable_handles_[info->device_id].insert(info->handle_id);
@@ -270,6 +286,11 @@ void Swap::PrintHandles() {
               << it.second->swap_count << " " << it.second->device_id
               << std::endl;
   }
+}
+
+void Swap::RecordOpTime(std::string name, size_t duration, int device_id) {
+  memory_history_->DevHistory(device_id).op_time[name] = duration;
+  memory_history_->DevHistory(device_id).op_time_total += duration;
 }
 
 } // namespace mxnet

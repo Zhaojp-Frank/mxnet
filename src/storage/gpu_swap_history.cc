@@ -290,6 +290,10 @@ void MemoryHistory::StartIteration() {
     dev_history_[device].swap_in_total = 0;
     dev_history_[device].swap_out_total = 0;
     dev_history_[device].num_get_addr = 0;
+    dev_history_[device].swap_in_time = 0;
+    dev_history_[device].swap_out_time = 0;
+    dev_history_[device].op_time_total = 0;
+    dev_history_[device].op_time.clear();
   }
 
   // We can't start the prefetching too early, otherwise, the prefetch_count
@@ -336,7 +340,13 @@ void MemoryHistory::Statistics() {
               << "=> Number of swap out: "
               << history.num_swap_out << std::endl
               << "=> Total swap out size: "
-              << GBString(history.swap_out_total)<< std::endl;
+              << GBString(history.swap_out_total)<< std::endl
+              << "=> Total swap in time: "
+              << history.swap_in_time << std::endl
+              << "=> Total swap out time: "
+              << history.swap_out_time << std::endl
+              << "=> Total optime: "
+              << history.op_time_total << std::endl;
   }
   GetMemoryManager()->Statistics();
 }

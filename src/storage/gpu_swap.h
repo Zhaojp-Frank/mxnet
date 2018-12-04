@@ -43,6 +43,7 @@ public:
   void LockSwap();
   void UnlockSwap();
   void PrintHandles();
+  void RecordOpTime(std::string name, size_t duration, int device_id);
 
 private:
   Swap();
