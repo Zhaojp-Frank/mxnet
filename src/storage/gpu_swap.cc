@@ -81,8 +81,8 @@ void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
       if (async) {
         memory_manager_->MemcpyAsync(device_id, target->cpu_address,
             target->dptr, target->size, cudaMemcpyDeviceToHost,
-            streams_[device_id]);
-        memory_manager_->StreamSynchronize(device_id, streams_[device_id]);
+            streams_out_[device_id]);
+        memory_manager_->StreamSynchronize(device_id, streams_out_[device_id]);
       } else {
         memory_manager_->Memcpy(device_id, target->cpu_address, target->dptr,
             target->size, cudaMemcpyDeviceToHost);
