@@ -70,7 +70,7 @@ class BuddySystem {
         return 0;
       } else {
         size_t size_log = Log2(size);
-        size_log += (size_log ^ size) ? 1 : 0;
+        size_log += ((1 << size_log) ^ size) ? 1 : 0;
         return size_log - kLogBase;
       }
     }

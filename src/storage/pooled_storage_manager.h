@@ -88,7 +88,7 @@ class GPUPooledStorageManager final : public StorageManager {
   // shared pointer for swap
   std::shared_ptr<Swap> swap_;
   // number of devices
-  const int NDEV = 32;
+  const int NDEV = 0;
   //shared pointer for memory manager
   std::shared_ptr<MemoryManager> memory_manager_;
   // memory pool
@@ -104,10 +104,10 @@ void GPUPooledStorageManager::Alloc(Storage::Handle* handle) {
   size_t size = handle->size + NDEV;
   auto&& reuse_it = memory_pool_.find(size);
   if (reuse_it == memory_pool_.end() || reuse_it->second.size() == 0) {
-    size_t free, total = 12000;
+    size_t free, total;
+    memory_manager_->MemGetInfo(device_id_, &total, &free);
     if (do_reuse_ && 
-        ( !memory_manager_->TryAllocate(device_id_, size + total * reserve_ / 100) 
-        || !memory_manager_->TryAllocate(device_id_, total * reserve_ / 100))) {
+        (free <= total*reserve_/100 || size > free - total*reserve_/100)) {
       do_reuse_ = false;
       ReleaseAll();
     }

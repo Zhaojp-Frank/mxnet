@@ -3,6 +3,7 @@
 #include <cuda_runtime_api.h>
 #include <dmlc/parameter.h>
 #include <dmlc/logging.h>
+#include <thread>
 #include <math.h>
 
 #include "../common/cuda_utils.h"
@@ -15,7 +16,8 @@ namespace mxnet {
   cudaError_t e = (func);                                   \
   CHECK(e == cudaSuccess || e == cudaErrorCudartUnloading)  \
         << __FUNCTION__ << ":" << __LINE__                  \
-        << "has a CUDA error: " << cudaGetErrorString(e);   \
+        << " (tid = " << std::this_thread::get_id() << ")"  \
+        << " has a CUDA error: " << cudaGetErrorString(e);  \
 }
 
 cudaError_t MemoryManager::Memcpy(int device_id, void* dst, const void* src,
@@ -313,6 +315,8 @@ std::shared_ptr<MemoryManager> GetMemoryManagerRef() {
       inst.reset(dynamic_cast<MemoryManager*>(new BuddyMemoryManager()));
     } else if (mem_mgr_type == "FAKE") {
       inst.reset(dynamic_cast<MemoryManager*>(new FakeMemoryManager()));
+    } else {
+      CHECK(false);
     }
     set = true;
   }
