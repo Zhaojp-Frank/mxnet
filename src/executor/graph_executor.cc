@@ -1430,7 +1430,7 @@ void GraphExecutor::InitCachedOps() {
       if (is_async) {
         exec->op_ctx.async_on_complete = on_complete;
       }
-      Swap::Get()->LockSwap();
+      Swap::Get()->PrePostAccess(true);
       exec->Run(ctx, is_gpu);
       // call on complete only if it is async op
       if (!is_async) {
@@ -1440,14 +1440,14 @@ void GraphExecutor::InitCachedOps() {
           //Prefetch::Get()->SignalStartComputing();
           ctx.get_stream<gpu>()->Wait();
           Prefetch::Get()->SignalStopComputing();
-          Swap::Get()->UnlockSwap();
         #else
           LOG(FATAL) << MXNET_GPU_NOT_ENABLED_ERROR;
         #endif
         }
         on_complete();
+        Swap::Get()->PrePostAccess(false);
       } else {
-        Swap::Get()->UnlockSwap();
+        CHECK(false);
       }
     };
     // setup the vars
@@ -1681,7 +1681,7 @@ GraphExecutor::CachedSegOpr GraphExecutor::CreateCachedSegOpr(size_t topo_start,
       RunContext ctx, Engine::CallbackOnComplete on_complete) {
     // Run all opr in the sub-graph
     // TODO(sotskin): Compatibility for non gpu
-    Swap::Get()->LockSwap();
+    Swap::Get()->PrePostAccess(true);
     for (auto &exec : exec_list) {
       exec->Run(ctx, is_gpu);
     }
@@ -1691,12 +1691,12 @@ GraphExecutor::CachedSegOpr GraphExecutor::CreateCachedSegOpr(size_t topo_start,
       //Prefetch::Get()->SignalStartComputing();
       ctx.get_stream<gpu>()->Wait();
       Prefetch::Get()->SignalStopComputing();
-      Swap::Get()->UnlockSwap();
 #else
       LOG(FATAL) << MXNET_GPU_NOT_ENABLED_ERROR;
 #endif
     }
     on_complete();
+    Swap::Get()->PrePostAccess(false);
   };
   opr_names.pop_back();
   opr_names += "]";
