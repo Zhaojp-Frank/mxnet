@@ -6,20 +6,25 @@ Here, we use resnet as an example.
 2. # python3 run.py @config_resnet
 '''
 import argparse
+import csv
 import os
 import pprint
+import re
 import signal
 import subprocess
 import sys
 import time
 
 
+
 def sigint_handler(signum, frame):
     print('Ctrl + C has been pressed.')
     print('Killing the subprocess.')
-    os.killpg(os.getpgid(sigint_handler.proc.pid), signal.SIGINT)
+    #os.killpg(os.getpgid(sigint_handler.proc.pid), signal.SIGINT)
+    sigint_handler.proc.send_signal(signal.SIGINT); 
     time.sleep(1)
-    sys.exit(0)
+    print('Proc killed')
+    #sys.exit(0)
 
 
 def register_sigint(proc):
@@ -27,8 +32,7 @@ def register_sigint(proc):
     signal.signal(signal.SIGINT, sigint_handler)
 
 
-def run_script(args):
-    envs = {val[0]: val[1] for val in (s.split('=') for s in args.envs)}
+def run_script(args, envs):
     if args.model == 'resnet':
         log_name = './log_{}_{}_{}_{}_{}_{}_{}'.format(
                         args.model, args.num_layers, args.batch_size,
@@ -66,6 +70,10 @@ def run_script(args):
         while True:
             line = proc.stdout.readline()
             if line:
+                if line[:8] == "duration":
+                    tmp = re.findall('\d+\.?\d*', line)
+                    # Duration, Average, Std
+                    result = [True, tmp[0], tmp[1], tmp[2]]
                 if args.also_print:
                     print(line, end='')
                 fp.write(line)
@@ -84,9 +92,49 @@ def run_script(args):
             if name == 'SIGSEGV':
                 message += 'Segmentation Fault.\n'
             else:
-                message += name + " : " + str(proc.returncode) + '\n'
-        fp.write(message)
-        print(message)
+                message += name + ' : ' + str(proc.returncode) + '\n'
+            result = [False, proc.returncode, name]
+        else:
+            fp.write(message)
+        print(message, end="")
+    return result
+
+# Self Test: Ignore layer, wide scale, batch size, algorithm settings
+def run_self_test(args):
+    envs = {val[0]: val[1] for val in (s.split('=') for s in args.envs)}
+    #layers = [50, 101, 152, 200, 269]
+    #batches = [1, 4, 8, 16, 32, 64, 128]
+    #widths = range(1,6)
+    #engines = ['NaiveEngine', 'ThreadedEngine']
+    layers = [269]
+    batches = [1,8]
+    widths = [1,6]
+    engines = ['ThreadedEngine']
+    lst = [(layer, batch, width, engine)
+            for layer in layers 
+            for batch in batches
+            for width in widths
+            for engine in engines
+          ]
+    with open('log_selftest.csv', 'w', newline='') as fp:
+        writer = csv.writer(fp)
+        writer.writerow(['layer','batch_size','wide_scale','engine',
+                         'duration','average','std',
+                         'returncode','error_name'])
+        for (layer, batch, width, engine) in lst:
+            print("Testing argument:",layer, batch, width, engine)
+            args.num_layers = layer
+            args.batch_size = batch
+            args.wide_scale = width
+            envs['MXNET_ENGINE_TYPE']=engine
+            result = run_script(args,envs)
+            print("result:", result)
+            if result[0] == True:
+                writer.writerow([layer, batch, width, engine]
+                                + result[1:] + [0])
+            else:
+                writer.writerow([layer, batch, width, engine]
+                                + ['','',''] + result[1:])
 
 
 class DumpArguments(argparse.Action):
@@ -136,6 +184,8 @@ def main():
                         help='Number of layers (for some models only).')
     parser.add_argument('--wide_scale', type=int, default=1,
                         help='Wide scale (for W-ResNet only).')
+    parser.add_argument('--self_test', action='store_true',
+                        help='Self test, ignoring some of the other arguments')
     # Environment variables settings.
     # NOTE that if b new environment variable is added, it should also be here.
     parser.add_argument('--envs', type=str, nargs='+',
@@ -159,8 +209,12 @@ def main():
         else:
             print('    envs:')
             pprint.pprint(getattr(args, arg), indent=8)
-
-    run_script(args)
+    if args.self_test:
+        print('Starting selftest for model {}...'.format(args.model))
+        run_self_test(args)
+    else:
+        envs = {val[0]: val[1] for val in (s.split('=') for s in args.envs)}
+        run_script(args, envs)
 
 if __name__ == '__main__':
     main()
