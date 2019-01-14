@@ -36,8 +36,7 @@ MemoryHistory::MemoryHistory() {
   } else if (swap_algorithm_ == "SizeHistory") {
     DoDecide = &MemoryHistory::SizeHistory;
   } else {
-    std::cout << "Unknown Algorithm Name: " << swap_algorithm_ << std::endl;
-    CHECK(0);
+    LOG(FATAL) << "Unknown Algorithm Name: " << swap_algorithm_;
   }
 }
 
@@ -109,8 +108,7 @@ handle_id_t MemoryHistory::LRU(std::unordered_set<handle_id_t> handles,
     history.lru_list.pop_back();
   }
   if (history.lru_list.size() == 0) {
-    std::cout << "LRU: No Swappable Handle Found" << std::endl;
-    CHECK(0);
+    throw "LRU: No Swappable Handle Found";
   } else {
     victim = history.lru_list.back();
     history.lru_map[victim] = history.lru_list.end();
@@ -183,8 +181,7 @@ handle_id_t MemoryHistory::SizeHistory(
         candidates = original_candidates;
         reverse_flag = false;
         if (no_swap_step == 0) {
-          std::cout << "Cannot find victim (algorithm error)" << std::endl;
-          CHECK(0);
+          LOG(FATAL) << "Cannot find victim (algorithm error)";
         }
         no_swap_step /= 2;
       } else {

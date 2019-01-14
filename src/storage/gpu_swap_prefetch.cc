@@ -38,9 +38,9 @@ Prefetch::Prefetch() {
   } else if (prefetch_algorithm_ == "NoPrefetch") {
     DoPrefetch = nullptr;
   } else {
-    std::cout << "Unknown Prefetch Algorithm: " << prefetch_algorithm_
-      << std::endl;
-    CHECK(0);
+    //std::cout << "Unknown Prefetch Algorithm: " << prefetch_algorithm_
+    // << std::endl;
+    LOG(FATAL) << "Unknown Prefetch Algorithm: " << prefetch_algorithm_;
   }
 }
 

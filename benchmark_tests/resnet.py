@@ -161,6 +161,8 @@ def get_symbol(args):
             units = [3, 24, 36, 3]
         elif num_layers == 269:
             units = [3, 30, 48, 8]
+        elif num_layers == 1001:
+            units = [3, 128, 186, 16] 
         else:
             raise ValueError("no experiments done on num_layers {}, you can do it youself".format(num_layers))
 

@@ -34,9 +34,11 @@ def register_sigint(proc):
 
 def run_script(args, envs):
     if args.model == 'resnet':
-        log_name = './log_{}_{}_{}_{}_{}_{}_{}'.format(
+        log_name = './log_{}_{}_{}_{}_{}_{}_{}_{}'.format(
                         args.model, args.num_layers, args.batch_size,
-                        args.wide_scale, envs['MXNET_SWAP_ALGORITHM'],
+                        args.wide_scale,
+                        envs['MXNET_ENGINE_TYPE'],
+                        envs['MXNET_SWAP_ALGORITHM'],
                         envs['MXNET_PREFETCH_ALGORITHM'],
                         envs['MXNET_PREFETCH_STEP_AHEAD'])
         options = ['--num_gpus={}'.format(args.num_gpus),
@@ -49,8 +51,9 @@ def run_script(args, envs):
         options = []
         raise NotImplementedError
     elif args.model == 'inception-v4':
-        log_name = './log_{}_{}_{}_{}_{}'.format(
+        log_name = './log_{}_{}_{}_{}_{}_{}'.format(
                         args.model, args.batch_size,
+                        envs['MXNET_ENGINE_TYPE'],
                         envs['MXNET_SWAP_ALGORITHM'],
                         envs['MXNET_PREFETCH_ALGORITHM'],
                         envs['MXNET_PREFETCH_STEP_AHEAD'])
@@ -67,13 +70,21 @@ def run_script(args, envs):
                             preexec_fn=os.setsid)
     register_sigint(proc)
     with open(log_name, 'w') as fp:
+        result = [-1,"Unknown"]
         while True:
             line = proc.stdout.readline()
             if line:
-                if line[:8] == "duration":
+                if line[:21] == 'mxnet.base.MXNetError':
+                    match = re.search(':\d+: ', line)
+                    if match:
+                        result = [0, line.rstrip()[match.end():]]
+                    else:
+                        result = [0, 'Unknown Error']
+                elif line[:8] == "duration":
                     tmp = re.findall('\d+\.?\d*', line)
                     # Duration, Average, Std
-                    result = [True, tmp[0], tmp[1], tmp[2]]
+                    result = [1, tmp[0], tmp[1], tmp[2]]
+                
                 if args.also_print:
                     print(line, end='')
                 fp.write(line)
@@ -93,8 +104,11 @@ def run_script(args, envs):
                 message += 'Segmentation Fault.\n'
             else:
                 message += name + ' : ' + str(proc.returncode) + '\n'
-            result = [False, proc.returncode, name]
+            if result[0] != 0:
+                result = [0, name + " : " + str(proc.returncode)]
         else:
+            if result[0] != 1: # duration was not captured before
+                result = [1, None, None, None]
             fp.write(message)
         print(message, end="")
     return result
@@ -102,39 +116,43 @@ def run_script(args, envs):
 # Self Test: Ignore layer, wide scale, batch size, algorithm settings
 def run_self_test(args):
     envs = {val[0]: val[1] for val in (s.split('=') for s in args.envs)}
-    #layers = [50, 101, 152, 200, 269]
-    #batches = [1, 4, 8, 16, 32, 64, 128]
-    #widths = range(1,6)
-    #engines = ['NaiveEngine', 'ThreadedEngine']
-    layers = [269]
-    batches = [1,8]
-    widths = [1,6]
-    engines = ['ThreadedEngine']
-    lst = [(layer, batch, width, engine)
+    layers = [50, 101, 152, 200, 269, 1001]
+    batches = [1, 4, 16, 32, 64, 128]
+    widths = range(1,13)
+    engines = ['NaiveEngine', 'ThreadedEngine']
+    #layers = [50]
+    #batches = [1,64]
+    #widths = [1,5,8,10]
+    #engines = ['NaiveEngine']
+    lst = [(layer, batch, engine)
             for layer in layers 
             for batch in batches
-            for width in widths
             for engine in engines
           ]
     with open('log_selftest.csv', 'w', newline='') as fp:
         writer = csv.writer(fp)
         writer.writerow(['layer','batch_size','wide_scale','engine',
-                         'duration','average','std',
-                         'returncode','error_name'])
-        for (layer, batch, width, engine) in lst:
+                         'duration','average','std','success', 
+                         'error_message'])
+    for (layer, batch, engine) in lst:
+        for width in widths: 
             print("Testing argument:",layer, batch, width, engine)
             args.num_layers = layer
             args.batch_size = batch
             args.wide_scale = width
-            envs['MXNET_ENGINE_TYPE']=engine
+            envs['MXNET_ENGINE_TYPE'] = engine
             result = run_script(args,envs)
             print("result:", result)
-            if result[0] == True:
-                writer.writerow([layer, batch, width, engine]
-                                + result[1:] + [0])
-            else:
-                writer.writerow([layer, batch, width, engine]
-                                + ['','',''] + result[1:])
+            with open('log_selftest.csv', 'a') as fp:
+                writer = csv.writer(fp)
+                if result[0] == 1:
+                    writer.writerow([layer, batch, width, engine]
+                                    + result)
+                else:
+                    writer.writerow([layer, batch, width, engine]
+                                    + ['','',''] + result)
+                    if result[1] == "cudaHostAlloc Failed":
+                        break # In case of Insufficient CPU Memory, break
 
 
 class DumpArguments(argparse.Action):
@@ -214,7 +232,8 @@ def main():
         run_self_test(args)
     else:
         envs = {val[0]: val[1] for val in (s.split('=') for s in args.envs)}
-        run_script(args, envs)
+        ret = run_script(args, envs)
+        print(ret)
 
 if __name__ == '__main__':
     main()

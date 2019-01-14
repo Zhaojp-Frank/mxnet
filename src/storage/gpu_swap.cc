@@ -184,12 +184,17 @@ void Swap::SwapOutLocked(unsigned required_memory, int device_id, bool async) {
 void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
   while (!memory_manager_->TryAllocate(device_id, required_memory)) {
     SwapParams param = {0, required_memory, &divided_handles_[device_id]};
-    handle_id_t victim = memory_history_->DecideVictim(
+    handle_id_t victim;
+    try{
+      victim = memory_history_->DecideVictim(
                             swappable_handles_[device_id], device_id, &param);
+    } catch (const char* msg) {
+      pthread_rwlock_unlock(&swap_lock_);
+      LOG(FATAL) << "Unable to find Victim";
+    }
     if (swap_info_.find(victim) == swap_info_.end()) {
-      std::cout << "Victim(" << victim
-                << ") does not exist (deleted?) " << std::endl;
-      CHECK(0);
+      pthread_rwlock_unlock(&swap_lock_);
+      LOG(FATAL) << "Victim(" << victim << ") does not exist (deleted?) ";
     }
     SwapInfo *target = swap_info_[victim];
 #ifdef FEGIN_DEBUG
@@ -203,8 +208,11 @@ void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
       if (target->cpu_address == nullptr) {
         //target->cpu_address = new char[int(target->size)];
         cudaHostAlloc((void**)&(target->cpu_address), target->size, 0);
+        if(target->cpu_address == nullptr) {
+          pthread_rwlock_unlock(&swap_lock_);
+          LOG(FATAL) << "cudaHostAlloc Failed";
+        }
       }
-      CHECK(target->cpu_address != nullptr);
     }
     CHECK(target->swapped_in);
     CHECK(!target->is_swapping.test_and_set(std::memory_order_acquire));
