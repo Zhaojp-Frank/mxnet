@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <queue>
 #include <set>
+#include <ctime>
 #if MXNET_USE_CUDA
 #include <cuda_runtime.h>
 #endif // MXNET_USE_CUDA

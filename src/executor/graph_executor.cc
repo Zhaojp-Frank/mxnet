@@ -1396,6 +1396,7 @@ void GraphExecutor::InitCachedOps() {
     auto& exec = op_nodes_[nid].exec;
     bool is_async = op_nodes_[nid].exec->exec_type() == ExecType::kAsync;
     bool is_gpu = op_nodes_[nid].ctx.dev_mask() == gpu::kDevMask;
+    auto& name = inode.source->attrs.name;
 
     // the variables
     std::vector<Engine::VarHandle> use_vars, mutate_vars;
@@ -1425,12 +1426,14 @@ void GraphExecutor::InitCachedOps() {
         on_complete();
       }, Context::CPU(), {}, all_vars, FnProperty::kNormal, 0,
       "SetupExec");
-    auto exec_fun = [exec, is_async, is_gpu] (
+    auto exec_fun = [exec, is_async, is_gpu, name] (
         RunContext ctx, Engine::CallbackOnComplete on_complete) {
       if (is_async) {
         exec->op_ctx.async_on_complete = on_complete;
       }
+      std::chrono::time_point<std::chrono::steady_clock> stime, etime;
       Swap::Get()->PrePostAccess(true);
+      stime = std::chrono::steady_clock::now();
       exec->Run(ctx, is_gpu);
       // call on complete only if it is async op
       if (!is_async) {
@@ -1445,6 +1448,9 @@ void GraphExecutor::InitCachedOps() {
         #endif
         }
         on_complete();
+        etime = std::chrono::steady_clock::now();
+        //FIXME: device id not known to this level
+        MemoryHistory::Get()->RecordTime(name, 0, false, stime, etime);
         Swap::Get()->PrePostAccess(false);
       } else {
         CHECK(false);

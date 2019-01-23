@@ -239,6 +239,8 @@ void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
 
 // Caller holds swap_lock_
 void Swap::SwapIn(SwapInfo *info, bool async) {
+  std::chrono::time_point<std::chrono::steady_clock> stime, etime;
+  stime = std::chrono::steady_clock::now();
   while (info->is_swapping.test_and_set(std::memory_order_acquire)) {
     // TODO(fegin): usleep may not be efficient and may cause unstable
     //              execution. This is not important for now but can be
@@ -289,6 +291,9 @@ void Swap::SwapIn(SwapInfo *info, bool async) {
 #endif
   }
   info->is_swapping.clear(std::memory_order_release);
+  etime = std::chrono::steady_clock::now();
+  // FIXME: hard coded device id, should fix this
+  MemoryHistory::Get()->RecordTime("Swapping", 0, true, stime, etime);
 }
 
 void Swap::SetAddr(handle_id_t handle_id, void* dptr, size_t size,
@@ -461,6 +466,7 @@ void Swap::PrePostAccess(bool is_pre) {
   handles.clear();
   pthread_rwlock_unlock(&swap_lock_);
 }
+
 
 void Swap::PrintHandles() {
   std::cout << "Print Handles" << std::endl;

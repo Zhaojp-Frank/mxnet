@@ -21,6 +21,7 @@ MemoryHistory::MemoryHistory() {
   is_recording_ = false;
   pre_recording_ = false;
   iteration_idx_ = 0;
+  time_io_name_ = "TimeRecord.txt";
   swap_algorithm_ = dmlc::GetEnv("MXNET_SWAP_ALGORITHM", std::string("LRU"));
   adaptive_history_ = dmlc::GetEnv("MXNET_ADAPTIVE_HISTORY", false);
   bool infinite_memory = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
@@ -242,9 +243,11 @@ void MemoryHistory::PrintRecord(int device) {
 
 void MemoryHistory::StartIteration() {
   iteration_started_ = true;
+  zerotime_ = std::chrono::steady_clock::now();
   for (int i = 0; i < NUMBER_OF_GPU; i++) {
     dev_history_[i].curr_idx = 0;
   }
+  time_doc_.resize(NUMBER_OF_GPU);
   // LRU needs to record every iteration. As a result, it is mandatory to do LRU
   // recording even at kBeginRecordAt iteration because the desired swapping
   // algorithm will kick in from (kBeginRecordAt + 1) iteration.
@@ -311,13 +314,25 @@ void MemoryHistory::StopIteration() {
     Prefetch::Get()->StopPrefetching();
   }
   ++iteration_idx_;
-  //for (int device = 0; device < NUMBER_OF_GPU; device++) {
+  for (int device = 0; device < NUMBER_OF_GPU; device++) {
     //auto& history = dev_history_[device];
     //if (adaptive_history_ && iteration_started_ >= kBeginRecordAt) {
       //history.all_ordered_history.push_back(history.ordered_history);
       //history.all_handle_history.push_back(history.handle_history);
     //}
-  //}
+    std::sort(time_doc_[device].begin(), time_doc_[device].end());
+    std::ofstream outfile;
+    std::cout << "Opening " << time_io_name_ << std::endl;
+    outfile.open(time_io_name_, std::ios_base::app);
+    for(auto& optime : time_doc_[device]) {
+      if(optime.swapping) {
+        outfile << "  ";
+      }
+      outfile << optime.op<< "  " << optime.stime.count() << "  "
+        << optime.etime.count() << std::endl;
+    }
+    time_doc_[device].clear();
+  }
 }
 
 void MemoryHistory::Statistics() {
@@ -395,5 +410,18 @@ void MemoryHistory::PrintSimilarity() {
   std::cout << "min: " << min << ", max: " << max << ", mean: " << mean << " " << M2
             << " stddev: " << sqrt(M2 / count - 1) << std::endl;
 }
+
+void MemoryHistory::RecordTime(std::string op, int device_id, bool swapping,
+  std::chrono::time_point<std::chrono::steady_clock> stime,
+  std::chrono::time_point<std::chrono::steady_clock> etime) {
+  std::chrono::duration<size_t, std::micro> relative_stime =
+    std::chrono::duration_cast<std::chrono::microseconds> (stime - zerotime_);
+  std::chrono::duration<size_t, std::micro> relative_etime =
+    std::chrono::duration_cast<std::chrono::microseconds> (etime - zerotime_);
+  TimeRecord rec = {op, swapping, relative_stime, relative_etime};
+  time_doc_[device_id].push_back(rec);
+ }
+
+  
 
 } // namespace mxnet

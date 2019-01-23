@@ -9,6 +9,8 @@
 #include <vector>
 #include <thread>
 #include <mutex>
+#include <ctime>
+#include <string>
 
 #if MXNET_USE_CUDA
 #include <cuda_runtime.h>
@@ -58,6 +60,15 @@ public:
     size_t swap_out_total;
     size_t num_get_addr;
   };
+  struct TimeRecord {
+    std::string op;
+    bool swapping;
+    std::chrono::duration<size_t, std::micro> stime;
+    std::chrono::duration<size_t, std::micro> etime;
+    bool operator < (const TimeRecord& rec) const {
+      return stime < rec.stime;
+    }
+  };
   static const size_t kBeginRecordAt = 2;
 
   ~MemoryHistory();
@@ -79,6 +90,9 @@ public:
   void Statistics();
   handle_id_t DecideVictim(std::unordered_set<handle_id_t> handles, int device,
                            void* arg);
+  void RecordTime(std::string op, int device_id, bool swapping,
+    std::chrono::time_point<std::chrono::steady_clock> stime,
+    std::chrono::time_point<std::chrono::steady_clock> etime);
 
 private:
   MemoryHistory();
@@ -95,6 +109,9 @@ private:
       void* arg);
 
   std::vector<DeviceHistory> dev_history_;
+  std::chrono::time_point<std::chrono::steady_clock> zerotime_;
+  std::string time_io_name_;
+  std::vector<std::vector<TimeRecord>> time_doc_;
   bool iteration_started_;
   bool is_recording_;
   bool pre_recording_;
