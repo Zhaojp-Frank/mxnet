@@ -116,14 +116,14 @@ def run_script(args, envs):
 # Self Test: Ignore layer, wide scale, batch size, algorithm settings
 def run_self_test(args):
     envs = {val[0]: val[1] for val in (s.split('=') for s in args.envs)}
-    layers = [50, 101, 152, 200, 269, 1001]
-    batches = [1, 4, 16, 32, 64, 128]
-    widths = range(1,13)
-    engines = ['NaiveEngine', 'ThreadedEngine']
-    #layers = [50]
-    #batches = [1,64]
-    #widths = [1,5,8,10]
-    #engines = ['NaiveEngine']
+    #layers = [50, 101, 152, 200, 269, 1001]
+    #batches = [1, 4, 16, 32, 64, 128]
+    #widths = range(1,13)
+    #engines = ['NaiveEngine', 'ThreadedEngine']
+    layers = [50, 101, 152, 200]
+    batches = [1,2,4]
+    widths = [1,2,4]
+    engines = ['NaiveEngine','ThreadedEngine']
     lst = [(layer, batch, engine)
             for layer in layers 
             for batch in batches
@@ -147,7 +147,7 @@ def run_self_test(args):
                 writer = csv.writer(fp)
                 if result[0] == 1:
                     writer.writerow([layer, batch, width, engine]
-                                    + result)
+                            + result[1:] + [1])
                 else:
                     writer.writerow([layer, batch, width, engine]
                                     + ['','',''] + result)

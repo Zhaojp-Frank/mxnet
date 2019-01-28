@@ -4,6 +4,7 @@
 #include "./gpu_swap.h"
 
 //#define FEGIN_DEBUG
+//#define SOTSU_DEBUG
 
 namespace mxnet{
 
@@ -159,6 +160,7 @@ Swap::Swap() {
   swap_lock_ = PTHREAD_RWLOCK_INITIALIZER;
   swap_async_ = dmlc::GetEnv("MXNET_SWAP_ASYNC", true);
   infinite_memory_ = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
+  host_memory_ = dmlc::GetEnv("MXNET_HOST_MEMORY", (size_t)32000000000) * 0.95;
   for (int i = 0; i < NUMBER_OF_GPU; ++i) {
     locks_[i] = PTHREAD_RWLOCK_INITIALIZER;
     // TODO(fegin): This and other cuda related code should be protected
@@ -207,11 +209,20 @@ void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
     if (!infinite_memory_) {
       if (target->cpu_address == nullptr) {
         //target->cpu_address = new char[int(target->size)];
+        if(target->size > host_memory_) {
+          pthread_rwlock_unlock(&swap_lock_);
+          LOG(FATAL) << "Not Enough Host Memory";
+        }
         cudaHostAlloc((void**)&(target->cpu_address), target->size, 0);
         if(target->cpu_address == nullptr) {
           pthread_rwlock_unlock(&swap_lock_);
           LOG(FATAL) << "cudaHostAlloc Failed";
         }
+        host_memory_ -= target->size;
+#ifdef SOTSU_DEBUG
+        std::cout << "Current remaining host memory " << host_memory_
+                  << std::endl;
+#endif
       }
     }
     CHECK(target->swapped_in);
@@ -265,8 +276,11 @@ void Swap::SwapIn(SwapInfo *info, bool async) {
               << info->swap_count << std::endl;
 #endif
     SwapOut(info->size, info->device_id, async);
-    CHECK(memory_manager_->Malloc(info->dptr, info->size, info->device_id) ==
-          cudaSuccess);
+    if(memory_manager_->Malloc(info->dptr, info->size, info->device_id) !=
+          cudaSuccess) {
+      pthread_rwlock_unlock(&swap_lock_);
+      LOG(FATAL) << "Cuda memory manager alloc failed";
+    }
     pthread_rwlock_unlock(&swap_lock_);
     memory_history_->DevHistory(info->device_id).num_swap_in++;
     memory_history_->DevHistory(info->device_id).swap_in_total += info->size;
@@ -284,6 +298,7 @@ void Swap::SwapIn(SwapInfo *info, bool async) {
       }
 #endif
       // delete info->cpu_address;
+
     }
     // info->cpu_address = nullptr;
     pthread_rwlock_wrlock(&swap_lock_);

@@ -113,6 +113,7 @@ private:
   bool infinite_memory_;
   cudaStream_t streams_out_[NUMBER_OF_GPU];
   cudaStream_t streams_in_[NUMBER_OF_GPU];
+  size_t host_memory_;
 }; // Class Swap
 
 } // namespace mxnet
