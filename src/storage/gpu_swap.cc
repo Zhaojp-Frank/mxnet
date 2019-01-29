@@ -192,7 +192,7 @@ void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
                             swappable_handles_[device_id], device_id, &param);
     } catch (const char* msg) {
       pthread_rwlock_unlock(&swap_lock_);
-      LOG(FATAL) << "Unable to find Victim";
+      LOG(FATAL) << "Unable to find victim";
     }
     if (swap_info_.find(victim) == swap_info_.end()) {
       pthread_rwlock_unlock(&swap_lock_);
@@ -211,12 +211,12 @@ void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
         //target->cpu_address = new char[int(target->size)];
         if(target->size > host_memory_) {
           pthread_rwlock_unlock(&swap_lock_);
-          LOG(FATAL) << "Not Enough Host Memory";
+          LOG(FATAL) << "Not enough host memory";
         }
         cudaHostAlloc((void**)&(target->cpu_address), target->size, 0);
         if(target->cpu_address == nullptr) {
           pthread_rwlock_unlock(&swap_lock_);
-          LOG(FATAL) << "cudaHostAlloc Failed";
+          LOG(FATAL) << "cudaHostAlloc failed";
         }
         host_memory_ -= target->size;
 #ifdef SOTSU_DEBUG
@@ -279,7 +279,7 @@ void Swap::SwapIn(SwapInfo *info, bool async) {
     if(memory_manager_->Malloc(info->dptr, info->size, info->device_id) !=
           cudaSuccess) {
       pthread_rwlock_unlock(&swap_lock_);
-      LOG(FATAL) << "Cuda memory manager alloc failed";
+      LOG(FATAL) << "Cuda malloc failed";
     }
     pthread_rwlock_unlock(&swap_lock_);
     memory_history_->DevHistory(info->device_id).num_swap_in++;

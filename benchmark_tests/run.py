@@ -117,12 +117,12 @@ def run_script(args, envs):
 def run_self_test(args):
     envs = {val[0]: val[1] for val in (s.split('=') for s in args.envs)}
     #layers = [50, 101, 152, 200, 269, 1001]
-    #batches = [1, 4, 16, 32, 64, 128]
-    #widths = range(1,13)
+    #batches = [1, 4, 16, 32, 64, 128, 256]
+    #widths = [1,2,4,6,8,10,12]
     #engines = ['NaiveEngine', 'ThreadedEngine']
-    layers = [50, 101, 152, 200]
-    batches = [1,2,4]
-    widths = [1,2,4]
+    layers = [50]
+    batches = [128]
+    widths = [6,8,10]
     engines = ['NaiveEngine','ThreadedEngine']
     lst = [(layer, batch, engine)
             for layer in layers 
@@ -151,7 +151,8 @@ def run_self_test(args):
                 else:
                     writer.writerow([layer, batch, width, engine]
                                     + ['','',''] + result)
-                    if result[1] == "cudaHostAlloc Failed":
+                    if result[1] == 'Unable to find victim' \
+                            or result[1] == 'Not enough host memory':
                         break # In case of Insufficient CPU Memory, break
 
 
