@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include <vector>
 #include <set>
+#include <thread>
 #include <dmlc/parameter.h>
 #include <dmlc/logging.h>
 #include "./gpu_swap_history.h"
@@ -243,11 +244,13 @@ void MemoryHistory::PrintRecord(int device) {
 
 void MemoryHistory::StartIteration() {
   iteration_started_ = true;
+  std::ofstream outfile;
+  outfile.open(time_io_name_, std::ios_base::app);
+  outfile << "Iteration " << iteration_idx_ << std::endl;
   zerotime_ = std::chrono::steady_clock::now();
   for (int i = 0; i < NUMBER_OF_GPU; i++) {
     dev_history_[i].curr_idx = 0;
   }
-  time_doc_.resize(NUMBER_OF_GPU);
   // LRU needs to record every iteration. As a result, it is mandatory to do LRU
   // recording even at kBeginRecordAt iteration because the desired swapping
   // algorithm will kick in from (kBeginRecordAt + 1) iteration.
@@ -297,6 +300,11 @@ void MemoryHistory::StartIteration() {
     dev_history_[device].swap_in_total = 0;
     dev_history_[device].swap_out_total = 0;
     dev_history_[device].num_get_addr = 0;
+    dev_history_[device].computation_time = 0;
+    dev_history_[device].communication_time = 0;
+    dev_history_[device].total_time = 0;
+    dev_history_[device].time_doc.clear();
+    dev_history_[device].zerotime = std::chrono::steady_clock::now();
   }
 
   // We can't start the prefetching too early, otherwise, the prefetch_count
@@ -314,24 +322,30 @@ void MemoryHistory::StopIteration() {
     Prefetch::Get()->StopPrefetching();
   }
   ++iteration_idx_;
+  std::ofstream outfile;
+  outfile.open(time_io_name_, std::ios_base::app);
   for (int device = 0; device < NUMBER_OF_GPU; device++) {
     //auto& history = dev_history_[device];
     //if (adaptive_history_ && iteration_started_ >= kBeginRecordAt) {
       //history.all_ordered_history.push_back(history.ordered_history);
       //history.all_handle_history.push_back(history.handle_history);
     //}
-    std::sort(time_doc_[device].begin(), time_doc_[device].end());
-    std::ofstream outfile;
-    std::cout << "Opening " << time_io_name_ << std::endl;
-    outfile.open(time_io_name_, std::ios_base::app);
-    for(auto& optime : time_doc_[device]) {
-      if(optime.swapping) {
-        outfile << "  ";
+    outfile << "Total time: " << dev_history_[device].total_time << std::endl;;
+    outfile << "Total Computation time: " << dev_history_[device].computation_time
+      << std::endl;
+    outfile << "Total Communication time: " << dev_history_[device].communication_time
+      << std::endl;
+
+    std::sort(dev_history_[device].time_doc.begin(),
+      dev_history_[device].time_doc.end());
+    for(auto& optime : dev_history_[device].time_doc) {
+      if(!optime.total) {
+        outfile << "\t";
       }
-      outfile << optime.op<< "  " << optime.stime.count() << "  "
+      outfile << optime.tid << "  " << optime.op << "  " << optime.stime.count() << "  "
         << optime.etime.count() << std::endl;
     }
-    time_doc_[device].clear();
+    outfile << std::endl;
   }
 }
 
@@ -411,16 +425,29 @@ void MemoryHistory::PrintSimilarity() {
             << " stddev: " << sqrt(M2 / count - 1) << std::endl;
 }
 
-void MemoryHistory::RecordTime(std::string op, int device_id, bool swapping,
-  std::chrono::time_point<std::chrono::steady_clock> stime,
+void MemoryHistory::RecordTime(std::string op, int device_id, bool total,
+  std::thread::id tid, std::chrono::time_point<std::chrono::steady_clock> stime,
   std::chrono::time_point<std::chrono::steady_clock> etime) {
+  std::lock_guard<std::mutex> lock(time_mutex_[device_id]);
+  
   std::chrono::duration<size_t, std::micro> relative_stime =
     std::chrono::duration_cast<std::chrono::microseconds> (stime - zerotime_);
   std::chrono::duration<size_t, std::micro> relative_etime =
     std::chrono::duration_cast<std::chrono::microseconds> (etime - zerotime_);
-  TimeRecord rec = {op, swapping, relative_stime, relative_etime};
-  time_doc_[device_id].push_back(rec);
- }
+  TimeRecord rec = {op, total, tid, relative_stime, relative_etime};
+  dev_history_[device_id].time_doc.push_back(rec);
+  std::chrono::duration<size_t, std::micro> duration = relative_etime - relative_stime;
+  if(total) {
+    dev_history_[device_id].total_time += duration.count();
+  } else {
+    if(op == "Communication") {
+      dev_history_[device_id].communication_time += duration.count();
+    } else if (op == "Computation") {
+      dev_history_[device_id].computation_time += duration.count();
+    }
+  }
+  
+}
 
   
 

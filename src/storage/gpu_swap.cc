@@ -1,3 +1,4 @@
+#include <thread>
 #include <dmlc/logging.h>
 #include <dmlc/parameter.h>
 #include "../common/cuda_utils.h"
@@ -293,7 +294,8 @@ void Swap::SwapIn(SwapInfo *info, bool async) {
   info->is_swapping.clear(std::memory_order_release);
   etime = std::chrono::steady_clock::now();
   // FIXME: hard coded device id, should fix this
-  MemoryHistory::Get()->RecordTime("Swapping", 0, true, stime, etime);
+  MemoryHistory::Get()->RecordTime("Communication", 0, false,
+    std::this_thread::get_id(), stime, etime);
 }
 
 void Swap::SetAddr(handle_id_t handle_id, void* dptr, size_t size,

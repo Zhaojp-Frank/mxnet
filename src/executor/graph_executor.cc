@@ -35,6 +35,7 @@
 #include "../common/exec_utils.h"
 #include "../storage/gpu_swap_prefetch.h"
 #include "../storage/gpu_swap.h"
+#include <thread>
 
 namespace mxnet {
 namespace exec {
@@ -1440,7 +1441,7 @@ void GraphExecutor::InitCachedOps() {
         if (is_gpu) {
         #if MXNET_USE_CUDA
           // Wait GPU kernel to finish.
-          //Prefetch::Get()->SignalStartComputing();
+          Prefetch::Get()->SignalStartComputing();
           ctx.get_stream<gpu>()->Wait();
           Prefetch::Get()->SignalStopComputing();
         #else
@@ -1450,7 +1451,8 @@ void GraphExecutor::InitCachedOps() {
         on_complete();
         etime = std::chrono::steady_clock::now();
         //FIXME: device id not known to this level
-        MemoryHistory::Get()->RecordTime(name, 0, false, stime, etime);
+        MemoryHistory::Get()->RecordTime(name, 0, true, std::this_thread::get_id(),
+          stime, etime);
         Swap::Get()->PrePostAccess(false);
       } else {
         CHECK(false);
@@ -1694,7 +1696,7 @@ GraphExecutor::CachedSegOpr GraphExecutor::CreateCachedSegOpr(size_t topo_start,
     if (is_gpu) {
 #if MXNET_USE_CUDA
       // Wait GPU kernel to finish.
-      //Prefetch::Get()->SignalStartComputing();
+      Prefetch::Get()->SignalStartComputing();
       ctx.get_stream<gpu>()->Wait();
       Prefetch::Get()->SignalStopComputing();
 #else

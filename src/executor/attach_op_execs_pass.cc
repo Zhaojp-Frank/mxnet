@@ -32,6 +32,8 @@
 #include "./exec_pass.h"
 #include "../operator/nn/mkldnn/mkldnn_base-inl.h"
 #include "../storage/gpu_swap_prefetch.h"
+#include "../storage/gpu_swap.h"
+#include <thread>
 
 namespace mxnet {
 
@@ -118,6 +120,8 @@ class StorageFallbackOpExecutor : public OpExecutor {
 class StatefulComputeExecutor : public StorageFallbackOpExecutor {
  public:
   void Run(RunContext rctx, bool is_gpu) override {
+    std::chrono::time_point<std::chrono::steady_clock> stime, etime;
+    stime = std::chrono::steady_clock::now();
     //std::cout<<"StatefulCompute Run"<<std::endl;
     op_ctx.run_ctx = rctx;
 #if MXNET_USE_MKLDNN == 1
@@ -127,6 +131,9 @@ class StatefulComputeExecutor : public StorageFallbackOpExecutor {
     Prefetch::Get()->SignalStartComputing();
     fcompute_(state_, op_ctx, in_data_, req, out_data_);
     PostFCompute(is_gpu);
+    etime = std::chrono::steady_clock::now();
+    MemoryHistory::Get()->RecordTime("Computation", 0, false,
+      std::this_thread::get_id(), stime, etime);
   }
 
   ExecType exec_type() const override {
@@ -197,6 +204,8 @@ class StatefulComputeExExecutor : public OpExecutor {
 class FComputeExecutor : public StorageFallbackOpExecutor {
  public:
   void Run(RunContext rctx, bool is_gpu) override {
+    std::chrono::time_point<std::chrono::steady_clock> stime, etime;
+    stime = std::chrono::steady_clock::now();
     //std::cout<<"FComputeExecutor Run"<<std::endl;
     using namespace common;
     op_ctx.run_ctx = rctx;
@@ -207,6 +216,9 @@ class FComputeExecutor : public StorageFallbackOpExecutor {
     Prefetch::Get()->SignalStartComputing();
     fcompute_(attrs_, op_ctx, in_data_, req, out_data_);
     PostFCompute(is_gpu);
+    etime = std::chrono::steady_clock::now();
+    MemoryHistory::Get()->RecordTime("Computation", 0, false,
+      std::this_thread::get_id(), stime, etime);
   }
 
   ExecType exec_type() const override {

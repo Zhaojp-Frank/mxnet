@@ -11,6 +11,7 @@
 #include <mutex>
 #include <ctime>
 #include <string>
+#include <thread>
 
 #if MXNET_USE_CUDA
 #include <cuda_runtime.h>
@@ -42,6 +43,16 @@ public:
     size_t record_step;
     size_t size;
   };
+  struct TimeRecord {
+    std::string op;
+    bool total;
+    std::thread::id tid;
+    std::chrono::duration<size_t, std::micro> stime;
+    std::chrono::duration<size_t, std::micro> etime;
+    bool operator < (const TimeRecord& rec) const {
+      return stime < rec.stime;
+    }
+  };
   struct DeviceHistory {
     static const size_t kMaxPreservedIteration = 10;
     std::list<std::map<handle_id_t, std::vector<MemRecord>>> all_handle_history;
@@ -59,16 +70,13 @@ public:
     size_t swap_in_total;
     size_t swap_out_total;
     size_t num_get_addr;
+    std::vector<TimeRecord> time_doc;
+    std::chrono::time_point<std::chrono::steady_clock> zerotime;
+    size_t computation_time;
+    size_t communication_time;
+    size_t total_time;
   };
-  struct TimeRecord {
-    std::string op;
-    bool swapping;
-    std::chrono::duration<size_t, std::micro> stime;
-    std::chrono::duration<size_t, std::micro> etime;
-    bool operator < (const TimeRecord& rec) const {
-      return stime < rec.stime;
-    }
-  };
+
   static const size_t kBeginRecordAt = 2;
 
   ~MemoryHistory();
@@ -90,13 +98,14 @@ public:
   void Statistics();
   handle_id_t DecideVictim(std::unordered_set<handle_id_t> handles, int device,
                            void* arg);
-  void RecordTime(std::string op, int device_id, bool swapping,
+  void RecordTime(std::string op, int device_id, bool total, std::thread::id tid,
     std::chrono::time_point<std::chrono::steady_clock> stime,
     std::chrono::time_point<std::chrono::steady_clock> etime);
 
 private:
   MemoryHistory();
   std::vector<std::mutex> mutex_ = std::vector<std::mutex>(NUMBER_OF_GPU);
+  std::vector<std::mutex> time_mutex_ = std::vector<std::mutex>(NUMBER_OF_GPU);
   handle_id_t (MemoryHistory::*DoDecide)(std::unordered_set<handle_id_t>, int, void*);
   void PrintSimilarity();
   double LCS_Similarity(std::vector<MemRecord>& base,
