@@ -49,7 +49,7 @@ class SwapAdvisorEngine final : public Engine {
   };
 
   SwapAdvisorEngine() {
-    ReadScheduling();
+    ReadSchedule();
     next_opr_ = 0;
   }
   // virtual destructor
@@ -110,7 +110,7 @@ class SwapAdvisorEngine final : public Engine {
   void Push(OprHandle op, Context exec_ctx, int priority = 0, bool profiling = false) override {
     NaiveOpr *opr = op->Cast<NaiveOpr>();
     size_t node_id = priority;
-    opr_info_map[node_id] = (OprInfo){opr, exec_ct, profiling};
+    opr_info_map_[node_id] = (OprInfo){opr, exec_ctx, profiling};
     DoPush(exec_order_[next_opr_]);
   }
 
@@ -183,7 +183,7 @@ class SwapAdvisorEngine final : public Engine {
     NaiveOpr *opr; 
     Context exec_ctx;
     bool profiling;
-  }
+  };
   // Read dataflow scheduling.
   void ReadSchedule() {
      
@@ -193,7 +193,7 @@ class SwapAdvisorEngine final : public Engine {
     if(opr_info_map_.find(node_id) == opr_info_map_.end()) return;
     next_opr_ ++;
     NaiveOpr *opr = opr_info_map_[node_id].opr; 
-    Contect exec_ctx = opr_info_map_[node_id].exec_ctx;
+    Context exec_ctx = opr_info_map_[node_id].exec_ctx;
     bool profiling = opr_info_map_[node_id].profiling;
     profiler::Profiler *profiler = profiler::Profiler::Get();
     opr->profiling = profiling && profiler->IsProfiling(profiler::Profiler::kSymbolic);
@@ -215,7 +215,7 @@ class SwapAdvisorEngine final : public Engine {
       opr->const_vars,
       opr->mutable_vars,
       opr->prop,
-      priority,
+      0,
       opr->opr_name);  
   }
   // callback to oncomplete
