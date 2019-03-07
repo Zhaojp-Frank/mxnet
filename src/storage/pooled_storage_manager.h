@@ -55,7 +55,7 @@ class GPUPooledStorageManager final : public StorageManager {
    * \brief Default constructor.
    */
   GPUPooledStorageManager() {
-    infinite_memory_ = dmlc::GetEnv("MXNET_INFINITE_MEMORY", 0);
+    infinite_memory_ = dmlc::GetEnv("MXNET_SWAP_INFINITE_MEMORY", 0);
     reserve_ = dmlc::GetEnv("MXNET_GPU_MEM_POOL_RESERVE", 5);
     page_size_ = dmlc::GetEnv("MXNET_GPU_MEM_POOL_PAGE_SIZE", 4096);
     if (page_size_ < NDEV) {

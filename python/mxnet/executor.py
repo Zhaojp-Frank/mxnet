@@ -27,6 +27,7 @@ import numpy as np
 from .base import _LIB
 from .base import mx_uint, NDArrayHandle, ExecutorHandle, py_str
 from .base import check_call, c_handle_array, c_array_buf, c_str_array
+from .base import string_types, c_str
 from .ndarray import NDArray
 from .ndarray import _ndarray_cls
 
