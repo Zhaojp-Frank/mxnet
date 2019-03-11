@@ -23,31 +23,16 @@
  * \brief Implementation of SwapAdvisorEngine
  *  It is build upon implementation of Naive Engine.
  */
-#include <vector>
 #include <atomic>
 #include <thread>
-#include "./engine_impl.h"
-#include "../profiler/profiler.h"
-#include "./openmp.h"
+#include "./threaded_engine.h"
 
 namespace mxnet {
 namespace engine {
 
 // implement naive engine
-class SwapAdvisorEngine final : public Engine {
+class SwapAdvisorEngine final : public ThreadedEngine {
  public:
-  struct NaiveOpr : public Opr {
-    AsyncFn fn;
-    std::vector<VarHandle> const_vars;
-    std::vector<VarHandle> mutable_vars;
-    FnProperty prop;
-    const char* opr_name;
-    /*! \brief indicate whether to profile this operator */
-    bool profiling{false};
-    /*! \brief operator execution statistics */
-    std::unique_ptr<profiler::ProfileOperator> opr_profile;
-  };
-
   SwapAdvisorEngine() {
     ReadSchedule();
     next_opr_ = 0;
@@ -72,32 +57,7 @@ class SwapAdvisorEngine final : public Engine {
   void Start() override {
   }
 
-  // new variables
-  VarHandle NewVariable() override {
-    size_t v = ++counter_;
-    return reinterpret_cast<VarHandle>(v);
-  }
-
-  OprHandle NewOperator(AsyncFn fn,
-                        std::vector<VarHandle> const& const_vars,
-                        std::vector<VarHandle> const& mutable_vars,
-                        FnProperty prop = FnProperty::kNormal,
-                        const char* opr_name = nullptr,
-                        bool wait = false) override {
-    NaiveOpr *opr = new NaiveOpr();
-    opr->fn = fn;
-    opr->const_vars = const_vars;
-    opr->mutable_vars = mutable_vars;
-    opr->prop = prop;
-    opr->opr_name = opr_name;
-    return opr;
-  }
-
-  void DeleteOperator(OprHandle op) override {
-    NaiveOpr *opr = op->Cast<NaiveOpr>();
-    delete opr;
-  }
-
+ protected:
   // priority variable stores node id of the node for this engine.
   /* (TODO: Sotskin) Test this function. Current idea
    * Use a map to store mapping: node_id -> {op, exec_ctx, profiling}
@@ -107,39 +67,29 @@ class SwapAdvisorEngine final : public Engine {
    * After current op is ran, call a function to check if next op is in the
    * map, and run it if it is.
    */
-  void Push(OprHandle op, Context exec_ctx, int priority = 0, bool profiling = false) override {
-    NaiveOpr *opr = op->Cast<NaiveOpr>();
-    size_t node_id = priority;
-    opr_info_map_[node_id] = (OprInfo){opr, exec_ctx, profiling};
-    DoPush(exec_order_[next_opr_]);
+  void PushToExecute(OprBlock *opr_block, bool pusher_thread) override {
+    if((size_t)opr_block->priority == exec_order_[next_opr_]) {
+      DoExecute(opr_block); 
+      next_opr_++;
+      if(opr_block_map_.find(exec_order_[next_opr_]) != 
+            opr_block_map_.end()) {
+        PushToExecute(opr_block_map_[exec_order_[next_opr_]], false);
+      }
+    } else {
+      opr_block_map_[opr_block->priority] = opr_block;
+      // Current is not the one we want
+    }
   }
 
-  void PushAsync(AsyncFn exec_fun,
-                 Context exec_ctx,
-                 std::vector<VarHandle> const& const_vars,
-                 std::vector<VarHandle> const& mutable_vars,
-                 FnProperty prop = FnProperty::kNormal,
-                 int priority = 0,
-                 const char* opr_name = nullptr,
-                 bool wait = false) override {
-    CallbackOnComplete callback = CreateCallback(
-        SwapAdvisorEngine::OnComplete, nullptr);
-    this->req_completed_ = false;
-    profiler::Profiler *profiler = profiler::Profiler::Get();
-    NaiveOpr *opr = nullptr;
-    const bool profiling = opr_name && profiler->IsProfiling(profiler::Profiler::kImperative);
-    if (profiling) {
-      opr = NewOperator(exec_fun, const_vars, mutable_vars,
-                        prop, opr_name)->Cast<NaiveOpr>();
-      opr->profiling = profiling;
-      std::unique_ptr<profiler::ProfileOperator::Attributes> attrs;
-      if (profiler->AggregateEnabled()) {
-        attrs.reset(new profiler::ProfileOperator::Attributes());
-      }
-      opr->opr_profile.reset(new profiler::ProfileOperator(opr->opr_name, attrs.release()));
-      opr->opr_profile->start(exec_ctx.dev_type, exec_ctx.dev_id);
-    }
-    if (exec_ctx.dev_mask() == gpu::kDevMask) {
+ private:
+  // Read dataflow scheduling.
+  void ReadSchedule() {
+     
+  }
+  // Execute the operation
+  void DoExecute(OprBlock* opr_block) {
+    assert(opr_block->wait.load() == 0);
+    if (opr_block->ctx.dev_mask() == gpu::kDevMask) {
 #if MXNET_USE_CUDA
       size_t dev_id = static_cast<size_t>(exec_ctx.dev_id);
       MSHADOW_CATCH_ERROR(mshadow::SetDevice<gpu>(exec_ctx.dev_id));
@@ -147,87 +97,16 @@ class SwapAdvisorEngine final : public Engine {
         streams_.resize(dev_id + 1, nullptr);
       }
       if (streams_[dev_id] == nullptr) {
-        streams_[dev_id] = mshadow::NewStream<gpu>(true, MXNET_USE_CUDNN != 0, dev_id);
+        streams_[dev_id] = mshadow:NewStream<gpu>(true,
+            MXNET_USE_CUDNN != 0, dev_id);
       }
-      exec_fun(RunContext{exec_ctx, streams_[dev_id]}, callback);
-#else
-      LOG(FATAL) << "GPU is not enabled";
-#endif
-    } else {
-      exec_fun(RunContext{exec_ctx, &cpu_stream_}, callback);
+      this->ExecuteOprBlock(opr_block, 
+          RunContext{opr_block->ctx, streams_[dev_id]});
+#else //MXNET_USE_CUDA
+      LOG(FATAL) << "Please compoile with CUDA enabled";
+#endif //MXNET_USE_CUDA
     }
-    CHECK(this->req_completed_)
-        << "SwapAdvisorEngine only support synchronize Push so far";
-    if (profiling) {
-      opr->opr_profile->stop();
-    }
-  }
-
-  void DeleteVariable(SyncFn delete_fn, Context exec_ctx, VarHandle var) override {
-    this->PushSync(delete_fn, exec_ctx, {}, {var},
-                   FnProperty::kNormal, 0, "DeleteVariable");
-  }
-
-  void WaitForVar(VarHandle var) override {
-  }
-
-  void WaitForAll() override {
-  }
-
-  void NotifyShutdown() override {
-    shutdown_phase_.store(true);
-  }
-
- private:
-  struct OprInfo {
-    NaiveOpr *opr; 
-    Context exec_ctx;
-    bool profiling;
-  };
-  // Read dataflow scheduling.
-  void ReadSchedule() {
-     
-  }
-  // Check if requested opr is ready and run it.
-  void DoPush(size_t node_id) {
-    if(opr_info_map_.find(node_id) == opr_info_map_.end()) return;
-    next_opr_ ++;
-    NaiveOpr *opr = opr_info_map_[node_id].opr; 
-    Context exec_ctx = opr_info_map_[node_id].exec_ctx;
-    bool profiling = opr_info_map_[node_id].profiling;
-    profiler::Profiler *profiler = profiler::Profiler::Get();
-    opr->profiling = profiling && profiler->IsProfiling(profiler::Profiler::kSymbolic);
-    this->PushAsync([&](RunContext ctx, CallbackOnComplete on_complete) {
-        if (opr->profiling) {
-          std::unique_ptr<profiler::ProfileOperator::Attributes> attrs;
-          if (profiler->AggregateEnabled()) {
-            attrs.reset(new profiler::ProfileOperator::Attributes());
-          }
-          opr->opr_profile.reset(new profiler::ProfileOperator(opr->opr_name, attrs.release()));
-          opr->opr_profile->start(exec_ctx.dev_type, exec_ctx.dev_id);
-        }
-        opr->fn(ctx, on_complete);
-        if (opr->profiling) {
-          opr->opr_profile->stop();
-        }
-      },
-      exec_ctx,
-      opr->const_vars,
-      opr->mutable_vars,
-      opr->prop,
-      0,
-      opr->opr_name);  
-  }
-  // callback to oncomplete
-  static void OnComplete(Engine *engine, void *param) {
-    static_cast<SwapAdvisorEngine*>(engine)->req_completed_ = true;
-  }
-  // whether action is completed
-  bool req_completed_;
-  // counter
-  std::atomic<size_t> counter_{0};
-  /*! \brief whether it is during shutdown phase*/
-  std::atomic<bool> shutdown_phase_{false};
+  } 
   // CPU stream
   mshadow::Stream<cpu> cpu_stream_;
   // GPU streams
@@ -237,7 +116,7 @@ class SwapAdvisorEngine final : public Engine {
   /*! \brief node id of next opr to be run */
   size_t next_opr_;
   /*! \brief map that stores operator info for nodes that haven't been run yet */
-  std::map<size_t, OprInfo> opr_info_map_;
+  std::map<size_t, OprBlock*> opr_block_map_;
 };  // class SwapAdvisorEngine
 
 Engine *CreateSwapAdvisorEngine() {
