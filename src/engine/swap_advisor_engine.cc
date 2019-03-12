@@ -68,7 +68,11 @@ class SwapAdvisorEngine final : public ThreadedEngine {
    * map, and run it if it is.
    */
   void PushToExecute(OprBlock *opr_block, bool pusher_thread) override {
-    if((size_t)opr_block->priority == exec_order_[next_opr_]) {
+    // (TODO: Sotskin) Here we check whether OprBlock is a swapin/swapout opr
+    if (false) {
+      DoExecute(opr_block);
+    }
+    else if((size_t)opr_block->priority == exec_order_[next_opr_]) {
       DoExecute(opr_block); 
       next_opr_++;
       if(opr_block_map_.find(exec_order_[next_opr_]) != 
