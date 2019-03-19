@@ -63,7 +63,7 @@ class GPUPooledStorageManager final : public StorageManager {
                  << ". Got " << page_size_ << ".";
     }
     if (infinite_memory_) {
-      memory_size_ = 8L * 1024 * 1024 * 1024;
+      memory_size_ = 10L * 1024 * 1024 * 1024;
       cudaMalloc(&memory_, memory_size_);
       memory_offset_ = 0;
     }
@@ -124,18 +124,22 @@ void GPUPooledStorageManager::Alloc(Storage::Handle* handle) {
   if (reuse_it == memory_pool_.end() || reuse_it->second.size() == 0) {
     size_t free, total;
     cudaMemGetInfo(&free, &total);
-    if (free <= total * reserve_ / 100 || size > free - total * reserve_ / 100)
-      ReleaseAll();
+    if (free <= total * reserve_ / 100 || size > free - total * reserve_ / 100) {
+      if (!infinite_memory_) {
+        ReleaseAll();
+      }
+    }
 
     void* ret = nullptr;
     if (infinite_memory_) {
-      if (memory_offset_ + size >= memory_size_) {
+      if (memory_offset_ + size > memory_size_) {
+        std::cout << "infinite memory wrap over " << std::endl;
         memory_offset_ = 0;
       }
       ret = (void*)((size_t)memory_ + memory_offset_);
       memory_offset_ += size;
-      if (memory_offset_ % 32 != 0) {
-        memory_offset_ += 32 - (memory_offset_ % 32);
+      if (memory_offset_ % 128 != 0) {
+        memory_offset_ += 128 - (memory_offset_ % 128);
       }
     } else {
       cudaError_t e = cudaMalloc(&ret, size);
