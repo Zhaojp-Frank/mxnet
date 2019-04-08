@@ -327,24 +327,65 @@ void GraphExecutor::Init(nnvm::Symbol symbol,
       auto _device = g.attrs["device"];
       std::cout << "Before SA_LoadGraph" << std::endl;
       g = nnvm::pass::SA_LoadGraph(g, "SwapEntry", "SwapoutSink", "Swapout",
-                                   "Swapin");
+                                   "Swapin", &num_forward_inputs_,
+                                   &num_forward_outputs_);
+
+      const auto& idx = g.indexed_graph();
+      // FIXME(fegin): This will be incorrect when there are multiple GPUs.
+      // The reference code (SplitDistributedGraph) does not change "device".
+      // But legacy "device" will cause segamentation fault in our code base.
+      // It's not clear what is the difference.
       g.attrs["context"] = _context;
       g.attrs["device"] = _device;
+      const auto& vctx = g.GetAttr<ContextVector>("context");
+      const auto& vdev = g.GetAttr<nnvm::DeviceVector>("device");
+      ContextVector new_vctx;
+      nnvm::DeviceVector new_vdev;
+      for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
+        new_vctx.push_back(vctx[0]);
+        new_vdev.push_back(vdev[0]);
+      }
+      g.attrs["context"] = std::make_shared<dmlc::any>(std::move(new_vctx));
+      g.attrs["device"] = std::make_shared<dmlc::any>(std::move(new_vdev));
+
+      #if 0
+      const nnvm::EntryIdMap& old_eids = g.GetAttr<nnvm::EntryIdMap>("old_eids");
+      //const auto& shape_vec = g.GetAttr<nnvm::ShapeVector>("shape");
+      //const auto& dtype_vec = g.GetAttr<nnvm::DTypeVector>("dtype");
+      std::vector<NDArray> new_data_entry(idx.num_node_entries());
+      std::cout << "OLD_EIDS " << old_eids.size() << std::endl;
+      for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
+        const size_t num_outputs = idx[nid].source->num_outputs();
+        for (size_t output_idx = 0; output_idx < num_outputs; output_idx++) {
+          const uint32_t eid = idx.entry_id(nid, output_idx);
+          const auto old_eid_it = old_eids.find(eid);
+          if (old_eid_it != old_eids.end()) {
+            std::cout << "Data_entry_ idx1 " << old_eid_it->second << std::endl;
+            std::cout << "data_entry_ " << data_entry_.size() << std::endl;
+            new_data_entry[eid] = data_entry_[old_eid_it->second];
+          } else {
+            //new_data_entry[eid] = NDArray(shape_vec[eid], default_ctx,
+                                          //false, dtype_vec[eid]);
+            TShape shape{1};
+            new_data_entry[eid] = NDArray(shape, default_ctx, false, 0);
+            std::cout << "Data_entry_ idx2 " << eid << std::endl;
+          }
+        }
+      }
+      data_entry_ = new_data_entry;
+      #endif
       std::cout << "After SA_LoadGraph" << std::endl;
     }
   }
 
-  std::cout << "01" << std::endl;
   // create arg_shapes and arg_dtypes for shape and type inferences
   const auto& idx = g.indexed_graph();
   const auto& mutable_nodes = idx.mutable_input_nodes();
   size_t arg_top = 0, aux_top = 0;
-  std::cout << "02" << std::endl;
   data_entry_.resize(idx.num_node_entries());
   nnvm::ShapeVector arg_shapes;
   nnvm::DTypeVector arg_dtypes;
   StorageTypeVector arg_stypes(idx.num_node_entries(), -1);
-  std::cout << "03" << std::endl;
   for (size_t i = 0; i < num_forward_inputs_; ++i) {
     const uint32_t nid = idx.input_nodes().at(i);
     const std::string& arg_name = idx[nid].source->attrs.name;
@@ -382,7 +423,6 @@ void GraphExecutor::Init(nnvm::Symbol symbol,
                 << common::stype_string(data_entry_[eid].storage_type()) << " (input)";
     }
   }
-  std::cout << "04" << std::endl;
 
   // expand arg_shapes and arg_dtypes to contain backward inputs
   arg_shapes.resize(idx.input_nodes().size(), TShape());
@@ -391,7 +431,6 @@ void GraphExecutor::Init(nnvm::Symbol symbol,
     HandleInferShapeError(num_forward_inputs_, g.indexed_graph(),
                           g.GetAttr<nnvm::ShapeVector>("shape"));
   }
-  std::cout << "05" << std::endl;
 
   arg_dtypes.resize(idx.input_nodes().size(), -1);
   g = InferType(std::move(g), std::move(arg_dtypes), "__dtype__");
@@ -399,7 +438,6 @@ void GraphExecutor::Init(nnvm::Symbol symbol,
     HandleInferTypeError(num_forward_inputs_, g.indexed_graph(),
                          g.GetAttr<nnvm::DTypeVector>("dtype"));
   }
-  std::cout << "06" << std::endl;
 
   g.attrs["storage_type"] = std::make_shared<dmlc::any>(std::move(arg_stypes));
   g = InferStorageType(std::move(g), StorageTypeVector(), "");
@@ -407,13 +445,11 @@ void GraphExecutor::Init(nnvm::Symbol symbol,
     HandleInferStorageTypeError(num_forward_inputs_, g.indexed_graph(),
                                 g.GetAttr<StorageTypeVector>("storage_type"));
   }
-  std::cout << "07" << std::endl;
 
   // Initialize the rest attributes of the graph.
   // This function can be called by regular bind
   // operation flow as well.
   FinishInitGraph(symbol, g, shared_exec, feed_dict);
-  std::cout << "08" << std::endl;
 }
 
 /*!
@@ -637,37 +673,28 @@ void GraphExecutor::FinishInitGraph(nnvm::Symbol symbol,
   const auto& idx = g.indexed_graph();
   const auto& vstorage_type = g.GetAttr<StorageTypeVector>("storage_type");
 
-  std::cout << "FinishInitGraph 01" << std::endl;
   // data entries for output gradients
   for (size_t j = num_forward_outputs_; j < idx.outputs().size(); ++j) {
     data_entry_[idx.entry_id(idx.outputs()[j])] = grad_store_[j - num_forward_outputs_].second;
   }
-  std::cout << "FinishInitGraph 02" << std::endl;
 
   {
     // memory allocator
     nnvm::StorageVector arg_storage_id(idx.num_node_entries(), kBadStorageID);
-    std::cout << "FinishInitGraph 02.01" << std::endl;
     for (size_t j = num_forward_outputs_; j < idx.outputs().size(); ++j) {
       arg_storage_id[idx.entry_id(idx.outputs()[j])] = kExternalStorageID;
     }
-    std::cout << "FinishInitGraph 02.02" << std::endl;
     for (const auto& kv : feed_dict) {
       uint32_t eid = idx.entry_id(kv.first);
       data_entry_[eid] = kv.second;
       arg_storage_id[eid] = kExternalStorageID;
     }
-    std::cout << "FinishInitGraph 02.03" << std::endl;
     for (size_t i = 0; i < idx.num_node_entries(); i++) {
       if (vstorage_type[i] != kDefaultStorage) arg_storage_id[i] = kDynamicStorageID;
     }
-    std::cout << "FinishInitGraph 02.04" << std::endl;
     g.attrs["storage"] = std::make_shared<dmlc::any>(std::move(arg_storage_id));
-    std::cout << "FinishInitGraph 02.05" << std::endl;
     g = nnvm::ApplyPass(g, "PlanMemory");
-    std::cout << "FinishInitGraph 02.06" << std::endl;
   }
-  std::cout << "FinishInitGraph 03" << std::endl;
   g = DetectInplaceAddTo(g);
 
   // log the static memory plan of the graph
@@ -675,21 +702,16 @@ void GraphExecutor::FinishInitGraph(nnvm::Symbol symbol,
   if (mem_log_verbose) {
     common::LogMemoryPlan(g);
   }
-  std::cout << "FinishInitGraph 04" << std::endl;
 
   g = AttachOpExecs(g);
-  std::cout << "FinishInitGraph 05" << std::endl;
   AttachOpResources(g);
-  std::cout << "FinishInitGraph 06" << std::endl;
   graph_ = std::move(g);
-  std::cout << "FinishInitGraph 07" << std::endl;
 
   if (shared_exec != nullptr) {
     this->InitDataEntryMemory(&(dynamic_cast<GraphExecutor*>(shared_exec)->data_pool_));
   } else {
     this->InitDataEntryMemory(nullptr);
   }
-  std::cout << "FinishInitGraph 08" << std::endl;
 
   {
     // initialize output arrays
@@ -706,11 +728,8 @@ void GraphExecutor::FinishInitGraph(nnvm::Symbol symbol,
       head_grad_array_[oid] = data_entry_[idx.entry_id(nid, 0)];
     }
   }
-  std::cout << "FinishInitGraph 09" << std::endl;
   this->InitCachedOps();
-  std::cout << "FinishInitGraph 10" << std::endl;
   this->InitOpSegs();
-  std::cout << "FinishInitGraph 11" << std::endl;
 }
 
 /*!

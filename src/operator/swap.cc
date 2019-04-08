@@ -20,7 +20,7 @@ inline bool SwapEntryInferShape(const nnvm::NodeAttrs& attrs,
                                 std::vector<TShape> *out_shapes) {
   // Avoid unused variable warnings.
   (void)attrs;
-  CHECK_EQ(in_shapes->size(), 0);
+  CHECK_EQ(in_shapes->size(), 1);
   CHECK_EQ(out_shapes->size(), 1);
   TShape outshape(1);
   outshape[0] = 1;
@@ -32,7 +32,7 @@ inline bool SwapEntryInferType(const nnvm::NodeAttrs& attrs,
                                std::vector<int> *in_types,
                                std::vector<int> *out_types) {
   (void)attrs;
-  CHECK_EQ(in_types->size(), 0);
+  CHECK_EQ(in_types->size(), 1);
   CHECK_EQ(out_types->size(), 1);
   TYPE_ASSIGN_CHECK(*out_types, 0, mshadow::kFloat32);
   return true;
@@ -54,7 +54,7 @@ void SwapEntryCompute(const nnvm::NodeAttrs& attrs,
 NNVM_REGISTER_OP(SwapEntry)
   .set_num_inputs(0)
   .set_num_outputs(1)
-  .set_attr<FCompute>("FCompute<cpu>", SwapEntryCompute)
+  .set_attr<FCompute>("FCompute<gpu>", SwapEntryCompute)
   .set_attr<nnvm::FInferShape>("FInferShape", SwapEntryInferShape)
   .set_attr<nnvm::FInferType>("FInferType", SwapEntryInferType)
   .describe("Special op to be swapout sink.");
@@ -98,7 +98,7 @@ void SwapoutSinkCompute(const nnvm::NodeAttrs& attrs,
 NNVM_REGISTER_OP(SwapoutSink)
   .set_num_inputs(0)
   .set_num_outputs(1)
-  .set_attr<FCompute>("FCompute<cpu>", SwapoutSinkCompute)
+  .set_attr<FCompute>("FCompute<gpu>", SwapoutSinkCompute)
   .set_attr<nnvm::FInferShape>("FInferShape", SwapoutSinkInferShape)
   .set_attr<nnvm::FInferType>("FInferType", SwapoutSinkInferType)
   .describe("Special op to be swapout sink.");
@@ -143,7 +143,7 @@ void SwapoutCompute(const nnvm::NodeAttrs& attrs,
 NNVM_REGISTER_OP(Swapout)
   .set_num_inputs(0)
   .set_num_outputs(1)
-  .set_attr<FCompute>("FCompute<cpu>", SwapoutCompute)
+  .set_attr<FCompute>("FCompute<gpu>", SwapoutCompute)
   .set_attr<nnvm::FInferShape>("FInferShape", SwapoutInferShape)
   .set_attr<nnvm::FInferType>("FInferType", SwapoutInferType)
   .describe("Special op to be swapout sink.");
@@ -187,7 +187,7 @@ void SwapinCompute(const nnvm::NodeAttrs& attrs,
 NNVM_REGISTER_OP(Swapin)
   .set_num_inputs(0)
   .set_num_outputs(1)
-  .set_attr<FCompute>("FCompute<cpu>", SwapinCompute)
+  .set_attr<FCompute>("FCompute<gpu>", SwapinCompute)
   .set_attr<nnvm::FInferShape>("FInferShape", SwapinInferShape)
   .set_attr<nnvm::FInferType>("FInferType", SwapinInferType)
   .describe("Special op to be swapout sink.");
