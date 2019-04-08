@@ -41,6 +41,7 @@ using namespace mxnet::common;
 
 GraphExecutor::GraphExecutor() {
   log_verbose_ = dmlc::GetEnv("MXNET_EXEC_VERBOSE_LOGGING", false);
+  pass_node_id_ = dmlc::GetEnv("MXNET_SWAPADVISOR_SCHEDULING", false);
   need_grad_ = false;
 }
 
@@ -1414,7 +1415,9 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
       opnode.exec->Run(opnode.exec->op_ctx.run_ctx, false);
     } else if (opnode.cached_opr != nullptr) {
       bool profiling = profiler::Profiler::Get()->GetState() == profiler::Profiler::kRunning;
-      Engine::Get()->Push(opnode.cached_opr, opnode.ctx, 0, profiling);
+      // Pass node id if enabled for scheduling
+      bool node_id = pass_node_id_? nid : 0;
+      Engine::Get()->Push(opnode.cached_opr, opnode.ctx, node_id, profiling);
     } else {
       LOG(FATAL) << "Not accessed";
     }

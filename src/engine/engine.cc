@@ -43,6 +43,8 @@ inline Engine* CreateEngine() {
     ret = CreateThreadedEnginePooled();
   } else if (stype == "ThreadedEnginePerDevice") {
     ret = CreateThreadedEnginePerDevice();
+  } else if (stype == "SwapAdvisorEngine") {
+    ret = CreateSwapAdvisorEngine();
   }
   #else
   ret = CreateNaiveEngine();

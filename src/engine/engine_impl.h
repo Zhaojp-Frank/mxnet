@@ -95,6 +95,8 @@ Engine *CreateNaiveEngine();
 Engine *CreateThreadedEnginePooled();
 /*! \return ThreadedEnginePerDevie instance */
 Engine *CreateThreadedEnginePerDevice();
+/*! \return SwapAdvisorEngine instance */
+Engine *CreateSwapAdvisorEngine();
 #endif
 }  // namespace engine
 }  // namespace mxnet

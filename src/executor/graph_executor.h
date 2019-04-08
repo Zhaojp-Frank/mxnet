@@ -258,6 +258,8 @@ class GraphExecutor : public Executor {
   std::unordered_set<std::string> cached_seg_opr_names_;
   // verbose logging
   bool log_verbose_ = false;
+  // enable passing node id for SwapAdvisor scheduling
+  bool pass_node_id_ = false;
 };
 
 }  // namespace exec
