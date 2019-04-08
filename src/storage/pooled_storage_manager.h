@@ -55,11 +55,17 @@ class GPUPooledStorageManager final : public StorageManager {
    * \brief Default constructor.
    */
   GPUPooledStorageManager() {
+    infinite_memory_ = dmlc::GetEnv("MXNET_SWAP_INFINITE_MEMORY", 0);
     reserve_ = dmlc::GetEnv("MXNET_GPU_MEM_POOL_RESERVE", 5);
     page_size_ = dmlc::GetEnv("MXNET_GPU_MEM_POOL_PAGE_SIZE", 4096);
     if (page_size_ < NDEV) {
       LOG(FATAL) << "MXNET_GPU_MEM_POOL_PAGE_SIZE cannot be set to a value smaller than " << NDEV \
                  << ". Got " << page_size_ << ".";
+    }
+    if (infinite_memory_) {
+      memory_size_ = 10L * 1024 * 1024 * 1024;
+      cudaMalloc(&memory_, memory_size_);
+      memory_offset_ = 0;
     }
   }
   /*!
@@ -79,17 +85,25 @@ class GPUPooledStorageManager final : public StorageManager {
 
  private:
   void DirectFreeNoLock(Storage::Handle handle) {
-    cudaError_t err = cudaFree(handle.dptr);
-    size_t size = std::max(handle.size, page_size_);
-    // ignore unloading error, as memory has already been recycled
-    if (err != cudaSuccess && err != cudaErrorCudartUnloading) {
-      LOG(FATAL) << "CUDA: " << cudaGetErrorString(err);
+    if (!infinite_memory_) {
+      cudaError_t err = cudaFree(handle.dptr);
+      // ignore unloading error, as memory has already been recycled
+      if (err != cudaSuccess && err != cudaErrorCudartUnloading) {
+        LOG(FATAL) << "CUDA: " << cudaGetErrorString(err);
+      }
     }
+    size_t size = std::max(handle.size, page_size_);
     used_memory_ -= size;
   }
 
  private:
   void ReleaseAll();
+  // All memory
+  bool infinite_memory_;
+  size_t memory_size_;
+  void *memory_;
+  size_t memory_offset_;
+
   // used memory
   size_t used_memory_ = 0;
   // page size
@@ -110,13 +124,28 @@ void GPUPooledStorageManager::Alloc(Storage::Handle* handle) {
   if (reuse_it == memory_pool_.end() || reuse_it->second.size() == 0) {
     size_t free, total;
     cudaMemGetInfo(&free, &total);
-    if (free <= total * reserve_ / 100 || size > free - total * reserve_ / 100)
-      ReleaseAll();
+    if (free <= total * reserve_ / 100 || size > free - total * reserve_ / 100) {
+      if (!infinite_memory_) {
+        ReleaseAll();
+      }
+    }
 
     void* ret = nullptr;
-    cudaError_t e = cudaMalloc(&ret, size);
-    if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
-      LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
+    if (infinite_memory_) {
+      if (memory_offset_ + size > memory_size_) {
+        std::cout << "infinite memory wrap over " << std::endl;
+        memory_offset_ = 0;
+      }
+      ret = (void*)((size_t)memory_ + memory_offset_);
+      memory_offset_ += size;
+      if (memory_offset_ % 128 != 0) {
+        memory_offset_ += 128 - (memory_offset_ % 128);
+      }
+    } else {
+      cudaError_t e = cudaMalloc(&ret, size);
+      if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
+        LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
+      }
     }
     used_memory_ += size;
     handle->dptr = ret;

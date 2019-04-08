@@ -117,6 +117,8 @@ class GraphExecutor : public Executor {
                     std::vector<NDArray>* arg_grads,
                     std::vector<NDArray>* aux_states) override;
 
+  nnvm::Graph GetGraph() {return graph_;};
+
  protected:
   friend class mxnet::Imperative;
   // Information about operational node
