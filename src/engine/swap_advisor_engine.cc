@@ -95,17 +95,17 @@ class SwapAdvisorEngine final : public ThreadedEngine {
     assert(opr_block->wait.load() == 0);
     if (opr_block->ctx.dev_mask() == gpu::kDevMask) {
 #if MXNET_USE_CUDA
-      size_t dev_id = static_cast<size_t>(exec_ctx.dev_id);
-      MSHADOW_CATCH_ERROR(mshadow::SetDevice<gpu>(exec_ctx.dev_id));
+      size_t dev_id = static_cast<size_t>(opr_block->ctx.dev_id);
+      MSHADOW_CATCH_ERROR(mshadow::SetDevice<gpu>(opr_block->ctx.dev_id));
       if (streams_.size() <= dev_id) {
         streams_.resize(dev_id + 1, nullptr);
       }
       if (streams_[dev_id] == nullptr) {
-        streams_[dev_id] = mshadow:NewStream<gpu>(true,
+        streams_[dev_id] = mshadow::NewStream<gpu>(true,
             MXNET_USE_CUDNN != 0, dev_id);
       }
-      this->ExecuteOprBlock(opr_block, 
-          RunContext{opr_block->ctx, streams_[dev_id]});
+      this->ExecuteOprBlock((RunContext){opr_block->ctx, streams_[dev_id]},
+            opr_block);
 #else //MXNET_USE_CUDA
       LOG(FATAL) << "Please compoile with CUDA enabled";
 #endif //MXNET_USE_CUDA
