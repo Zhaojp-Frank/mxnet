@@ -57,7 +57,7 @@ NNVM_REGISTER_OP(SwapEntry)
   .set_attr<FCompute>("FCompute<gpu>", SwapEntryCompute)
   .set_attr<nnvm::FInferShape>("FInferShape", SwapEntryInferShape)
   .set_attr<nnvm::FInferType>("FInferType", SwapEntryInferType)
-  .describe("Special op to be swapout sink.");
+  .describe("Special op to be swap nodes entry.");
 
 inline bool SwapoutSinkInferShape(const nnvm::NodeAttrs& attrs,
                                   std::vector<TShape> *in_shapes,
@@ -146,7 +146,7 @@ NNVM_REGISTER_OP(Swapout)
   .set_attr<FCompute>("FCompute<gpu>", SwapoutCompute)
   .set_attr<nnvm::FInferShape>("FInferShape", SwapoutInferShape)
   .set_attr<nnvm::FInferType>("FInferType", SwapoutInferType)
-  .describe("Special op to be swapout sink.");
+  .describe("Swapout operator.");
 
 inline bool SwapinInferShape(const nnvm::NodeAttrs& attrs,
                                 std::vector<TShape> *in_shapes,
@@ -190,7 +190,7 @@ NNVM_REGISTER_OP(Swapin)
   .set_attr<FCompute>("FCompute<gpu>", SwapinCompute)
   .set_attr<nnvm::FInferShape>("FInferShape", SwapinInferShape)
   .set_attr<nnvm::FInferType>("FInferType", SwapinInferType)
-  .describe("Special op to be swapout sink.");
+  .describe("Swapin operator.");
 
 }  // namespace op
 }  // namespace mxnet
