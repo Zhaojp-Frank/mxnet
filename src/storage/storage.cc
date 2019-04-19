@@ -125,13 +125,16 @@ void StorageImpl::Alloc(Storage::Handle* handle) {
             std::string strategy = type;
 
             if (strategy == "Round") {
-              ptr = new storage::GPUPooledRoundedStorageManager();
-              LOG(INFO) << "Using GPUPooledRoundedStorageManager.";
+                ptr = new storage::GPUPooledRoundedStorageManager();
+                LOG(INFO) << "Using GPUPooledRoundedStorageManager.";
+            } else if (strategy == "OnDemandSwap") {
+                ptr = new storage::GpuOnDemandSwapStorageManager();
+                LOG(INFO) << "Using GpuOnDemandSwapStorageManager.";
             } else {
-              if (strategy != "Naive") {
-                LOG(FATAL) << "Unknown memory pool strategy specified: " << strategy << ".";
-              }
-              ptr = new storage::GPUPooledStorageManager();
+                if (strategy != "Naive") {
+                    LOG(FATAL) << "Unknown memory pool strategy specified: " << strategy << ".";
+                }
+                ptr = new storage::GPUPooledStorageManager();
             }
 #else
             LOG(FATAL) << "Compile with USE_CUDA=1 to enable GPU usage";
