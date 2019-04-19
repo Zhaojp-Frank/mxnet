@@ -241,6 +241,10 @@ void MemoryHistory::PrintRecord(int device) {
 }
 
 void MemoryHistory::StartIteration() {
+  if(dmlc::GetEnv("MXNET_GPU_MEM_POOL_TYPE", std::string("Naive"))
+     != "OnDemandSwap") {
+    return;
+  }
   iteration_started_ = true;
   for (int i = 0; i < NUMBER_OF_GPU; i++) {
     dev_history_[i].curr_idx = 0;
@@ -304,6 +308,10 @@ void MemoryHistory::StartIteration() {
 }
 
 void MemoryHistory::StopIteration() {
+  if(dmlc::GetEnv("MXNET_GPU_MEM_POOL_TYPE", std::string("Naive"))
+     != "OnDemandSwap") {
+    return;
+  }
   pre_recording_ = false;
   is_recording_ = false;
   iteration_started_ = false;
