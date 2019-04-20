@@ -48,9 +48,9 @@ struct SpaceAllocator {
   Storage::Handle host_handle;
 
   SpaceAllocator() {
-    handle.dptr = nullptr;
+    handle.SetDptr(nullptr, ctx.dev_type == Context::kGPU ? ctx.dev_id : -1);
     handle.size = 0;
-    host_handle.dptr = nullptr;
+    host_handle.SetDptr(nullptr, ctx.dev_type == Context::kGPU ? ctx.dev_id : -1);
     host_handle.size = 0;
   }
   inline void ReleaseAll() {
@@ -64,21 +64,25 @@ struct SpaceAllocator {
     }
   }
   inline void* GetSpace(size_t size) {
-    if (handle.size >= size) return handle.dptr;
+    //if (handle.size >= size) return handle.dptr;
+    if (handle.size >= size) return handle.GetDptr;
     if (handle.size != 0) {
       Storage::Get()->DirectFree(handle);
     }
     handle = Storage::Get()->Alloc(size, ctx);
-    return handle.dptr;
+    //return handle.dptr;
+    return handle.GetDptr();
   }
 
   inline void* GetHostSpace(size_t size) {
-    if (host_handle.size >= size) return host_handle.dptr;
+    //if (host_handle.size >= size) return host_handle.dptr;
+    if (host_handle.size >= size) return host_handle.GetDptr();
     if (host_handle.size != 0) {
       Storage::Get()->DirectFree(host_handle);
     }
     host_handle = Storage::Get()->Alloc(size, Context());
-    return host_handle.dptr;
+    //return host_handle.dptr;
+    return host_handle.GetDptr();
   }
 };
 

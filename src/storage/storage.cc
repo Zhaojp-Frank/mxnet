@@ -128,9 +128,9 @@ void StorageImpl::Alloc(Storage::Handle* handle) {
             if (strategy == "Round") {
               ptr = new storage::GPUPooledRoundedStorageManager();
               LOG(INFO) << "Using GPUPooledRoundedStorageManager.";
-            } else if (strategy == "Swap") {
-              ptr = new storage::GPUSwapStorageManager();
-              LOG(INFO) << "Using GPUSwapStorageManager.";
+            } else if (strategy == "SwapAdv") {
+              ptr = new storage::GPUSwapAdvStorageManager();
+              LOG(INFO) << "Using GPUSwapAdvStorageManager.";
             } else {
               if (strategy != "Naive") {
                 LOG(FATAL) << "Unknown memory pool strategy specified: " << strategy << ".";

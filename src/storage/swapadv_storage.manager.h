@@ -1,5 +1,5 @@
-#ifndef MXNET_STORAGE_SWAP_STORAGE_MANAGER_H_
-#define MXNET_STORAGE_SWAP_STORAGE_MANAGER_H_
+#ifndef MXNET_STORAGE_SWAPADVISOR_STORAGE_MANAGER_H_
+#define MXNET_STORAGE_SWAPADVISOR_STORAGE_MANAGER_H_
 
 #if MXNET_USE_CUDA
   #include <cuda_runtime.h>
@@ -12,6 +12,7 @@
 #include <mutex>
 #include <new>
 #include <fstream>
+#include <mxnet/mm_dptr.h>
 #include "./storage_manager.h"
 #include "../common/cuda_utils.h"
 #include "../common/utils.h"
@@ -20,17 +21,48 @@
 namespace mxnet {
 namespace storage {
 
+class SA_MM_Dptr {
+ public:
+  void* Alloc(handle_id_t id, void* ptr) {
+    dptr_mapping_[id] = ptr;
+    return ptr;
+  }
+
+  void* Free(handle_id_t id) {
+    auto it = dptr_mapping_.find(id);
+    void* ptr = *it;
+    dptr_mapping_.erase(it);
+    return ptr;
+  }
+
+  void Release(handle_id_t id, void* ptr) {
+    dptr_mapping_[id] = ptr;
+  }
+
+  void* GetDptr(handle_id_t id) {
+    dptr_mapping_.at(id);
+  }
+
+  void SetDptr(handle_id_t id, void* ptr, uint32_t dev_id) {
+    dptr_mapping_[id] = ptr;
+  }
+
+ private:
+  std::unordered_map<handle_id_t, void*> dptr_mapping_;
+};
+
 #if MXNET_USE_CUDA
 /*!
  * \brief Storage manager with a memory pool on gpu. Memory chunks are reused based on exact size
  * match.
  */
-class GPUSwapStorageManager final : public StorageManager {
+class GPUSwapAdvStorageManager final : public StorageManager {
  public:
   /*!
    * \brief Default constructor.
    */
-  GPUSwapStorageManager() {
+  GPUSwapAdvStorageManager(int device_id) {
+    device_id_ = device_id;
     memory_size_ = 10L * 1024 * 1024 * 1024;
     cudaError_t e = cudaMalloc(&memory_, memory_size_);
     if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
@@ -53,7 +85,7 @@ class GPUSwapStorageManager final : public StorageManager {
   /*!
    * \brief Default destructor.
    */
-  ~GPUSwapStorageManager() {
+  ~GPUSwapAdvStorageManager() {
     cudaFree(memory_);
     memory_ = nullptr;
   }
@@ -87,10 +119,11 @@ class GPUSwapStorageManager final : public StorageManager {
   std::vector<std::unordered_set<void*>> used_mempools_;
   // Used memory
   size_t used_memory_ = 0;
-  DISALLOW_COPY_AND_ASSIGN(GPUSwapStorageManager);
-};  // class GPUSwapStorageManager
+  int device_id_;
+  DISALLOW_COPY_AND_ASSIGN(GPUSwapAdvStorageManager);
+};  // class GPUSwapAdvStorageManager
 
-void GPUSwapStorageManager::ReadAllocationRst() {
+void GPUSwapAdvStorageManager::ReadAllocationRst() {
   std::cout << "ReadAllocationRst" << std::endl;
   std::ifstream ifs("memalloc.rst");
   std::string line;
@@ -122,19 +155,21 @@ void GPUSwapStorageManager::ReadAllocationRst() {
   }
 }
 
-void GPUSwapStorageManager::Alloc(Storage::Handle* handle) {
+void GPUSwapAdvStorageManager::Alloc(Storage::Handle* handle) {
   std::lock_guard<std::mutex> lock(Storage::Get()->GetMutex(Context::kGPU));
   size_t mempool = rsize_to_mempool_.at(handle->size);
   void* address = *(mempools_.at(mempool).begin());
   mempools_.at(mempool).erase(address);
-  handle->dptr = address;
+  //handle->dptr = address;
+  //handle->SetDptr(address, device_id_);
+  handle->SetDptr(address, device_id_);
 }
 
-void GPUSwapStorageManager::Free(Storage::Handle handle) {
+void GPUSwapAdvStorageManager::Free(Storage::Handle handle) {
   std::lock_guard<std::mutex> lock(Storage::Get()->GetMutex(Context::kGPU));
   size_t mempool = rsize_to_mempool_.at(handle.size);
-  CHECK_EQ(used_mempools_[mempool].erase(handle.dptr), 1);
-  mempools_.at(mempool).emplace(handle.dptr);
+  CHECK_EQ(used_mempools_[mempool].erase(handle.GetDptr()), 1);
+  mempools_.at(mempool).emplace(handle.GetDptr());
 }
 
 
@@ -143,4 +178,4 @@ void GPUSwapStorageManager::Free(Storage::Handle handle) {
 }  // namespace storage
 }  // namespace mxnet
 
-#endif  // MXNET_STORAGE_GPU_STORAGE_MANAGER_H_
+#endif  // MXNET_STORAGE_GPU_SWAPADVISOR_STORAGE_MANAGER_H_

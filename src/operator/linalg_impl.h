@@ -668,6 +668,24 @@ inline int linalg_potrf_buffsize(const Tensor<gpu, 2, DType>& A, bool lower, Str
 LINALG_GPU_BUFFSIZE_POTRF(DnSpotrf_bufferSize, float)
 LINALG_GPU_BUFFSIZE_POTRF(DnDpotrf_bufferSize, double)
 
+//#define LINALG_GPU_POTRF(fname, DType) \
+//template<> inline \
+//void linalg_potrf<gpu, DType>(const Tensor<gpu, 2, DType>& A, bool lower, Stream<gpu> *s) { \
+  //using namespace mxnet; \
+  //using mshadow::gpu; \
+  //CHECK_NOTNULL(s); \
+  //check_potrf(A, lower); \
+  //int buffsize(linalg_potrf_buffsize(A, lower, s)); \
+  //Storage::Handle buffer = Storage::Get()->Alloc(sizeof(DType)*buffsize, Context::GPU()); \
+  //Storage::Handle info = Storage::Get()->Alloc(sizeof(int), Context::GPU()); \
+  //CUSOLVER_CALL(cusolver##fname(Stream<gpu>::GetSolverHandle(s), \
+                //(lower ? CUBLAS_FILL_MODE_UPPER : CUBLAS_FILL_MODE_LOWER), \
+                //A.size(0), A.dptr_, A.stride_, static_cast<DType *>(buffer.dptr), buffsize, \
+                //static_cast<int *>(info.dptr))); \
+  //Storage::Get()->Free(buffer); \
+  //Storage::Get()->Free(info); \
+//}
+
 #define LINALG_GPU_POTRF(fname, DType) \
 template<> inline \
 void linalg_potrf<gpu, DType>(const Tensor<gpu, 2, DType>& A, bool lower, Stream<gpu> *s) { \
@@ -680,14 +698,34 @@ void linalg_potrf<gpu, DType>(const Tensor<gpu, 2, DType>& A, bool lower, Stream
   Storage::Handle info = Storage::Get()->Alloc(sizeof(int), Context::GPU()); \
   CUSOLVER_CALL(cusolver##fname(Stream<gpu>::GetSolverHandle(s), \
                 (lower ? CUBLAS_FILL_MODE_UPPER : CUBLAS_FILL_MODE_LOWER), \
-                A.size(0), A.dptr_, A.stride_, static_cast<DType *>(buffer.dptr), buffsize, \
-                static_cast<int *>(info.dptr))); \
+                A.size(0), A.dptr_, A.stride_, static_cast<DType *>(buffer.GetDptr()), buffsize, \
+                static_cast<int *>(info.GetDptr()))); \
   Storage::Get()->Free(buffer); \
   Storage::Get()->Free(info); \
 }
 LINALG_GPU_POTRF(DnSpotrf, float)
 LINALG_GPU_POTRF(DnDpotrf, double)
 
+//#define LINALG_GPU_BATCH_POTRF(fname, DType) \
+//template<> inline \
+//void linalg_batch_potrf<gpu, DType>(const Tensor<gpu, 3, DType>& A, bool lower, Stream<gpu> *s) { \
+  //using namespace mxnet; \
+  //using mshadow::gpu; \
+  //CHECK_NOTNULL(s); \
+  //CHECK_GT(A.size(0), 0); \
+  //check_potrf(A[0], lower); \
+  //int buffsize(linalg_potrf_buffsize(A[0], lower, s)); \
+  //Storage::Handle buffer = Storage::Get()->Alloc(sizeof(DType)*buffsize, Context::GPU()); \
+  //Storage::Handle info = Storage::Get()->Alloc(sizeof(int), Context::GPU()); \
+  //for (mshadow::index_t i = 0; i < A.size(0); ++i) { \
+    //CUSOLVER_CALL(cusolver##fname(Stream<gpu>::GetSolverHandle(s), \
+                 //(lower ? CUBLAS_FILL_MODE_UPPER : CUBLAS_FILL_MODE_LOWER), \
+                 //A[i].size(0), A[i].dptr_, A[i].stride_, \
+                 //static_cast<DType *>(buffer.dptr), buffsize, static_cast<int *>(info.dptr))); \
+  //} \
+  //Storage::Get()->Free(buffer); \
+  //Storage::Get()->Free(info); \
+//}
 #define LINALG_GPU_BATCH_POTRF(fname, DType) \
 template<> inline \
 void linalg_batch_potrf<gpu, DType>(const Tensor<gpu, 3, DType>& A, bool lower, Stream<gpu> *s) { \
@@ -703,7 +741,7 @@ void linalg_batch_potrf<gpu, DType>(const Tensor<gpu, 3, DType>& A, bool lower, 
     CUSOLVER_CALL(cusolver##fname(Stream<gpu>::GetSolverHandle(s), \
                  (lower ? CUBLAS_FILL_MODE_UPPER : CUBLAS_FILL_MODE_LOWER), \
                  A[i].size(0), A[i].dptr_, A[i].stride_, \
-                 static_cast<DType *>(buffer.dptr), buffsize, static_cast<int *>(info.dptr))); \
+                 static_cast<DType *>(buffer.GetDptr()), buffsize, static_cast<int *>(info.GetDptr()))); \
   } \
   Storage::Get()->Free(buffer); \
   Storage::Get()->Free(info); \
@@ -763,6 +801,26 @@ __global__ void linalgInitIdentityGPU(DType *a, int stride, int lda, int N) {
 }
 
 // There is no direct support for potri in cuda. We emulate the function by two calls to trsm.
+//#define LINALG_GPU_POTRI(DType) \
+//template<> inline \
+//void linalg_potri<gpu, DType>(const Tensor<gpu, 2, DType>& A, bool lower, Stream<gpu> *s) { \
+  //using namespace mxnet; \
+  //CHECK_NOTNULL(s); \
+  //check_potri(A, lower); \
+  //Storage::Handle buffer = Storage::Get()->Alloc(sizeof(DType)*A.MSize(), Context::GPU()); \
+  //using namespace mshadow::cuda; \
+  //int ngrid = std::min(kMaxGridNum, \
+                       //static_cast<int>((A.MSize() + kBaseThreadNum - 1) / kBaseThreadNum)); \
+  //linalgInitIdentityGPU<<<ngrid, kBaseThreadNum, 0, mshadow::Stream<gpu>::GetStream(s)>>> \
+    //(static_cast<DType *>(buffer.dptr), A.MSize(), A.stride_, A.MSize());  \
+  //MSHADOW_CUDA_POST_KERNEL_CHECK(linalgInitIdentityGPU); \
+  //Tensor<gpu, 2, DType> B((DType *)buffer.dptr, A.shape_, A.stride_, s); \
+  //linalg_trsm(A, B, DType(1.0), false, lower, !lower, s); \
+  //linalg_trsm(A, B, DType(1.0), false, lower, lower, s); \
+  //Copy(A, B, s); \
+  //B.dptr_ = 0; \
+  //Storage::Get()->Free(buffer); \
+//}
 #define LINALG_GPU_POTRI(DType) \
 template<> inline \
 void linalg_potri<gpu, DType>(const Tensor<gpu, 2, DType>& A, bool lower, Stream<gpu> *s) { \
@@ -774,9 +832,9 @@ void linalg_potri<gpu, DType>(const Tensor<gpu, 2, DType>& A, bool lower, Stream
   int ngrid = std::min(kMaxGridNum, \
                        static_cast<int>((A.MSize() + kBaseThreadNum - 1) / kBaseThreadNum)); \
   linalgInitIdentityGPU<<<ngrid, kBaseThreadNum, 0, mshadow::Stream<gpu>::GetStream(s)>>> \
-    (static_cast<DType *>(buffer.dptr), A.MSize(), A.stride_, A.MSize());  \
+    (static_cast<DType *>(buffer.GetDptr()), A.MSize(), A.stride_, A.MSize());  \
   MSHADOW_CUDA_POST_KERNEL_CHECK(linalgInitIdentityGPU); \
-  Tensor<gpu, 2, DType> B((DType *)buffer.dptr, A.shape_, A.stride_, s); \
+  Tensor<gpu, 2, DType> B((DType *)buffer.GetDptr(), A.shape_, A.stride_, s); \
   linalg_trsm(A, B, DType(1.0), false, lower, !lower, s); \
   linalg_trsm(A, B, DType(1.0), false, lower, lower, s); \
   Copy(A, B, s); \
@@ -786,6 +844,27 @@ void linalg_potri<gpu, DType>(const Tensor<gpu, 2, DType>& A, bool lower, Stream
 LINALG_GPU_POTRI(float)
 LINALG_GPU_POTRI(double)
 
+//#define LINALG_GPU_BATCH_POTRI(DType) \
+//template<> inline \
+//void linalg_batch_potri<gpu, DType>(const Tensor<gpu, 3, DType>& A, bool lower, Stream<gpu> *s) { \
+  //using namespace mxnet; \
+  //CHECK_NOTNULL(s); \
+  //CHECK_GT(A.size(0), 0); \
+  //check_potri(A[0], lower); \
+  //Storage::Handle buffer = Storage::Get()->Alloc(sizeof(DType)*A.MSize(), Context::GPU()); \
+  //using namespace mshadow::cuda; \
+  //int ngrid = std::min(kMaxGridNum, \
+                       //static_cast<int>((A.MSize() + kBaseThreadNum - 1) / kBaseThreadNum)); \
+  //linalgInitIdentityGPU<<<ngrid, kBaseThreadNum, 0, mshadow::Stream<gpu>::GetStream(s)>>> \
+    //(static_cast<DType *>(buffer.dptr), A.size(1)*A.stride_, A.stride_, A.MSize()); \
+  //MSHADOW_CUDA_POST_KERNEL_CHECK(linalgInitIdentityGPU); \
+  //Tensor<gpu, 3, DType> B((DType *)buffer.dptr, A.shape_, A.stride_, s); \
+  //linalg_batch_trsm(A, B, DType(1.0), false, lower, !lower, s); \
+  //linalg_batch_trsm(A, B, DType(1.0), false, lower, lower, s); \
+  //Copy(A, B, s); \
+  //B.dptr_ = 0; \
+  //Storage::Get()->Free(buffer); \
+//}
 #define LINALG_GPU_BATCH_POTRI(DType) \
 template<> inline \
 void linalg_batch_potri<gpu, DType>(const Tensor<gpu, 3, DType>& A, bool lower, Stream<gpu> *s) { \
@@ -798,9 +877,9 @@ void linalg_batch_potri<gpu, DType>(const Tensor<gpu, 3, DType>& A, bool lower, 
   int ngrid = std::min(kMaxGridNum, \
                        static_cast<int>((A.MSize() + kBaseThreadNum - 1) / kBaseThreadNum)); \
   linalgInitIdentityGPU<<<ngrid, kBaseThreadNum, 0, mshadow::Stream<gpu>::GetStream(s)>>> \
-    (static_cast<DType *>(buffer.dptr), A.size(1)*A.stride_, A.stride_, A.MSize()); \
+    (static_cast<DType *>(buffer.GetDptr()), A.size(1)*A.stride_, A.stride_, A.MSize()); \
   MSHADOW_CUDA_POST_KERNEL_CHECK(linalgInitIdentityGPU); \
-  Tensor<gpu, 3, DType> B((DType *)buffer.dptr, A.shape_, A.stride_, s); \
+  Tensor<gpu, 3, DType> B((DType *)buffer.GetDptr(), A.shape_, A.stride_, s); \
   linalg_batch_trsm(A, B, DType(1.0), false, lower, !lower, s); \
   linalg_batch_trsm(A, B, DType(1.0), false, lower, lower, s); \
   Copy(A, B, s); \
@@ -964,6 +1043,23 @@ LINALG_CPU_GELQF_WORKSPACE_QUERY(d, double)
 
 #ifdef __CUDACC__
 
+//#define LINALG_GPU_GELQF(fname, DType) \
+//template<> inline \
+//void linalg_gelqf<gpu, DType>(const Tensor<gpu, 2, DType>& A, \
+                              //const Tensor<gpu, 1, DType>& work, \
+                              //Stream<gpu> *s) { \
+  //using namespace mxnet; \
+  //using mshadow::gpu; \
+  //CHECK_NOTNULL(s); \
+  //check_gelqf(A, work); \
+  //int m(A.size(0)); \
+  //int lwork(work.size(0) - m); \
+  //Storage::Handle info = Storage::Get()->Alloc(sizeof(int), Context::GPU()); \
+  //CUSOLVER_CALL(cusolver##fname(Stream<gpu>::GetSolverHandle(s), \
+                //A.size(1), m, A.dptr_ , A.stride_, work.dptr_, \
+                //work.dptr_ + m, lwork, static_cast<int *>(info.dptr))); \
+  //Storage::Get()->Free(info); \
+//}
 #define LINALG_GPU_GELQF(fname, DType) \
 template<> inline \
 void linalg_gelqf<gpu, DType>(const Tensor<gpu, 2, DType>& A, \
@@ -978,7 +1074,7 @@ void linalg_gelqf<gpu, DType>(const Tensor<gpu, 2, DType>& A, \
   Storage::Handle info = Storage::Get()->Alloc(sizeof(int), Context::GPU()); \
   CUSOLVER_CALL(cusolver##fname(Stream<gpu>::GetSolverHandle(s), \
                 A.size(1), m, A.dptr_ , A.stride_, work.dptr_, \
-                work.dptr_ + m, lwork, static_cast<int *>(info.dptr))); \
+                work.dptr_ + m, lwork, static_cast<int *>(info.GetDptr()))); \
   Storage::Get()->Free(info); \
 }
 // Col-major QR-decomposition results in row-major LQ decomposition.
@@ -987,6 +1083,24 @@ LINALG_GPU_GELQF(DnDgeqrf, double)
 
 // ORGLQ only available with cuda8 or higher.
 #if CUDA_VERSION >= 8000
+
+//#define LINALG_GPU_ORGLQ(fname, DType) \
+//template<> inline \
+//void linalg_orglq<gpu, DType>(const Tensor<gpu, 2, DType>& A, \
+                              //const Tensor<gpu, 1, DType>& work, \
+                              //Stream<gpu> *s) { \
+  //using namespace mxnet; \
+  //using mshadow::gpu; \
+  //CHECK_NOTNULL(s); \
+  //check_gelqf(A, work); \
+  //int m(A.size(0)); \
+  //int lwork(work.size(0) - m); \
+  //Storage::Handle info = Storage::Get()->Alloc(sizeof(int), Context::GPU()); \
+  //CUSOLVER_CALL(cusolver##fname(Stream<gpu>::GetSolverHandle(s), \
+                //A.size(1), m, m, A.dptr_ , A.stride_, work.dptr_, \
+                //work.dptr_ + m, lwork, static_cast<int *>(info.dptr))); \
+  //Storage::Get()->Free(info); \
+//}
 
 #define LINALG_GPU_ORGLQ(fname, DType) \
 template<> inline \
@@ -1002,9 +1116,10 @@ void linalg_orglq<gpu, DType>(const Tensor<gpu, 2, DType>& A, \
   Storage::Handle info = Storage::Get()->Alloc(sizeof(int), Context::GPU()); \
   CUSOLVER_CALL(cusolver##fname(Stream<gpu>::GetSolverHandle(s), \
                 A.size(1), m, m, A.dptr_ , A.stride_, work.dptr_, \
-                work.dptr_ + m, lwork, static_cast<int *>(info.dptr))); \
+                work.dptr_ + m, lwork, static_cast<int *>(info.GetDptr()))); \
   Storage::Get()->Free(info); \
 }
+
 
 #else
 
@@ -1024,6 +1139,24 @@ LINALG_GPU_ORGLQ(DnDorgqr, double)
 // ORGLQ only available with cuda8 or higher.
 #if CUDA_VERSION >= 8000
 
+//#define LINALG_GPU_GELQF_WORKSPACE_QUERY(prefix, DType) \
+//template<> inline \
+//int linalg_gelqf_workspace_query<gpu, DType>(const Tensor<gpu, 2, DType>& A, \
+                                             //Stream<gpu> *s) { \
+  //using namespace mxnet; \
+  //using mshadow::gpu; \
+  //int m(A.size(0)); \
+  //int work1(0); \
+  //CUSOLVER_CALL(cusolverDn##prefix##geqrf_bufferSize(Stream<gpu>::GetSolverHandle(s), \
+                //A.size(1), m, A.dptr_ , A.stride_, &work1)); \
+  //int work2(0);  \
+  //Storage::Handle tau = Storage::Get()->Alloc(sizeof(DType), Context::GPU()); \
+  //CUSOLVER_CALL(cusolverDn##prefix##orgqr_bufferSize(Stream<gpu>::GetSolverHandle(s), \
+                //A.size(1), m, m, A.dptr_ , A.stride_, static_cast<DType *>(tau.dptr), &work2)); \
+  //Storage::Get()->Free(tau); \
+  //return std::max(work1, work2) + m; \
+//}
+
 #define LINALG_GPU_GELQF_WORKSPACE_QUERY(prefix, DType) \
 template<> inline \
 int linalg_gelqf_workspace_query<gpu, DType>(const Tensor<gpu, 2, DType>& A, \
@@ -1037,10 +1170,11 @@ int linalg_gelqf_workspace_query<gpu, DType>(const Tensor<gpu, 2, DType>& A, \
   int work2(0);  \
   Storage::Handle tau = Storage::Get()->Alloc(sizeof(DType), Context::GPU()); \
   CUSOLVER_CALL(cusolverDn##prefix##orgqr_bufferSize(Stream<gpu>::GetSolverHandle(s), \
-                A.size(1), m, m, A.dptr_ , A.stride_, static_cast<DType *>(tau.dptr), &work2)); \
+                A.size(1), m, m, A.dptr_ , A.stride_, static_cast<DType *>(tau.GetDptr()), &work2)); \
   Storage::Get()->Free(tau); \
   return std::max(work1, work2) + m; \
 }
+
 
 #else
 
@@ -1123,6 +1257,23 @@ LINALG_CPU_SYEVD_WORKSPACE_QUERY(dsyevd, double)
 
 // Row-major vs. col-major handled by using upper triangular
 // in cusolver-call.
+//#define LINALG_GPU_SYEVD(fname, DType) \
+//template<> inline \
+//void linalg_syevd<gpu, DType>(const Tensor<gpu, 2, DType>& A, \
+                              //const Tensor<gpu, 1, DType>& L, \
+                              //const Tensor<gpu, 1, DType>& work, \
+                              //Stream<gpu> *s) { \
+  //using namespace mxnet; \
+  //using mshadow::gpu; \
+  //CHECK_NOTNULL(s); \
+  //check_syevd(A, L); \
+  //Storage::Handle info = Storage::Get()->Alloc(sizeof(int), Context::GPU()); \
+  //CUSOLVER_CALL(cusolver##fname(Stream<gpu>::GetSolverHandle(s), \
+                //CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_UPPER, \
+                //A.size(0), A.dptr_ , A.stride_, L.dptr_, work.dptr_, \
+                //work.size(0), static_cast<int *>(info.dptr))); \
+  //Storage::Get()->Free(info); \
+//}
 #define LINALG_GPU_SYEVD(fname, DType) \
 template<> inline \
 void linalg_syevd<gpu, DType>(const Tensor<gpu, 2, DType>& A, \
@@ -1137,7 +1288,7 @@ void linalg_syevd<gpu, DType>(const Tensor<gpu, 2, DType>& A, \
   CUSOLVER_CALL(cusolver##fname(Stream<gpu>::GetSolverHandle(s), \
                 CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_UPPER, \
                 A.size(0), A.dptr_ , A.stride_, L.dptr_, work.dptr_, \
-                work.size(0), static_cast<int *>(info.dptr))); \
+                work.size(0), static_cast<int *>(info.GetDptr()))); \
   Storage::Get()->Free(info); \
 }
 
