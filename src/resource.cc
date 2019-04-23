@@ -65,7 +65,7 @@ struct SpaceAllocator {
   }
   inline void* GetSpace(size_t size) {
     //if (handle.size >= size) return handle.dptr;
-    if (handle.size >= size) return handle.GetDptr;
+    if (handle.size >= size) return handle.GetDptr();
     if (handle.size != 0) {
       Storage::Get()->DirectFree(handle);
     }

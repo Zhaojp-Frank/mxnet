@@ -24,7 +24,7 @@
 #include "./storage_manager.h"
 #include "./naive_storage_manager.h"
 #include "./pooled_storage_manager.h"
-#include "./swap_storage_manager.h"
+#include "./swapadv_storage_manager.h"
 #include "./cpu_shared_storage_manager.h"
 #include "./cpu_device_storage.h"
 #include "./pinned_memory_storage.h"

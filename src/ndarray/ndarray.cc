@@ -716,7 +716,7 @@ void NDArray::SetTBlob() const {
   CHECK(ptr_ != nullptr);
   TShape shape = shape_;
   //char *dptr = static_cast<char*>(ptr_->shandle.dptr);
-  char *dptr = static_cast<char*>(ptr_->shandle.GetDptr);
+  char *dptr = static_cast<char*>(ptr_->shandle.GetDptr());
   auto stype = storage_type();
   if (stype == kDefaultStorage) {
 #if MXNET_USE_MKLDNN == 1

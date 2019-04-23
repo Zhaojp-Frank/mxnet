@@ -46,7 +46,7 @@ namespace storage {
 
 #if MXNET_USE_CUDA
 
-class Pooled_MM_Dptr {
+class Pooled_MM_Dptr : public MM_Dptr {
  public:
   void* Alloc(handle_id_t id, size_t size, void* ptr) {
     dptr_mapping_[id] = ptr;
@@ -55,7 +55,7 @@ class Pooled_MM_Dptr {
 
   void* Free(handle_id_t id) {
     auto it = dptr_mapping_.find(id);
-    void* ptr = *it;
+    void* ptr = it->second;
     dptr_mapping_.erase(it);
     return ptr;
   }
@@ -65,7 +65,7 @@ class Pooled_MM_Dptr {
   }
 
   void* GetDptr(handle_id_t id) {
-    dptr_mapping_.at(id);
+    return dptr_mapping_.at(id);
   }
 
   void SetDptr(handle_id_t id, void* ptr, uint32_t dev_id) {
@@ -87,8 +87,7 @@ class GPUPooledStorageManager final : public StorageManager {
   /*!
    * \brief Default constructor.
    */
-  GPUPooledStorageManager(int device_id) {
-    device_id_  = device_id;
+  GPUPooledStorageManager() {
     infinite_memory_ = dmlc::GetEnv("MXNET_SWAP_INFINITE_MEMORY", 0);
     reserve_ = dmlc::GetEnv("MXNET_GPU_MEM_POOL_RESERVE", 5);
     page_size_ = dmlc::GetEnv("MXNET_GPU_MEM_POOL_PAGE_SIZE", 4096);
@@ -149,7 +148,6 @@ class GPUPooledStorageManager final : public StorageManager {
   const size_t NDEV = 32;
   // memory pool
   std::unordered_map<size_t, std::vector<void*>> memory_pool_;
-  int device_id_;
   DISALLOW_COPY_AND_ASSIGN(GPUPooledStorageManager);
 };  // class GPUPooledStorageManager
 

@@ -21,7 +21,7 @@
 namespace mxnet {
 namespace storage {
 
-class SA_MM_Dptr {
+class SA_MM_Dptr : public MM_Dptr {
  public:
   SA_MM_Dptr() {
     memory_size_ = 10L * 1024 * 1024 * 1024;
@@ -50,17 +50,18 @@ class SA_MM_Dptr {
     void* address = *(mempools_.at(mempool).begin());
     mempools_.at(mempool).erase(address);
     hdl_dptr_mapping_[id] = address;
+    hdl_size_mapping_[id] = size;
     return address;
   }
 
   void* Free(handle_id_t id) {
     //std::lock_guard<std::mutex> lock(Storage::Get()->GetMutex(Context::kGPU));
-    size_t size = hdl_size_.at(id);
+    size_t size = hdl_size_mapping_.at(id);
     size_t mempool = rsize_to_mempool_.at(size);
     auto it = hdl_dptr_mapping_.find(id);
-    void* address = *it;
-    handle_dptr_mapping_.erase(it);
-    CHECK_EQ(used_mempools_[mempool].erase(address, 1));
+    void* address = it->second;
+    hdl_dptr_mapping_.erase(it);
+    CHECK_EQ(used_mempools_[mempool].erase(address), 1);
     mempools_.at(mempool).emplace(address);
     return nullptr;
   }
@@ -71,7 +72,7 @@ class SA_MM_Dptr {
   }
 
   void* GetDptr(handle_id_t id) {
-    hdl_dptr_mapping_.at(id);
+    return hdl_dptr_mapping_.at(id);
   }
 
   void SetDptr(handle_id_t id, void* ptr, uint32_t dev_id) {
@@ -82,6 +83,7 @@ class SA_MM_Dptr {
   // Handle to dptr mapping. If the result it nulldptr, the handle is swapped
   // out.
   std::unordered_map<handle_id_t, void*> hdl_dptr_mapping_;
+  std::unordered_map<handle_id_t, size_t> hdl_size_mapping_;
   // Let we know which device does the handle belong to.
   // Not useful now since we have not supported multiple devices.
   std::unordered_map<handle_id_t, size_t> hdl_dev_mapping_;
@@ -108,7 +110,6 @@ class SA_MM_Dptr {
   std::vector<std::unordered_set<void*>> used_mempools_;
   // Used memory
   size_t used_memory_ = 0;
-  int device_id_;
 };
 
 #if MXNET_USE_CUDA
@@ -127,8 +128,8 @@ class GPUSwapAdvStorageManager final : public StorageManager {
    */
   ~GPUSwapAdvStorageManager() {}
   void Alloc(Storage::Handle* handle) {
-    MM_DPTR()->Alloc(handle->ID(), handle->size)
-  };
+    MM_DPTR()->Alloc(handle->ID(), handle->size, nullptr);
+  }
   void Free(Storage::Handle handle) { MM_DPTR()->Free(handle.ID()); }
   void DirectFree(Storage::Handle handle) { MM_DPTR()->Free(handle.ID()); }
   DISALLOW_COPY_AND_ASSIGN(GPUSwapAdvStorageManager);
