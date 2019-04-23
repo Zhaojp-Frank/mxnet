@@ -48,7 +48,7 @@ namespace storage {
 
 class Pooled_MM_Dptr {
  public:
-  void* Alloc(handle_id_t id, void* ptr) {
+  void* Alloc(handle_id_t id, size_t size, void* ptr) {
     dptr_mapping_[id] = ptr;
     return ptr;
   }
@@ -184,12 +184,12 @@ void GPUPooledStorageManager::Alloc(Storage::Handle* handle) {
       }
     }
     used_memory_ += size;
-    handle->Alloc(handle->ID(), ret);
+    MM_DPTR()->Alloc(handle->ID(), size, ret);
   } else {
     auto&& reuse_pool = reuse_it->second;
     auto ret = reuse_pool.back();
     reuse_pool.pop_back();
-    handle->Alloc(handle->ID(), ret);
+    MM_DPTR()->Alloc(handle->ID(), size, ret);
   }
 }
 
@@ -344,11 +344,11 @@ void GPUPooledRoundedStorageManager::Alloc(Storage::Handle* handle) {
       LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
     }
     used_memory_ += size;
-    MM_DPTR()->Alloc(handle->ID(), ret);
+    MM_DPTR()->Alloc(handle->ID(), size, ret);
   } else {
     auto ret = reuse_pool.back();
     reuse_pool.pop_back();
-    MM_DPTR()->Alloc(handle->ID(), ret);
+    MM_DPTR()->Alloc(handle->ID(), size, ret);
   }
 }
 

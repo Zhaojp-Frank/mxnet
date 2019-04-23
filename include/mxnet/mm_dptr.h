@@ -14,7 +14,7 @@ class MM_Dptr {
   // The ptr parameter is used for pooled_storage_manager since we don't want to
   // dramatically change pooled_storage_manager.
   // (Should on-demand swap memory manager also be the same implementation?)
-  virtual void* Alloc(handle_id_t id, void* ptr);
+  virtual void* Alloc(handle_id_t id, size_t size, void* ptr);
 
   // Free an address captured by the handle.
   // This function should be used exclusively for storage managers.
