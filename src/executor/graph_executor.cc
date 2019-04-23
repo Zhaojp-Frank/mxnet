@@ -327,8 +327,8 @@ void GraphExecutor::Init(nnvm::Symbol symbol,
       auto _context = g.attrs["context"];
       auto _device = g.attrs["device"];
       std::cout << "Before SA_LoadGraph" << std::endl;
-      g = nnvm::pass::SA_LoadGraph(g, "SwapEntry", "SwapoutSink", "Swapout",
-                                   "Swapin", &num_forward_inputs_,
+      g = nnvm::pass::SA_LoadGraph(g, "_grad_add", "SwapEntry", "SwapoutSink",
+                                   "Swapout", "Swapin", &num_forward_inputs_,
                                    &num_forward_outputs_);
 
       const auto& idx = g.indexed_graph();
