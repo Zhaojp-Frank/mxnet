@@ -33,8 +33,8 @@ class MM_Dptr {
   // Can be called by both handles and storage managers.
   virtual void  SetDptr(handle_id_t id, void* ptr, uint32_t dev_id);
 };  // class MM_Dptr
-}   // namespace mxnet
 
 MM_Dptr* MM_DPTR();
 
+}   // namespace mxnet
 #endif // MXNET_MM_DPTR_H_
