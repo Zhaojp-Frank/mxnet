@@ -7,10 +7,11 @@
 #include <unordered_map>
 #include <algorithm>
 #include <vector>
+#include <fstream>
 
 namespace mxnet {
 namespace storage {
-class SA_MM_Dptr : public MM_Dptr {
+class SA_MM_Dptr : virtual public MM_Dptr {
  public:
   SA_MM_Dptr() {
     memory_size_ = 10L * 1024 * 1024 * 1024;
@@ -100,7 +101,21 @@ class SA_MM_Dptr : public MM_Dptr {
   // Used memory
   size_t used_memory_ = 0;
 };
+
+void SA_MM_Dptr::ReadAllocationRst() {
+  std::cout << "ReadAllocationRst" << std::endl;
+  std::ifstream ifs("memalloc.rst");
+  std::string line;
+
+  size_t next = 0, last = 0;
+  std::getline(ifs, line);
+  while ((next = line.find(",", last)) != std::string::npos) {
+    next = line.find(",", last);
+    uint32_t size = std::stoi(line.substr(last, next - last));
+    mempool_to_size_.emplace_back(size);
+  }
+}
+
 }  // namespace storage
 }  // namespace mxnet
 #endif
-

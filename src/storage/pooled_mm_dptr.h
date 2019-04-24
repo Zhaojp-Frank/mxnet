@@ -10,7 +10,7 @@
 namespace mxnet {
 namespace storage {
 
-class Pooled_MM_Dptr : public MM_Dptr {
+class Pooled_MM_Dptr : virtual public MM_Dptr {
  public:
   void* Alloc(handle_id_t id, size_t size, void* ptr) {
     dptr_mapping_[id] = ptr;

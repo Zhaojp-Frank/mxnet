@@ -62,20 +62,20 @@ class Storage {
     int shared_id{-1};
 
     void SetDptr(void* ptr, uint32_t dev_id) {
-      MM_DPTR()->SetDptr(id_, ptr, dev_id);
+        storage::MM_DPTR()->SetDptr(id_, ptr, dev_id);
     }
 
     void* GetDptr() const {
-      return MM_DPTR()->GetDptr(id_);
+      return storage::MM_DPTR()->GetDptr(id_);
     }
 
-    handle_id_t ID() {
+    storage::handle_id_t ID() {
       return id_;
     }
   private:
-    static std::atomic<handle_id_t> base_id_;
+    static std::atomic<storage::handle_id_t> base_id_;
     //void* dptr_;
-    handle_id_t id_;
+    storage::handle_id_t id_;
   }; // class handle
   /*!
    * \brief Allocate a new contiguous memory for a given size.
