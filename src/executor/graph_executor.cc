@@ -758,6 +758,9 @@ void GraphExecutor::FinishInitGraph(nnvm::Symbol symbol,
   this->InitCachedOps();
 #if SWAP_ADVISOR_FLOW_TRACE
   std::cout << "After InitCachedOps" << std::endl;
+#endif
+  this->SaveEntryMapping();
+#if SWAP_ADVISOR_FLOW_TRACE
   std::cout << "Before InitOpSegs" << std::endl;
 #endif
   this->InitOpSegs();
@@ -1178,17 +1181,7 @@ void GraphExecutor::InitCachedOps() {
   // setup the array and requirements.
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
-    if (inode.source->is_variable()) {
-      uint32_t eid = idx.entry_id(nid, 0);
-#if SWAP_ADVISOR_FLOW_TRACE
-      std::cout << "[InitCachedOps var] Name: " << inode.source->attrs.name
-                << ", NID: " << nid << ", EID: " << eid << ", handle id: "
-                << data_entry_[eid].storage_handle().ID() << std::endl;
-#endif
-      storage::MM_DPTR()->RegisterEntry(nid, 0, data_entry_[eid].storage_handle().ID(),
-                                        true);
-      continue;
-    }
+    if (inode.source->is_variable()) continue;
     op_nodes_[nid].opr_name = inode.source->op()->name.c_str();
     if (skip_plus_node.at(nid)) {
       op_nodes_[nid].skip_exec_node = true; continue;
@@ -1205,13 +1198,6 @@ void GraphExecutor::InitCachedOps() {
     // detect inplace requirement
     for (uint32_t index = 0; index < inode.source->num_outputs(); ++index) {
       uint32_t eid = idx.entry_id(nid, index);
-#if SWAP_ADVISOR_FLOW_TRACE
-      std::cout << "[InitCachedOps op] Name: " << inode.source->attrs.name
-                << ", NID: " << nid << ", EID: " << eid << ", handle id: "
-                << data_entry_[eid].storage_handle().ID() << std::endl;
-#endif
-      storage::MM_DPTR()->RegisterEntry(nid, index,
-                               data_entry_[eid].storage_handle().ID(), false);
       exec->out_array.push_back(data_entry_[eid]);
       if (addto_entry.at(eid) != 0) {
         exec->req.push_back(kAddTo);
@@ -1300,6 +1286,56 @@ void GraphExecutor::InitCachedOps() {
         op_nodes_[nid].opr_name);
     op_nodes_[nid].mutate_vars = mutate_vars;
     op_nodes_[nid].use_vars = use_vars;
+  }
+}
+
+void GraphExecutor::SaveEntryMapping() {
+  const auto& idx = graph_.indexed_graph();
+  std::vector<std::vector<std::vector<size_t>>> output_handles;
+  bool export_graph = dmlc::GetEnv("MXNET_SWAP_EXPORT_GRAPH", 0);
+  for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
+    const auto& inode = idx[nid];
+    std::vector<std::vector<size_t>> output_handles_;
+    if (inode.source->is_variable()) {
+      uint32_t eid = idx.entry_id(nid, 0);
+      uint32_t hid = data_entry_[eid].storage_handle().ID();
+#if SWAP_ADVISOR_FLOW_TRACE
+      std::cout << "[InitCachedOps var] Name: " << inode.source->attrs.name
+                << ", NID: " << nid << ", EID: " << eid << ", handle id: "
+                << hid << std::endl;
+#endif
+      storage::MM_DPTR()->RegisterEntry(nid, 0, hid, true);
+      if (export_graph) {
+        output_handles_.emplace_back(std::vector<size_t>());
+        output_handles_[0].push_back(nid);
+        output_handles_[0].push_back(0);
+        output_handles_[0].push_back(hid);
+      }
+    } else {
+      for (uint32_t index = 0; index < inode.source->num_outputs(); ++index) {
+        uint32_t eid = idx.entry_id(nid, index);
+        uint32_t hid = data_entry_[eid].storage_handle().ID();
+#if SWAP_ADVISOR_FLOW_TRACE
+        std::cout << "[InitCachedOps op] Name: " << inode.source->attrs.name
+                  << ", NID: " << nid << ", EID: " << eid << ", handle id: "
+                  << hid << std::endl;
+#endif
+        storage::MM_DPTR()->RegisterEntry(nid, index, hid, false);
+        if (export_graph) {
+          output_handles_.emplace_back(std::vector<size_t>());
+          output_handles_[index].push_back(nid);
+          output_handles_[index].push_back(index);
+          output_handles_[index].push_back(hid);
+        }
+      }
+    }
+    if (export_graph) {
+      output_handles.emplace_back(output_handles_);
+    }
+  }
+  if (export_graph) {
+    graph_.attrs["output_handles"] =
+      std::make_shared<dmlc::any>(std::move(output_handles));
   }
 }
 

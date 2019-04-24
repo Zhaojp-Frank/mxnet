@@ -193,6 +193,7 @@ class GraphExecutor : public Executor {
                       const std::vector<OpReqType>& grad_req_types);
   // initialize the cached operator
   void InitCachedOps();
+  void SaveEntryMapping();
   // initialize the opr segments for bulk exec
   void InitOpSegs();
   // initialize the resources in the graph
