@@ -1,7 +1,7 @@
 #include <unordered_map>
 #include <mxnet/mm_dptr.h>
-#include "./pooled_storage_manager.h"
-#include "./swapadv_storage_manager.h"
+#include "./pooled_mm_dptr.h"
+#include "./swapadv_mm_dptr.h"
 
 namespace mxnet {
 namespace storage {

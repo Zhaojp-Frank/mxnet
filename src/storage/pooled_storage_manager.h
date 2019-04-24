@@ -46,38 +46,6 @@ namespace storage {
 
 #if MXNET_USE_CUDA
 
-class Pooled_MM_Dptr : public MM_Dptr {
- public:
-  void* Alloc(handle_id_t id, size_t size, void* ptr) {
-    dptr_mapping_[id] = ptr;
-    return ptr;
-  }
-
-  void* Free(handle_id_t id) {
-    auto it = dptr_mapping_.find(id);
-    void* ptr = it->second;
-    dptr_mapping_.erase(it);
-    return ptr;
-  }
-
-  void Release(handle_id_t id, void* ptr) {
-    dptr_mapping_[id] = ptr;
-  }
-
-  void* GetDptr(handle_id_t id) {
-    return dptr_mapping_.at(id);
-  }
-
-  void SetDptr(handle_id_t id, void* ptr, uint32_t dev_id) {
-    dptr_mapping_[id] = ptr;
-  }
-
- private:
-  std::unordered_map<handle_id_t, void*> dptr_mapping_;
-};
-
-
-
 /*!
  * \brief Storage manager with a memory pool on gpu. Memory chunks are reused based on exact size
  * match.
