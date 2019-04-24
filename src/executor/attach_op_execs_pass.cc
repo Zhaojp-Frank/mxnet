@@ -122,7 +122,13 @@ class StatefulComputeExecutor : public StorageFallbackOpExecutor {
     InvalidateOutputs(out_array, req);
 #endif
     PreFCompute(is_gpu);
+#if SWAP_ADVISOR_FLOW_TRACE
+    std::cout << "Before fcompute_ 1" << std::endl;
+#endif
     fcompute_(state_, op_ctx, in_data_, req, out_data_);
+#if SWAP_ADVISOR_FLOW_TRACE
+    std::cout << "After fcompute_ 1" << std::endl;
+#endif
     PostFCompute(is_gpu);
   }
 
@@ -199,7 +205,13 @@ class FComputeExecutor : public StorageFallbackOpExecutor {
     InvalidateOutputs(out_array, req);
 #endif
     PreFCompute(is_gpu);
+#if SWAP_ADVISOR_FLOW_TRACE
+    std::cout << "Before fcompute_ 2" << std::endl;
+#endif
     fcompute_(attrs_, op_ctx, in_data_, req, out_data_);
+#if SWAP_ADVISOR_FLOW_TRACE
+    std::cout << "After fcompute_ 2" << std::endl;
+#endif
     PostFCompute(is_gpu);
   }
 

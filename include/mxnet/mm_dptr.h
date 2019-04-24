@@ -28,6 +28,11 @@ class MM_Dptr {
   // This function should be used exclusively for storage managers.
   virtual void  Release(handle_id_t id, void* ptr) = 0;
 
+  // Register the mapping from an entry to a handle. The mapping is
+  // many-(entry)-to-one(handle).
+  virtual void  RegisterEntry(uint32_t nid, uint32_t idx, handle_id_t hid,
+                              bool is_var) = 0;
+
   // Can be called by both handles and storage managers.
   virtual void* GetDptr(handle_id_t id) = 0;
 

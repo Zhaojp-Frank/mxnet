@@ -61,6 +61,11 @@ class SA_MM_Dptr : virtual public MM_Dptr {
     CHECK(0);
   }
 
+  void RegisterEntry(uint32_t nid, uint32_t idx, handle_id_t hid, bool is_var) {
+    uint32_t eid = nid * hash_const + idx;
+    entry_hdl_mapping_[eid] = std::make_pair(hid, is_var);
+  }
+
   void* GetDptr(handle_id_t id) {
     return hdl_dptr_mapping_.at(id);
   }
@@ -73,11 +78,15 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   // Handle to dptr mapping. If the result it nulldptr, the handle is swapped
   // out.
   std::unordered_map<handle_id_t, void*> hdl_dptr_mapping_;
+  // Handle to size mapping.
   std::unordered_map<handle_id_t, size_t> hdl_size_mapping_;
   // Let we know which device does the handle belong to.
   // Not useful now since we have not supported multiple devices.
   std::unordered_map<handle_id_t, size_t> hdl_dev_mapping_;
+  // An entry (NDArray) to handle mapping.
+  std::unordered_map<uint32_t, std::pair<handle_id_t, bool>> entry_hdl_mapping_;
 
+  static constexpr uint32_t hash_const = 33;
   // Read the memory allocation result from the SwapAdvisor.
   void ReadAllocationRst();
   // Pointer to the main memory allocation.
