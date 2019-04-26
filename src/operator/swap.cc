@@ -137,7 +137,9 @@ void SwapoutCompute(const nnvm::NodeAttrs& attrs,
   (void)inputs;
   (void)req;
   (void)outputs;
+#if SWAP_ADVISOR_FLOW_TRACE
   std::cout << "SwapoutCompute" << std::endl;
+#endif
 }
 
 NNVM_REGISTER_OP(Swapout)
@@ -181,7 +183,9 @@ void SwapinCompute(const nnvm::NodeAttrs& attrs,
   (void)inputs;
   (void)req;
   (void)outputs;
+#if SWAP_ADVISOR_FLOW_TRACE
   std::cout << "SwapinCompute" << std::endl;
+#endif
 }
 
 NNVM_REGISTER_OP(Swapin)

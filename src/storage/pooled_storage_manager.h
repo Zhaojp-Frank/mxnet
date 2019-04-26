@@ -45,6 +45,7 @@ namespace mxnet {
 namespace storage {
 
 #if MXNET_USE_CUDA
+
 /*!
  * \brief Storage manager with a memory pool on gpu. Memory chunks are reused based on exact size
  * match.
@@ -86,7 +87,8 @@ class GPUPooledStorageManager final : public StorageManager {
  private:
   void DirectFreeNoLock(Storage::Handle handle) {
     if (!infinite_memory_) {
-      cudaError_t err = cudaFree(handle.dptr);
+      //cudaError_t err = cudaFree(handle.dptr);
+      cudaError_t err = cudaFree(MM_DPTR()->Free(handle.ID()));
       // ignore unloading error, as memory has already been recycled
       if (err != cudaSuccess && err != cudaErrorCudartUnloading) {
         LOG(FATAL) << "CUDA: " << cudaGetErrorString(err);
@@ -148,12 +150,12 @@ void GPUPooledStorageManager::Alloc(Storage::Handle* handle) {
       }
     }
     used_memory_ += size;
-    handle->dptr = ret;
+    MM_DPTR()->Alloc(handle->ID(), size, ret);
   } else {
     auto&& reuse_pool = reuse_it->second;
     auto ret = reuse_pool.back();
     reuse_pool.pop_back();
-    handle->dptr = ret;
+    MM_DPTR()->Alloc(handle->ID(), size, ret);
   }
 }
 
@@ -161,14 +163,17 @@ void GPUPooledStorageManager::Free(Storage::Handle handle) {
   std::lock_guard<std::mutex> lock(Storage::Get()->GetMutex(Context::kGPU));
   size_t size = std::max(handle.size, page_size_);
   auto&& reuse_pool = memory_pool_[size];
-  reuse_pool.push_back(handle.dptr);
+  //reuse_pool.push_back(handle.dptr);
+  reuse_pool.push_back(MM_DPTR()->Free(handle.ID()));
 }
 
 void GPUPooledStorageManager::ReleaseAll() {
+  std::cout << "GPUPooledStorageManager ReleaseAll()" << std::endl;
   for (auto&& i : memory_pool_) {
     for (auto&& j : i.second) {
       Storage::Handle handle;
-      handle.dptr = j;
+      //handle.dptr = j;
+      MM_DPTR()->Release(handle.ID(), j);
       handle.size = i.first;
       DirectFreeNoLock(handle);
     }
@@ -257,7 +262,8 @@ class GPUPooledRoundedStorageManager final : public StorageManager {
   }
 
   void DirectFreeNoLock(Storage::Handle handle) {
-    cudaError_t err = cudaFree(handle.dptr);
+    //cudaError_t err = cudaFree(handle.dptr);
+    cudaError_t err = cudaFree(MM_DPTR()->Free(handle.ID()));
     size_t size = get_size(get_bucket(handle.size));
     // ignore unloading error, as memory has already been recycled
     if (err != cudaSuccess && err != cudaErrorCudartUnloading) {
@@ -304,11 +310,11 @@ void GPUPooledRoundedStorageManager::Alloc(Storage::Handle* handle) {
       LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
     }
     used_memory_ += size;
-    handle->dptr = ret;
+    MM_DPTR()->Alloc(handle->ID(), size, ret);
   } else {
     auto ret = reuse_pool.back();
     reuse_pool.pop_back();
-    handle->dptr = ret;
+    MM_DPTR()->Alloc(handle->ID(), size, ret);
   }
 }
 
@@ -316,16 +322,19 @@ void GPUPooledRoundedStorageManager::Free(Storage::Handle handle) {
   std::lock_guard<std::mutex> lock(Storage::Get()->GetMutex(Context::kGPU));
   int bucket = get_bucket(handle.size);
   auto&& reuse_pool = memory_pool_[bucket];
-  reuse_pool.push_back(handle.dptr);
+  //reuse_pool.push_back(handle.dptr);
+  reuse_pool.push_back(MM_DPTR()->GetDptr(handle.ID()));
 }
 
 void GPUPooledRoundedStorageManager::ReleaseAll() {
+  std::cout << "GPUPooledRoundedStorageManager ReleaseAll()" << std::endl;
   for (size_t i = 0; i < memory_pool_.size(); i++) {
     int size = get_size(i);
     for (auto& j : memory_pool_[i]) {
       Storage::Handle handle;
       handle.size = size;
-      handle.dptr = j;
+      //handle.dptr = j;
+      MM_DPTR()->Release(handle.ID(), j);
       DirectFreeNoLock(handle);
     }
     memory_pool_[i].clear();

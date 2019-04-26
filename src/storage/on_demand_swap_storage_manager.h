@@ -77,6 +77,7 @@ class GPUOnDemandSwapStorageManager final : public StorageManager {
   void DirectFreeNoLock(Storage::Handle handle) {
     size_t size = handle.size + NDEV;
     // (FIXME) handle.Free();
+    MM_DPTR()->Free(handle.ID());
     used_memory_ -= size;
   }
  
@@ -120,11 +121,15 @@ void GPUOnDemandSwapStorageManager::Alloc(Storage::Handle* handle) {
     }
     used_memory_ += size;
     // (FIXME) handle->SetDptr(ret, device_id_);
+    MM_DPTR()->Alloc(handle->ID(), size, ret);
+    MM_DPTR()->SetDptr(handle->ID(), ret, device_id_);
   } else {
     auto&& reuse_pool = reuse_it->second;
     auto ret = reuse_pool.back();
     reuse_pool.pop_back();
     // (FIXME) handle->SetDptr(ret, device_id_);
+    MM_DPTR()->Alloc(handle->ID(), size, ret);
+    MM_DPTR()->SetDptr(handle->ID(), ret, device_id_);
   }
 }
 
@@ -135,8 +140,11 @@ void GPUOnDemandSwapStorageManager::Free(Storage::Handle handle) {
     size_t size = handle.size + NDEV;
     auto&& reuse_pool = memory_pool_[size];
     // (FIXME) reuse_pool.push_back(handle.GetDptr());
+    reuse_pool.push_back(MM_DPTR()->GetDptr(handle.ID()));
     // The address will be set to a different handle later
     // (FIXME) handle.FreeDptr();
+    MM_DPTR()->Free(handle.ID());
+    
   } else {
     DirectFreeNoLock(handle);
   }

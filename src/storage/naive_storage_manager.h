@@ -49,7 +49,8 @@ class NaiveStorageManager final : public StorageManager {
   void Free(Storage::Handle handle) override;
 
   void DirectFree(Storage::Handle handle) override {
-    DeviceStorage::Free(handle.dptr);
+    //DeviceStorage::Free(handle.dptr);
+    DeviceStorage::Free(handle.GetDptr());
   }
 
  private:
@@ -58,12 +59,14 @@ class NaiveStorageManager final : public StorageManager {
 
 template <class DeviceStorage>
 void NaiveStorageManager<DeviceStorage>::Alloc(Storage::Handle* handle) {
-  handle->dptr = DeviceStorage::Alloc(handle->size);
+  //handle->dptr = DeviceStorage::Alloc(handle->size);
+  handle->SetDptr(DeviceStorage::Alloc(handle->size), -1);
 }
 
 template <class DeviceStorage>
 void NaiveStorageManager<DeviceStorage>::Free(Storage::Handle handle) {
-  DeviceStorage::Free(handle.dptr);
+  //DeviceStorage::Free(handle.dptr);
+  DeviceStorage::Free(handle.GetDptr());
 }
 
 }  // namespace storage

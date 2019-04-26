@@ -57,6 +57,9 @@ inline bool SetupDefaultBlobsIn(const std::vector<NDArray>& src,
                                 std::unordered_map<uint32_t, uint32_t> *idx_map) {
   bool require_cast = false;
   for (size_t i = 0; i < src.size(); i++) {
+#if SWAP_ADVISOR_FLOW_TRACE 
+    std::cout << "SetupDefaultBlobsIn " << i << std::endl;
+#endif
     auto& nd = src[i];
     bool is_default = nd.storage_type() == kDefaultStorage;
 #if MXNET_USE_MKLDNN == 1
@@ -78,6 +81,9 @@ inline bool SetupDefaultBlobsIn(const std::vector<NDArray>& src,
       blobs->push_back(nd.data());
     }
   }
+#if SWAP_ADVISOR_FLOW_TRACE 
+  std::cout << "SetupDefaultBlobsIn end" << std::endl;
+#endif
   return require_cast;
 }
 
@@ -89,6 +95,9 @@ inline bool SetupDefaultBlobsOut(const std::vector<NDArray>& src,
                                  std::vector<NDArray> *temp_dst) {
   bool require_cast = false;
   for (size_t i = 0; i < src.size(); i++) {
+#if SWAP_ADVISOR_FLOW_TRACE 
+    std::cout << "SetupDefaultBlobsOut " << i << std::endl;
+#endif
     auto& nd = src[i];
     bool is_default = nd.storage_type() == kDefaultStorage;
 #if MXNET_USE_MKLDNN == 1
@@ -122,10 +131,14 @@ inline bool SetupDefaultBlobsOut(const std::vector<NDArray>& src,
       temp_dst->emplace_back(temp);
       blobs->emplace_back(temp.data());
       require_cast = true;
+      CHECK(0);
     } else {
       blobs->push_back(nd.data());
     }
   }
+#if SWAP_ADVISOR_FLOW_TRACE 
+  std::cout << "SetupDefaultBlobsOut end" << std::endl;
+#endif
   return require_cast;
 }
 

@@ -25,6 +25,7 @@
 #include "./naive_storage_manager.h"
 #include "./pooled_storage_manager.h"
 #include "./on_demand_swap_storage_manager.h"
+#include "./swapadv_storage_manager.h"
 #include "./cpu_shared_storage_manager.h"
 #include "./cpu_device_storage.h"
 #include "./pinned_memory_storage.h"
@@ -133,6 +134,9 @@ void StorageImpl::Alloc(Storage::Handle* handle) {
                     handle->ctx.real_dev_id());
               //ptr = new storage::GPUPooledStorageManager();
               LOG(INFO) << "Using GPUOnDemandSwapStorageManager.";
+            } else if (strategy == "SwapAdv") {
+              ptr = new storage::GPUSwapAdvStorageManager();
+              LOG(INFO) << "Using GPUSwapAdvStorageManager.";
             } else {
               if (strategy != "Naive") {
                   LOG(FATAL) << "Unknown memory pool strategy specified: " << strategy << ".";
@@ -208,4 +212,7 @@ Storage* Storage::Get() {
   static Storage *ptr = _GetSharedRef().get();
   return ptr;
 }
+
+std::atomic<storage::handle_id_t> Storage::Handle::base_id_(0);
+
 }  // namespace mxnet

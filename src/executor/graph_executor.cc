@@ -23,6 +23,7 @@
  * \brief graph executor
  */
 #include <mxnet/base.h>
+#include <mxnet/mm_dptr.h>
 #include <nnvm/graph.h>
 #include <nnvm/pass_functions.h>
 #include <vector>
@@ -302,6 +303,9 @@ void GraphExecutor::Init(nnvm::Symbol symbol,
                          Executor* shared_exec,
                          const nnvm::NodeEntryMap<NDArray>& feed_dict) {
   // create in_arg_ctxes, arg_grad_ctxes, aux_state_ctxes
+#if SWAP_ADVISOR_FLOW_TRACE
+  std::cout << "Before initializing anything" << std::endl;
+#endif
   auto get_ctx1 = [](const NDArray& nd) { return nd.ctx(); };
   auto get_ctx2 = [default_ctx](const NDArray& nd) -> Context {
     if (nd.is_none()) return default_ctx;
@@ -327,8 +331,8 @@ void GraphExecutor::Init(nnvm::Symbol symbol,
       auto _context = g.attrs["context"];
       auto _device = g.attrs["device"];
       std::cout << "Before SA_LoadGraph" << std::endl;
-      g = nnvm::pass::SA_LoadGraph(g, "SwapEntry", "SwapoutSink", "Swapout",
-                                   "Swapin", &num_forward_inputs_,
+      g = nnvm::pass::SA_LoadGraph(g, "_grad_add", "SwapEntry", "SwapoutSink",
+                                   "Swapout", "Swapin", &num_forward_inputs_,
                                    &num_forward_outputs_);
 
       const auto& idx = g.indexed_graph();
@@ -705,22 +709,38 @@ void GraphExecutor::FinishInitGraph(nnvm::Symbol symbol,
   }
 
   g = AttachOpExecs(g);
+#if SWAP_ADVISOR_FLOW_TRACE
+  std::cout << "AttachOpResources" << std::endl;
+#endif
   AttachOpResources(g);
   graph_ = std::move(g);
 
+#if SWAP_ADVISOR_FLOW_TRACE
+  std::cout << "Before InitDataEntryMemory" << std::endl;
+#endif
   if (shared_exec != nullptr) {
     this->InitDataEntryMemory(&(dynamic_cast<GraphExecutor*>(shared_exec)->data_pool_));
   } else {
     this->InitDataEntryMemory(nullptr);
   }
+#if SWAP_ADVISOR_FLOW_TRACE
+  std::cout << "After InitDataEntryMemory" << std::endl;
+#endif
 
   {
+#if SWAP_ADVISOR_FLOW_TRACE
+    std::cout << "Before initializing output arrays" << std::endl;
+#endif
     // initialize output arrays
     auto& idx = graph_.indexed_graph();
     for (size_t i = 0; i < num_forward_outputs_; ++i) {
       auto& e = idx.outputs()[i];
       output_arrays_.push_back(data_entry_[idx.entry_id(e)]);
     }
+#if SWAP_ADVISOR_FLOW_TRACE
+    std::cout << "After initializing output arrays" << std::endl;
+    std::cout << "Before initializing head gradient arrays" << std::endl;
+#endif
     // initialize head gradient array
     head_grad_array_.resize(symbol.outputs.size());
     for (size_t i = num_forward_inputs_; i < idx.input_nodes().size(); ++i) {
@@ -728,9 +748,25 @@ void GraphExecutor::FinishInitGraph(nnvm::Symbol symbol,
       uint32_t oid = head_grad_map_.at(idx[nid].source);
       head_grad_array_[oid] = data_entry_[idx.entry_id(nid, 0)];
     }
+#if SWAP_ADVISOR_FLOW_TRACE
+    std::cout << "After initializing head gradient arrays" << std::endl;
+#endif
   }
+#if SWAP_ADVISOR_FLOW_TRACE
+  std::cout << "Before InitCachedOps" << std::endl;
+#endif
   this->InitCachedOps();
+#if SWAP_ADVISOR_FLOW_TRACE
+  std::cout << "After InitCachedOps" << std::endl;
+#endif
+  this->SaveEntryMapping();
+#if SWAP_ADVISOR_FLOW_TRACE
+  std::cout << "Before InitOpSegs" << std::endl;
+#endif
   this->InitOpSegs();
+#if SWAP_ADVISOR_FLOW_TRACE
+  std::cout << "After InitOpSegs" << std::endl;
+#endif
 }
 
 /*!
@@ -1217,11 +1253,16 @@ void GraphExecutor::InitCachedOps() {
         on_complete();
       }, Context::CPU(), {}, all_vars, FnProperty::kNormal, 0,
       "SetupExec");
-    auto exec_fun = [exec, is_async, is_gpu] (
+    std::string name = inode.source->attrs.name;
+    auto exec_fun = [exec, is_async, is_gpu, nid, name] (
         RunContext ctx, Engine::CallbackOnComplete on_complete) {
       if (is_async) {
         exec->op_ctx.async_on_complete = on_complete;
       }
+#if SWAP_ADVISOR_FLOW_TRACE
+      std::cout << "[RUNNING]: ID = " <<  nid << ", " << "NAME = " << name
+                << std::endl;
+#endif
       exec->Run(ctx, is_gpu);
       // call on complete only if it is async op
       if (!is_async) {
@@ -1235,6 +1276,9 @@ void GraphExecutor::InitCachedOps() {
         }
         on_complete();
       }
+#if SWAP_ADVISOR_FLOW_TRACE
+      std::cout << "[RUNNING]: DONE, " << nid << std::endl;
+#endif
     };
     // setup the vars
     op_nodes_[nid].cached_opr = Engine::Get()->NewOperator(
@@ -1242,6 +1286,56 @@ void GraphExecutor::InitCachedOps() {
         op_nodes_[nid].opr_name);
     op_nodes_[nid].mutate_vars = mutate_vars;
     op_nodes_[nid].use_vars = use_vars;
+  }
+}
+
+void GraphExecutor::SaveEntryMapping() {
+  const auto& idx = graph_.indexed_graph();
+  std::vector<std::vector<std::vector<size_t>>> output_handles;
+  bool export_graph = dmlc::GetEnv("MXNET_SWAP_EXPORT_GRAPH", 0);
+  for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
+    const auto& inode = idx[nid];
+    std::vector<std::vector<size_t>> output_handles_;
+    if (inode.source->is_variable()) {
+      uint32_t eid = idx.entry_id(nid, 0);
+      uint32_t hid = data_entry_[eid].storage_handle().ID();
+#if SWAP_ADVISOR_FLOW_TRACE
+      std::cout << "[InitCachedOps var] Name: " << inode.source->attrs.name
+                << ", NID: " << nid << ", EID: " << eid << ", handle id: "
+                << hid << std::endl;
+#endif
+      storage::MM_DPTR()->RegisterEntry(nid, 0, hid, true);
+      if (export_graph) {
+        output_handles_.emplace_back(std::vector<size_t>());
+        output_handles_[0].push_back(nid);
+        output_handles_[0].push_back(0);
+        output_handles_[0].push_back(hid);
+      }
+    } else {
+      for (uint32_t index = 0; index < inode.source->num_outputs(); ++index) {
+        uint32_t eid = idx.entry_id(nid, index);
+        uint32_t hid = data_entry_[eid].storage_handle().ID();
+#if SWAP_ADVISOR_FLOW_TRACE
+        std::cout << "[InitCachedOps op] Name: " << inode.source->attrs.name
+                  << ", NID: " << nid << ", EID: " << eid << ", handle id: "
+                  << hid << std::endl;
+#endif
+        storage::MM_DPTR()->RegisterEntry(nid, index, hid, false);
+        if (export_graph) {
+          output_handles_.emplace_back(std::vector<size_t>());
+          output_handles_[index].push_back(nid);
+          output_handles_[index].push_back(index);
+          output_handles_[index].push_back(hid);
+        }
+      }
+    }
+    if (export_graph) {
+      output_handles.emplace_back(output_handles_);
+    }
+  }
+  if (export_graph) {
+    graph_.attrs["output_handles"] =
+      std::make_shared<dmlc::any>(std::move(output_handles));
   }
 }
 
@@ -1530,6 +1624,9 @@ Executor *Executor::Bind(nnvm::Symbol symbol,
                          const std::vector<OpReqType> &grad_req_type,
                          const std::vector<NDArray> &aux_states,
                          Executor* shared_exec) {
+#if SWAP_ADVISOR_FLOW_TRACE
+  std::cout << "Before binding anything" << std::endl;
+#endif
   auto exec = new exec::GraphExecutor();
   exec->Init(symbol, default_ctx, group2ctx,
              in_args, arg_grad_store, grad_req_type, aux_states,

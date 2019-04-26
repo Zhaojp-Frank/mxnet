@@ -23,9 +23,13 @@
  * \brief Implementation of SwapAdvisorEngine
  *  It is build upon implementation of Naive Engine.
  */
+#include<dmlc/base.h>
+#include<dmlc/concurrency.h>
 #include <atomic>
 #include <thread>
 #include "./threaded_engine.h"
+#include "./thread_pool.h"
+#include "../common/cuda_utils.h"
 
 namespace mxnet {
 namespace engine {
@@ -34,93 +38,140 @@ namespace engine {
 class SwapAdvisorEngine final : public ThreadedEngine {
  public:
   SwapAdvisorEngine() {
-    ReadSchedule();
-    next_opr_ = 0;
+    this->Start();     
   }
   // virtual destructor
   virtual ~SwapAdvisorEngine() {
-#if MXNET_USE_CUDA
-    LOG(INFO) << "Engine shutdown";
-    for (size_t i = 0; i < streams_.size(); ++i) {
-      if (streams_[i] != nullptr) {
-        // Catch exception for CUDA driver shutdown
-        MSHADOW_CATCH_ERROR(mshadow::DeleteStream(streams_[i]));
-        streams_[i] = nullptr;
-      }
-    }
-#endif
+    this->Stop();
   }
 
   void Stop() override {
+#if MXNET_USE_CUDA
+    for (size_t i = 0; i < streams_.size(); ++i) {
+      MSHADOW_CATCH_ERROR(mshadow::DeleteStream<gpu>(streams_[i]));
+      streams_[i] = nullptr;
+    }
+    for (size_t i = 0; i < swapin_streams_.size(); ++i) {
+      MSHADOW_CATCH_ERROR(mshadow::DeleteStream<gpu>(swapin_streams_[i]));
+      swapin_streams_[i] = nullptr;
+    }
+    for (size_t i = 0; i < swapout_streams_.size(); ++i) {
+      MSHADOW_CATCH_ERROR(mshadow::DeleteStream<gpu>(swapout_streams_[i]));
+      swapout_streams_[i] = nullptr;
+    }
+#endif // MXNET_USE_CUDA
+    task_queue_->SignalForKill();
+    swapin_task_queue_->SignalForKill();
+    swapout_task_queue_->SignalForKill();
+    task_queue_ = nullptr;
+    swapin_task_queue_ = nullptr;
+    swapout_task_queue_ = nullptr;
+    thread_pool_ = nullptr;
+    swapin_thread_pool_ = nullptr;
+    swapout_thread_pool_ = nullptr;
   }
 
   void Start() override {
+    task_queue_.reset(new dmlc::ConcurrentBlockingQueue<OprBlock*>());
+    swapin_task_queue_.reset(new dmlc::ConcurrentBlockingQueue<OprBlock*>());
+    swapout_task_queue_.reset(new dmlc::ConcurrentBlockingQueue<OprBlock*>());
+    thread_pool_.reset(new ThreadPool(1,
+                       [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
+                        ThreadWorker(task_queue_, ready_event); 
+                       }, true));
+    swapin_thread_pool_.reset(new ThreadPool(1,
+                       [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
+                        ThreadWorker(swapin_task_queue_, ready_event); 
+                       }, true));
+    swapout_thread_pool_.reset(new ThreadPool(1,
+                       [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
+                        ThreadWorker(swapout_task_queue_, ready_event); 
+                       }, true));
   }
 
  protected:
   // priority variable stores node id of the node for this engine.
-  /* (TODO: Sotskin) Test this function. Current idea
-   * Use a map to store mapping: node_id -> {op, exec_ctx, profiling}
-   * If current op is the next to be run according to scheduling, run it,
-   * Otherwise, store the information in map.
-   *
-   * After current op is ran, call a function to check if next op is in the
-   * map, and run it if it is.
-   */
   void PushToExecute(OprBlock *opr_block, bool pusher_thread) override {
-    // (TODO: Sotskin) Here we check whether OprBlock is a swapin/swapout opr
-    if (false) {
-      DoExecute(opr_block);
+    std::cout << "Opr = " << opr_block->opr->opr_name << ", GPU: " 
+              << (int)(opr_block->ctx.dev_mask() == gpu::kDevMask) << std::endl;
+    if(std::string(opr_block->opr->opr_name) == "Swapout") {
+      swapout_task_queue_->Push(opr_block);
     }
-    else if((size_t)opr_block->priority == exec_order_[next_opr_]) {
-      DoExecute(opr_block); 
-      next_opr_++;
-      if(opr_block_map_.find(exec_order_[next_opr_]) != 
-            opr_block_map_.end()) {
-        PushToExecute(opr_block_map_[exec_order_[next_opr_]], false);
-      }
-    } else {
-      opr_block_map_[opr_block->priority] = opr_block;
-      // Current is not the one we want
+    else if(std::string(opr_block->opr->opr_name) == "Swapin") {
+      swapin_task_queue_->Push(opr_block);
+    }
+    else {
+      task_queue_->Push(opr_block);
     }
   }
 
  private:
-  // Read dataflow scheduling.
-  void ReadSchedule() {
-     
-  }
   // Execute the operation
   void DoExecute(OprBlock* opr_block) {
     assert(opr_block->wait.load() == 0);
     if (opr_block->ctx.dev_mask() == gpu::kDevMask) {
 #if MXNET_USE_CUDA
       size_t dev_id = static_cast<size_t>(opr_block->ctx.dev_id);
-      MSHADOW_CATCH_ERROR(mshadow::SetDevice<gpu>(opr_block->ctx.dev_id));
-      if (streams_.size() <= dev_id) {
-        streams_.resize(dev_id + 1, nullptr);
+      //MSHADOW_CATCH_ERROR(mshadow::SetDevice<gpu>(opr_block->ctx.dev_id));
+      CUDA_CALL(cudaSetDevice(opr_block->ctx.dev_id));
+      mshadow::Stream<gpu>* cur_stream;
+      std::string opr_name = std::string(opr_block->opr->opr_name);
+      if(opr_name == "Swapout") {
+        cur_stream = this->GetStream(swapout_streams_, dev_id);
       }
-      if (streams_[dev_id] == nullptr) {
-        streams_[dev_id] = mshadow::NewStream<gpu>(true,
-            MXNET_USE_CUDNN != 0, dev_id);
+      else if(opr_name == "Swapin"){
+        cur_stream = this->GetStream(swapin_streams_, dev_id);
       }
-      this->ExecuteOprBlock((RunContext){opr_block->ctx, streams_[dev_id]},
+      else {
+        cur_stream = this->GetStream(streams_, dev_id);
+      }
+      this->ExecuteOprBlock((RunContext){opr_block->ctx, cur_stream},
             opr_block);
 #else //MXNET_USE_CUDA
       LOG(FATAL) << "Please compoile with CUDA enabled";
 #endif //MXNET_USE_CUDA
+    } else {
+      this->ExecuteOprBlock((RunContext){opr_block->ctx, &cpu_stream_}, opr_block);
     }
   } 
+
+  void ThreadWorker(std::shared_ptr<dmlc::ConcurrentBlockingQueue<OprBlock*>> task_queue,
+                    const std::shared_ptr<dmlc::ManualEvent>& ready_event) {
+    OprBlock* opr_block;
+    ready_event->signal();
+    while(task_queue->Pop(&opr_block)) {
+      DoExecute(opr_block);
+    }
+  }
+
+  mshadow::Stream<gpu>* GetStream(std::vector<mshadow::Stream<gpu>*> &streams,
+      size_t dev_id) {
+    if (streams.size() <= dev_id) {
+      streams.resize(dev_id + 1, nullptr);
+    }
+    if (streams[dev_id] == nullptr) {
+      streams[dev_id] = mshadow::NewStream<gpu>(true,
+          MXNET_USE_CUDNN != 0, dev_id);
+    }
+    return streams[dev_id];
+  }
+
   // CPU stream
   mshadow::Stream<cpu> cpu_stream_;
   // GPU streams
   std::vector<mshadow::Stream<gpu>*> streams_;
-  /*! \brief order of execution by nodeid given by scheduler. */
-  std::vector<size_t> exec_order_;
-  /*! \brief node id of next opr to be run */
-  size_t next_opr_;
-  /*! \brief map that stores operator info for nodes that haven't been run yet */
-  std::map<size_t, OprBlock*> opr_block_map_;
+  // Swapout Streams
+  std::vector<mshadow::Stream<gpu>*> swapout_streams_;
+  // Swapin Streams
+  std::vector<mshadow::Stream<gpu>*> swapin_streams_;
+  // Task queues
+  std::shared_ptr<dmlc::ConcurrentBlockingQueue<OprBlock*>> task_queue_;
+  std::shared_ptr<dmlc::ConcurrentBlockingQueue<OprBlock*>> swapout_task_queue_;
+  std::shared_ptr<dmlc::ConcurrentBlockingQueue<OprBlock*>> swapin_task_queue_;
+  // Thread pools
+  std::unique_ptr<ThreadPool> thread_pool_;
+  std::unique_ptr<ThreadPool> swapin_thread_pool_;
+  std::unique_ptr<ThreadPool> swapout_thread_pool_;
 };  // class SwapAdvisorEngine
 
 Engine *CreateSwapAdvisorEngine() {
