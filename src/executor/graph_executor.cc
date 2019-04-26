@@ -1291,7 +1291,7 @@ void GraphExecutor::InitCachedOps() {
 
 void GraphExecutor::SaveEntryMapping() {
   const auto& idx = graph_.indexed_graph();
-  std::vector<std::vector<std::vector<size_t>>> output_handles;
+  std::vector<std::vector<size_t>> output_handles;
   bool export_graph = dmlc::GetEnv("MXNET_SWAP_EXPORT_GRAPH", 0);
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
@@ -1306,10 +1306,11 @@ void GraphExecutor::SaveEntryMapping() {
 #endif
       storage::MM_DPTR()->RegisterEntry(nid, 0, hid, true);
       if (export_graph) {
-        output_handles_.emplace_back(std::vector<size_t>());
-        output_handles_[0].push_back(nid);
-        output_handles_[0].push_back(0);
-        output_handles_[0].push_back(hid);
+        std::vector<size_t> output_handle;
+        output_handle.push_back(nid);
+        output_handle.push_back(0);
+        output_handle.push_back(hid);
+        output_handles.emplace_back(output_handle);
       }
     } else {
       for (uint32_t index = 0; index < inode.source->num_outputs(); ++index) {
@@ -1322,15 +1323,13 @@ void GraphExecutor::SaveEntryMapping() {
 #endif
         storage::MM_DPTR()->RegisterEntry(nid, index, hid, false);
         if (export_graph) {
-          output_handles_.emplace_back(std::vector<size_t>());
-          output_handles_[index].push_back(nid);
-          output_handles_[index].push_back(index);
-          output_handles_[index].push_back(hid);
+          std::vector<size_t> output_handle;
+          output_handle.push_back(nid);
+          output_handle.push_back(index);
+          output_handle.push_back(hid);
+          output_handles.emplace_back(output_handle);
         }
       }
-    }
-    if (export_graph) {
-      output_handles.emplace_back(output_handles_);
     }
   }
   if (export_graph) {
