@@ -129,7 +129,7 @@ void StorageImpl::Alloc(Storage::Handle* handle) {
             if (strategy == "Round") {
               ptr = new storage::GPUPooledRoundedStorageManager();
               LOG(INFO) << "Using GPUPooledRoundedStorageManager.";
-            } else if (strategy == "OnDemandSwap") {
+            } else if (strategy == "SwapOnDemand") {
               ptr = new storage::GPUOnDemandSwapStorageManager(
                     handle->ctx.real_dev_id());
               //ptr = new storage::GPUPooledStorageManager();

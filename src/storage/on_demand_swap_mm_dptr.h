@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <vector>
 #include "./gpu_swap.h"
+#define SWAP_ADVISOR_FLOW_TRACE 1
 
 namespace mxnet {
 namespace storage {
