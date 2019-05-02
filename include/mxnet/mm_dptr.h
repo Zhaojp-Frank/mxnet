@@ -33,6 +33,10 @@ class MM_Dptr {
   virtual void  RegisterEntry(uint32_t nid, uint32_t idx, handle_id_t hid,
                               bool is_var) = 0;
 
+  // Let the manager know that all regular tensor allocations are finished.
+  // All rest memory allocations will be temporary memory allocations.
+  virtual void FinalizeRegular() = 0;
+
   // Can be called by both handles and storage managers.
   virtual void* GetDptr(handle_id_t id) = 0;
 

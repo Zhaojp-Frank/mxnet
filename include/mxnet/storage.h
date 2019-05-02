@@ -44,6 +44,15 @@ class Storage {
   public:
     Handle() {
       id_ = (base_id_.fetch_add(1, std::memory_order_relaxed)) + 1;
+#if SWAP_ADVISOR_FLOW_TRACE
+      std::cout << "Handle id = " << id_ << std::endl;
+#endif
+    }
+
+    ~Handle() {
+#if SWAP_ADVISOR_FLOW_TRACE
+      std::cout << "Destroy handle " << id_ << std::endl;
+#endif
     }
 
     //void* dptr;

@@ -15,10 +15,17 @@ class SA_MM_Dptr : virtual public MM_Dptr {
  public:
   SA_MM_Dptr() {
     memory_size_ = 10L * 1024 * 1024 * 1024;
+    temp_size_ = 1L * 1024 * 1024 * 1024;
     cudaError_t e = cudaMalloc(&memory_, memory_size_);
     if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
       LOG(FATAL) << "Can't allocate the memory in the initialization of "
                  << "the memory manager. The required size = " << memory_size_
+                 <<cudaGetErrorString(e);
+    }
+    e = cudaMalloc(&temp_memory_, temp_size_);
+    if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
+      LOG(FATAL) << "Can't allocate the memory in the initialization of "
+                 << "the memory manager. The required size = " << temp_size_
                  <<cudaGetErrorString(e);
     }
     ReadAllocationRst();
@@ -32,10 +39,18 @@ class SA_MM_Dptr : virtual public MM_Dptr {
         address = (void*)((size_t)address + mempool_to_size_[i]);
       }
     }
+    regular_finalized_ = false;
+    used_memory_ = 0;
+    temp_user = 0;
   }
 
   void* Alloc(handle_id_t id, size_t size, void* ptr=nullptr) {
     //std::lock_guard<std::mutex> lock(Storage::Get()->GetMutex(Context::kGPU));
+    if (regular_finalized_) {
+      CHECK_EQ(temp_user, 0);
+      temp_user = id;
+      return temp_memory_;
+    }
     size_t mempool = rsize_to_mempool_.at(size);
     void* address = *(mempools_.at(mempool).begin());
     mempools_.at(mempool).erase(address);
@@ -45,6 +60,10 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   }
 
   void* Free(handle_id_t id) {
+    if (id == temp_user) {
+      temp_user = 0;
+      return nullptr;
+    }
     //std::lock_guard<std::mutex> lock(Storage::Get()->GetMutex(Context::kGPU));
     size_t size = hdl_size_mapping_.at(id);
     size_t mempool = rsize_to_mempool_.at(size);
@@ -57,13 +76,17 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   }
 
   void Release(handle_id_t id, void* ptr) {
-    // No need to implement for this class;
+    // No need to implement for this manager;
     CHECK(0);
   }
 
   void RegisterEntry(uint32_t nid, uint32_t idx, handle_id_t hid, bool is_var) {
     uint32_t eid = nid * hash_const + idx;
     entry_hdl_mapping_[eid] = std::make_pair(hid, is_var);
+  }
+
+  void FinalizeRegular() {
+    regular_finalized_ = true;
   }
 
   void* GetDptr(handle_id_t id) {
@@ -93,10 +116,15 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   void *memory_;
   // The size which the memory manager is allowed to use for the main memory.
   size_t memory_size_;
+  // The temporary memory size. This should be dynamically determinited but is
+  // predefined for now.
+  size_t temp_size_;
   // Pointer to the temoprary memory;
   void *temp_memory_;
   // The size which the memory manager is allowed to use for the temp memory.
   size_t temp_memory_size_;
+  // Who is using temp_memory
+  size_t temp_user;
   // Memory pool index to memory pool size.
   std::vector<size_t> mempool_to_size_;
   // Memory pool objects count
@@ -108,7 +136,9 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   // Used memory pools
   std::vector<std::unordered_set<void*>> used_mempools_;
   // Used memory
-  size_t used_memory_ = 0;
+  size_t used_memory_;
+  // Are all regular memory allocations finalzed.
+  bool regular_finalized_;
 };
 
 void SA_MM_Dptr::ReadAllocationRst() {

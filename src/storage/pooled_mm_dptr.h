@@ -42,6 +42,10 @@ class Pooled_MM_Dptr : virtual public MM_Dptr {
     return;
   }
 
+  void FinalizeRegular() {
+    return;
+  }
+
   void* GetDptr(handle_id_t id) {
 #if SWAP_ADVISOR_FLOW_TRACE
     std::cout << "GetDptr " << id << std::endl;
