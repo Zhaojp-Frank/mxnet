@@ -124,6 +124,10 @@ handle_id_t MemoryHistory::LRU(std::unordered_set<handle_id_t> handles,
 handle_id_t MemoryHistory::NaiveHistory(
   std::unordered_set<handle_id_t> handles, int device, void* arg) {
   auto& history = dev_history_[device];
+#ifdef FEGIN_DEBUG
+  std::cout << "DoDecide: NaiveHistory, handles numbers = " 
+            << history.handle_history.size() << std::endl;
+#endif
   SwapParams* params = (SwapParams*)arg;
   size_t latest_step = 0;
   handle_id_t latest_id = 0;
@@ -242,7 +246,7 @@ void MemoryHistory::PrintRecord(int device) {
 
 void MemoryHistory::StartIteration() {
   if(dmlc::GetEnv("MXNET_GPU_MEM_POOL_TYPE", std::string("Naive"))
-     != "OnDemandSwap") {
+     != "SwapOnDemand") {
     return;
   }
   iteration_started_ = true;
@@ -309,7 +313,7 @@ void MemoryHistory::StartIteration() {
 
 void MemoryHistory::StopIteration() {
   if(dmlc::GetEnv("MXNET_GPU_MEM_POOL_TYPE", std::string("Naive"))
-     != "OnDemandSwap") {
+     != "SwapOnDemand") {
     return;
   }
   pre_recording_ = false;

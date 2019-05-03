@@ -184,6 +184,10 @@ void Swap::SwapOutLocked(unsigned required_memory, int device_id, bool async) {
 void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
   while (!memory_manager_->TryAllocate(device_id, required_memory)) {
     SwapParams param = {0, required_memory, &divided_handles_[device_id]};
+#ifdef FEGIN_DEBUG
+    std::cout<<"Swapout calling Decide victim. Swappable size = "
+             <<swappable_handles_[device_id].size() << std::endl;
+#endif
     handle_id_t victim = memory_history_->DecideVictim(
                             swappable_handles_[device_id], device_id, &param);
     if (swap_info_.find(victim) == swap_info_.end()) {

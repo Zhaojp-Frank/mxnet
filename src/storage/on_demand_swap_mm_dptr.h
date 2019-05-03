@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <vector>
 #include "./gpu_swap.h"
-#define SWAP_ADVISOR_FLOW_TRACE 1
 
 namespace mxnet {
 namespace storage {
@@ -18,8 +17,8 @@ class OD_MM_Dptr : virtual public MM_Dptr {
 #if SWAP_ADVISOR_FLOW_TRACE
     std::cout << "Alloc " << id << std::endl;
 #endif
-    dptr_size_[id] = size;
     dptr_mapping_[id] = ptr;
+    dptr_size_[ptr] = size;
     return ptr;
   }
 
@@ -50,23 +49,31 @@ class OD_MM_Dptr : virtual public MM_Dptr {
 #if SWAP_ADVISOR_FLOW_TRACE
     std::cout << "GetDptr " << id << std::endl;
 #endif
-    return dptr_mapping_[id] = Swap::Get()->GetAddr(id);
+    void* old_ptr = dptr_mapping_[id];
+    dptr_mapping_[id] = Swap::Get()->GetAddr(id);
+    dptr_size_[dptr_mapping_[id]] = dptr_size_[old_ptr];
+    dptr_size_.erase(old_ptr);
+    return dptr_mapping_[id];
   }
 
   void SetDptr(handle_id_t id, void* ptr, uint32_t dev_id) {
 #if SWAP_ADVISOR_FLOW_TRACE
-    std::cout << "SetDptr " << id << std::endl;
+    std::cout << "SetDptr " << id << " " << ptr << std::endl;
 #endif
-    if(dptr_size_.find(id) == dptr_size_.end()) {
+    if(ptr != nullptr && dptr_size_.find(ptr) == dptr_size_.end()) {
         LOG(FATAL) << "Can't find the size for id " << id << ".";
     }
-    Swap::Get()->SetAddr(id, ptr, dptr_size_[id], dev_id);
+    size_t ptr_size = 0;
+    if(ptr != nullptr) {
+      ptr_size = dptr_size_[ptr];
+    }
+    Swap::Get()->SetAddr(id, ptr, ptr_size, dev_id);
     dptr_mapping_[id] = ptr;
   }
 
  private:
   std::unordered_map<handle_id_t, void*> dptr_mapping_;
-  std::unordered_map<handle_id_t, size_t> dptr_size_;
+  std::unordered_map<void*, size_t> dptr_size_;
 };
 
 }  // namespace storage
