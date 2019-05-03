@@ -2,6 +2,7 @@
 #include <mxnet/mm_dptr.h>
 #include "./pooled_mm_dptr.h"
 #include "./swapadv_mm_dptr.h"
+#include "./on_demand_swap_mm_dptr.h"
 
 namespace mxnet {
 namespace storage {
@@ -20,6 +21,7 @@ MM_Dptr* MM_DPTR() {
   } else if (mm_type == "SwapAdv") {
     mm_dptr = new SA_MM_Dptr();
   } else if (mm_type == "SwapOnDemand") {
+    mm_dptr = new OD_MM_Dptr();
   } else {
     CHECK(0) << "Unknown mm type.";
   }

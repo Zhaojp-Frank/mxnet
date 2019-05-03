@@ -24,6 +24,7 @@
 #include "./storage_manager.h"
 #include "./naive_storage_manager.h"
 #include "./pooled_storage_manager.h"
+#include "./on_demand_swap_storage_manager.h"
 #include "./swapadv_storage_manager.h"
 #include "./cpu_shared_storage_manager.h"
 #include "./cpu_device_storage.h"
@@ -128,12 +129,17 @@ void StorageImpl::Alloc(Storage::Handle* handle) {
             if (strategy == "Round") {
               ptr = new storage::GPUPooledRoundedStorageManager();
               LOG(INFO) << "Using GPUPooledRoundedStorageManager.";
+            } else if (strategy == "SwapOnDemand") {
+              ptr = new storage::GPUOnDemandSwapStorageManager(
+                    handle->ctx.real_dev_id());
+              //ptr = new storage::GPUPooledStorageManager();
+              LOG(INFO) << "Using GPUOnDemandSwapStorageManager.";
             } else if (strategy == "SwapAdv") {
               ptr = new storage::GPUSwapAdvStorageManager();
               LOG(INFO) << "Using GPUSwapAdvStorageManager.";
             } else {
               if (strategy != "Naive") {
-                LOG(FATAL) << "Unknown memory pool strategy specified: " << strategy << ".";
+                  LOG(FATAL) << "Unknown memory pool strategy specified: " << strategy << ".";
               }
               ptr = new storage::GPUPooledStorageManager();
             }
