@@ -31,7 +31,8 @@ class MM_Dptr {
   // Register the mapping from an entry to a handle. The mapping is
   // many-(entry)-to-one(handle).
   virtual void  RegisterEntry(uint32_t nid, uint32_t idx, handle_id_t hid,
-                              bool is_var) = 0;
+                              uint32_t old_nid, uint32_t old_idx,
+                              handle_id_t old_hid, bool is_var) = 0;
 
   // Let the manager know that all regular tensor allocations are finished.
   // All rest memory allocations will be temporary memory allocations.

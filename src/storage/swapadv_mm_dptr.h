@@ -80,7 +80,10 @@ class SA_MM_Dptr : virtual public MM_Dptr {
     CHECK(0);
   }
 
-  void RegisterEntry(uint32_t nid, uint32_t idx, handle_id_t hid, bool is_var) {
+  void RegisterEntry(uint32_t nid, uint32_t idx, handle_id_t hid,
+                     uint32_t old_nid, uint32_t old_idx, handle_id_t old_hid,
+                     bool is_var) {
+    // FIXME(fegin): old hid
     uint32_t eid = nid * hash_const + idx;
     entry_hdl_mapping_[eid] = std::make_pair(hid, is_var);
   }

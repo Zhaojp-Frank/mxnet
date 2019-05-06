@@ -1289,49 +1289,61 @@ void GraphExecutor::InitCachedOps() {
   }
 }
 
+
 void GraphExecutor::SaveEntryMapping() {
+  std::cout << "SaveEntryMapping" << std::endl;
   const auto& idx = graph_.indexed_graph();
   std::vector<std::vector<size_t>> output_handles;
   bool export_graph = dmlc::GetEnv("MXNET_SWAP_EXPORT_GRAPH", 0);
+  nnvm::IdMapping old_to_new_nids(
+                      graph_.GetAttr<nnvm::IdMapping>("old_to_new_nids"));
+  const nnvm::IdMapping& new_to_old_nids =
+    graph_.GetAttr<nnvm::IdMapping>("new_to_old_nids");
+  const nnvm::HandleUsages& old_hdl_usages =
+    graph_.GetAttr<nnvm::HandleUsages>("old_hdl_usages");
+  std::unordered_map<uint32_t, uint32_t> new_to_old_hids;
+  std::cout << "Length of newtoold_nids:" << new_to_old_nids.size()
+            << std::endl;
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
     std::vector<std::vector<size_t>> output_handles_;
-    if (inode.source->is_variable()) {
-      uint32_t eid = idx.entry_id(nid, 0);
+    std::cout << "new nid:" << nid << " "
+              << inode.source->attrs.name << std::endl;
+    auto old_nid_it = new_to_old_nids.find(nid);
+    if (old_nid_it == new_to_old_nids.end()) {
+      continue;
+    }
+    uint32_t old_nid = old_nid_it->second;
+    old_to_new_nids.erase(old_nid);
+    std::cout << "old nid:" << old_nid << std::endl;
+    for (uint32_t index = 0; index < inode.source->num_outputs(); ++index) {
+      uint32_t eid = idx.entry_id(nid, index);
       uint32_t hid = data_entry_[eid].storage_handle().ID();
+      uint32_t old_hid = old_hdl_usages.at(old_nid)[index];
+      auto old_hid_it = new_to_old_hids.find(hid);
+      if (old_hid_it != new_to_old_hids.end()) {
+        CHECK_EQ(old_hid_it->second, old_hid);
+      } else {
+        new_to_old_hids[hid] = old_hid;
+      }
 #if SWAP_ADVISOR_FLOW_TRACE
-      std::cout << "[InitCachedOps var] Name: " << inode.source->attrs.name
+      std::cout << "SaveEntryMapping Name: " << inode.source->attrs.name
                 << ", NID: " << nid << ", EID: " << eid << ", handle id: "
                 << hid << std::endl;
 #endif
-      storage::MM_DPTR()->RegisterEntry(nid, 0, hid, true);
+      storage::MM_DPTR()->RegisterEntry(nid, index, hid, old_nid, index, old_hid, true);
       if (export_graph) {
         std::vector<size_t> output_handle;
         output_handle.push_back(nid);
-        output_handle.push_back(0);
+        output_handle.push_back(index);
         output_handle.push_back(hid);
         output_handles.emplace_back(output_handle);
       }
-    } else {
-      for (uint32_t index = 0; index < inode.source->num_outputs(); ++index) {
-        uint32_t eid = idx.entry_id(nid, index);
-        uint32_t hid = data_entry_[eid].storage_handle().ID();
-#if SWAP_ADVISOR_FLOW_TRACE
-        std::cout << "[InitCachedOps op] Name: " << inode.source->attrs.name
-                  << ", NID: " << nid << ", EID: " << eid << ", handle id: "
-                  << hid << std::endl;
-#endif
-        storage::MM_DPTR()->RegisterEntry(nid, index, hid, false);
-        if (export_graph) {
-          std::vector<size_t> output_handle;
-          output_handle.push_back(nid);
-          output_handle.push_back(index);
-          output_handle.push_back(hid);
-          output_handles.emplace_back(output_handle);
-        }
-      }
     }
   }
+  CHECK_EQ(old_to_new_nids.size(), 0);
+  std::cout << "Length of newtoold_hids:" << new_to_old_hids.size()
+            << std::endl;
   if (export_graph) {
     graph_.attrs["output_handles"] =
       std::make_shared<dmlc::any>(std::move(output_handles));
