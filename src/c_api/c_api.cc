@@ -46,6 +46,7 @@
 #include "./c_api_common.h"
 #include "../operator/custom/custom-inl.h"
 #include "../operator/tensor/matrix_op-inl.h"
+#include "../storage/gpu_swap_history.h"
 
 using namespace mxnet;
 
@@ -101,6 +102,24 @@ int MXRandomSeedContext(int seed, int dev_type, int dev_id) {
 int MXNotifyShutdown() {
   API_BEGIN();
   Engine::Get()->NotifyShutdown();
+  API_END();
+}
+
+int MXSwapStartIteration() {
+  API_BEGIN();
+  MemoryHistory::Get()->StartIteration();
+  API_END();
+}
+
+int MXSwapStopIteration() {
+  API_BEGIN();
+  MemoryHistory::Get()->StopIteration();
+  API_END();
+}
+
+int MXSwapStatistics() {
+  API_BEGIN();
+  MemoryHistory::Get()->Statistics();
   API_END();
 }
 

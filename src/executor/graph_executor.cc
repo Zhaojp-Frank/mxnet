@@ -34,6 +34,8 @@
 #include "../profiler/profiler.h"
 #include "../common/utils.h"
 #include "../common/exec_utils.h"
+#include "../storage/gpu_swap.h"
+#include "../storage/gpu_swap_prefetch.h"
 
 namespace mxnet {
 namespace exec {
@@ -1263,6 +1265,8 @@ void GraphExecutor::InitCachedOps() {
       std::cout << "[RUNNING]: ID = " <<  nid << ", " << "NAME = " << name
                 << std::endl;
 #endif
+      // FIXME(fegin): This should have some switch to turn it off.
+      Swap::Get()->PrePostAccess(true);
       exec->Run(ctx, is_gpu);
       // call on complete only if it is async op
       if (!is_async) {
@@ -1270,11 +1274,13 @@ void GraphExecutor::InitCachedOps() {
         #if MXNET_USE_CUDA
           // Wait GPU kernel to finish.
           ctx.get_stream<gpu>()->Wait();
+          Prefetch::Get()->SignalStopComputing();
         #else
           LOG(FATAL) << MXNET_GPU_NOT_ENABLED_ERROR;
         #endif
         }
         on_complete();
+        Swap::Get()->PrePostAccess(false);
       }
 #if SWAP_ADVISOR_FLOW_TRACE
       std::cout << "[RUNNING]: DONE, " << nid << std::endl;
@@ -1585,6 +1591,7 @@ GraphExecutor::CachedSegOpr GraphExecutor::CreateCachedSegOpr(size_t topo_start,
   auto exec_fun = [exec_list, is_gpu] (
       RunContext ctx, Engine::CallbackOnComplete on_complete) {
     // Run all opr in the sub-graph
+    Swap::Get()->PrePostAccess(true);
     for (auto &exec : exec_list) {
       exec->Run(ctx, is_gpu);
     }
@@ -1592,11 +1599,13 @@ GraphExecutor::CachedSegOpr GraphExecutor::CreateCachedSegOpr(size_t topo_start,
 #if MXNET_USE_CUDA
       // Wait GPU kernel to finish.
       ctx.get_stream<gpu>()->Wait();
+      Prefetch::Get()->SignalStopComputing();
 #else
       LOG(FATAL) << MXNET_GPU_NOT_ENABLED_ERROR;
 #endif
     }
     on_complete();
+    Swap::Get()->PrePostAccess(false);
   };
   opr_names.pop_back();
   opr_names += "]";
