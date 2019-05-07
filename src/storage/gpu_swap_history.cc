@@ -23,6 +23,7 @@ MemoryHistory::MemoryHistory() {
   iteration_idx_ = 0;
   swap_algorithm_ = dmlc::GetEnv("MXNET_SWAP_ALGORITHM", std::string("LRU"));
   adaptive_history_ = dmlc::GetEnv("MXNET_ADAPTIVE_HISTORY", false);
+  enable_statistics_ = dmlc::GetEnv("MXNET_ENABLE_STATISTICS", false);
   bool infinite_memory = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
   if (infinite_memory) {
       swap_algorithm_ = "SizeHistory";
@@ -333,6 +334,9 @@ void MemoryHistory::StopIteration() {
 }
 
 void MemoryHistory::Statistics() {
+  if (!enable_statistics_) {
+    return;
+  }
   if (adaptive_history_) {
     PrintSimilarity();
   }

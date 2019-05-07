@@ -100,6 +100,7 @@ private:
   bool pre_recording_;
   size_t iteration_idx_;
   bool adaptive_history_;
+  bool enable_statistics_;
   std::string swap_algorithm_;
   high_resolution_clock::time_point begin_time_;
 };  // class MemoryHistory
