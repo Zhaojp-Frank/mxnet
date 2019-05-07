@@ -82,10 +82,10 @@ class SA_MM_Dptr : virtual public MM_Dptr {
 
   void RegisterEntry(uint32_t nid, uint32_t idx, handle_id_t hid,
                      uint32_t old_nid, uint32_t old_idx, handle_id_t old_hid,
-                     bool is_var) {
-    // FIXME(fegin): old hid
+                     size_t hdl_size, bool is_var) {
     uint32_t eid = nid * hash_const + idx;
     entry_hdl_mapping_[eid] = std::make_pair(hid, is_var);
+    new_to_old_hids_[hid] = old_hid;
   }
 
   void FinalizeRegular() {
@@ -101,6 +101,8 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   }
 
  private:
+  //
+  std::unordered_map<handle_id_t, handle_id_t> new_to_old_hids_;
   // Handle to dptr mapping. If the result it nulldptr, the handle is swapped
   // out.
   std::unordered_map<handle_id_t, void*> hdl_dptr_mapping_;

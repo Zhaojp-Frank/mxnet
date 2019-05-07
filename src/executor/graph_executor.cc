@@ -1301,6 +1301,8 @@ void GraphExecutor::SaveEntryMapping() {
     graph_.GetAttr<nnvm::IdMapping>("new_to_old_nids");
   const nnvm::HandleUsages& old_hdl_usages =
     graph_.GetAttr<nnvm::HandleUsages>("old_hdl_usages");
+  const nnvm::HandleSizes& hdl_sizes =
+    graph_.GetAttr<nnvm::HandleSizes>("hdl_sizes");
   std::unordered_map<uint32_t, uint32_t> new_to_old_hids;
   std::cout << "Length of newtoold_nids:" << new_to_old_nids.size()
             << std::endl;
@@ -1331,7 +1333,12 @@ void GraphExecutor::SaveEntryMapping() {
                 << ", NID: " << nid << ", EID: " << eid << ", handle id: "
                 << hid << std::endl;
 #endif
-      storage::MM_DPTR()->RegisterEntry(nid, index, hid, old_nid, index, old_hid, true);
+      size_t hdl_size = hdl_sizes.at(old_hid);
+      // FIXME(fegin): Check if the size is the same or not.
+      CHECK_EQ(hdl_size, data_entry_[eid].storage_handle().size);
+      std::cout << "FEGIN " << hdl_size << " " << data_entry_[eid].storage_handle().size << std::endl;
+      storage::MM_DPTR()->RegisterEntry(nid, index, hid, old_nid, index,
+                                        old_hid, hdl_size, true);
       if (export_graph) {
         std::vector<size_t> output_handle;
         output_handle.push_back(nid);
