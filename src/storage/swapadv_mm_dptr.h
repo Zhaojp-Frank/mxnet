@@ -14,8 +14,9 @@ namespace storage {
 class SA_MM_Dptr : virtual public MM_Dptr {
  public:
   SA_MM_Dptr() {
-    memory_size_ = 10L * 1024 * 1024 * 1024;
-    temp_size_ = 1L * 1024 * 1024 * 1024;
+      // TODO(fegin): Determine this dynamically.
+    memory_size_ = 3L * 1024 * 1024 * 1024;
+    temp_size_ = 0.5L * 1024 * 1024 * 1024;
     cudaError_t e = cudaMalloc(&memory_, memory_size_);
     if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
       LOG(FATAL) << "Can't allocate the memory in the initialization of "
@@ -28,7 +29,9 @@ class SA_MM_Dptr : virtual public MM_Dptr {
                  << "the memory manager. The required size = " << temp_size_
                  <<cudaGetErrorString(e);
     }
+
     ReadAllocationRst();
+    ReadInitialHandlesRst();
 
     void* address = memory_;
     for (size_t i = 0; i < mempool_counts_.size(); i++) {
@@ -42,24 +45,33 @@ class SA_MM_Dptr : virtual public MM_Dptr {
     regular_finalized_ = false;
     used_memory_ = 0;
     temp_user = 0;
+    std::cout << "SA_MM_Dptr initialized" << std::endl;
   }
 
   void* Alloc(handle_id_t id, size_t size, void* ptr=nullptr) {
+    std::cout << "SA_MM_Dptr Alloc " << size << std::endl;
     //std::lock_guard<std::mutex> lock(Storage::Get()->GetMutex(Context::kGPU));
     if (regular_finalized_) {
       CHECK_EQ(temp_user, 0);
       temp_user = id;
+      std::cout << "SA_MM_Dptr Alloc done 1" << std::endl;
       return temp_memory_;
     }
     size_t mempool = rsize_to_mempool_.at(size);
+    if (mempools_.at(mempool).size() == 0) {
+      std::cout << "Size should not be 0" << std::endl;
+      assert(0);
+    }
     void* address = *(mempools_.at(mempool).begin());
     mempools_.at(mempool).erase(address);
     hdl_dptr_mapping_[id] = address;
     hdl_size_mapping_[id] = size;
+    std::cout << "SA_MM_Dptr Alloc done 2" << std::endl;
     return address;
   }
 
   void* Free(handle_id_t id) {
+    std::cout << "SA_MM_Dptr Free" << std::endl;
     if (id == temp_user) {
       temp_user = 0;
       return nullptr;
@@ -76,6 +88,7 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   }
 
   void Release(handle_id_t id, void* ptr) {
+    std::cout << "SA_MM_Dptr Release" << std::endl;
     // No need to implement for this manager;
     CHECK(0);
   }
@@ -89,14 +102,17 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   }
 
   void FinalizeRegular() {
+    std::cout << "SA_MM_Dptr FinalizeRegular" << std::endl;
     regular_finalized_ = true;
   }
 
   void* GetDptr(handle_id_t id) {
+    std::cout << "SA_MM_Dptr GetDptr" << std::endl;
     return hdl_dptr_mapping_.at(id);
   }
 
   void SetDptr(handle_id_t id, void* ptr, uint32_t dev_id) {
+    std::cout << "SA_MM_Dptr SetDptr" << std::endl;
     hdl_dptr_mapping_[id] = ptr;
   }
 
@@ -113,10 +129,14 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   std::unordered_map<handle_id_t, size_t> hdl_dev_mapping_;
   // An entry (NDArray) to handle mapping.
   std::unordered_map<uint32_t, std::pair<handle_id_t, bool>> entry_hdl_mapping_;
+  // Initial handles
+  std::vector<uint32_t> initial_handles_;
 
   static constexpr uint32_t hash_const = 33;
   // Read the memory allocation result from the SwapAdvisor.
   void ReadAllocationRst();
+  // Read the initial handle allocation result from the SwapAdvisor.
+  void ReadInitialHandlesRst();
   // Pointer to the main memory allocation.
   void *memory_;
   // The size which the memory manager is allowed to use for the main memory.
@@ -155,8 +175,44 @@ void SA_MM_Dptr::ReadAllocationRst() {
   std::getline(ifs, line);
   while ((next = line.find(",", last)) != std::string::npos) {
     next = line.find(",", last);
-    uint32_t size = std::stoi(line.substr(last, next - last));
+    size_t size = std::stol(line.substr(last, next - last));
+    last = next + 1;
     mempool_to_size_.emplace_back(size);
+  }
+
+  std::getline(ifs, line);
+  next = last = 0;
+  while ((next = line.find(",", last)) != std::string::npos) {
+    next = line.find(",", last);
+    uint32_t count = std::stoi(line.substr(last, next - last));
+    last = next + 1;
+    mempool_counts_.emplace_back(count);
+  }
+
+  std::getline(ifs, line);
+  next = last = 0;
+  while ((next = line.find(",", last)) != std::string::npos) {
+    next = line.find(",", last);
+    size_t rsize = std::stol(line.substr(last, next - last));
+    last = next + 1;
+    next = line.find(",", last);
+    uint32_t pool = std::stoi(line.substr(last, next - last));
+    last = next + 1;
+    rsize_to_mempool_[rsize] = pool;
+  }
+}
+
+void SA_MM_Dptr::ReadInitialHandlesRst() {
+  std::cout << "ReadInitialHandlesRst" << std::endl;
+  std::ifstream ifs("initial_handles.rst");
+  std::string line;
+
+  size_t next = 0, last = 0;
+  std::getline(ifs, line);
+  while ((next = line.find(",", last)) != std::string::npos) {
+    uint32_t hid = std::stoi(line.substr(last, next - last));
+    last = next + 1;
+    initial_handles_.push_back(hid);
   }
 }
 

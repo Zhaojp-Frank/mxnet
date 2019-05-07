@@ -15,6 +15,7 @@ MM_Dptr* MM_DPTR() {
   if (type != nullptr) {
     mm_type = type;
   }
+  std::cout << "Using " << mm_type << " mm_dptr" << std::endl;
   if (mm_type == "Round" || mm_type == "Naive") {
     mm_dptr = new Pooled_MM_Dptr();
   } else if (mm_type == "SwapAdv") {
