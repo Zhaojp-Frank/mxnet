@@ -44,7 +44,7 @@ using namespace mxnet::common;
 
 GraphExecutor::GraphExecutor() {
   log_verbose_ = dmlc::GetEnv("MXNET_EXEC_VERBOSE_LOGGING", false);
-  pass_node_id_ = dmlc::GetEnv("MXNET_SWAPADVISOR_SCHEDULING", false);
+  memory_strategy_ = dmlc::GetEnv("MXNET_GPU_MEM_POOL_TYPE", std::string("Naive"));
   need_grad_ = false;
 }
 
@@ -1256,7 +1256,7 @@ void GraphExecutor::InitCachedOps() {
       }, Context::CPU(), {}, all_vars, FnProperty::kNormal, 0,
       "SetupExec");
     std::string name = inode.source->attrs.name;
-    auto exec_fun = [exec, is_async, is_gpu, nid, name] (
+    auto exec_fun = [this, exec, is_async, is_gpu, nid, name] (
         RunContext ctx, Engine::CallbackOnComplete on_complete) {
       if (is_async) {
         exec->op_ctx.async_on_complete = on_complete;
@@ -1265,7 +1265,9 @@ void GraphExecutor::InitCachedOps() {
       std::cout << "[RUNNING]: ID = " <<  nid << ", " << "NAME = " << name
                 << std::endl;
 #endif
-      Swap::Get()->PrePostAccess(true);
+      if(this->memory_strategy_ == "SwapOnDemand") {
+        Swap::Get()->PrePostAccess(true);
+      }
       exec->Run(ctx, is_gpu);
       // call on complete only if it is async op
       if (!is_async) {
@@ -1279,7 +1281,9 @@ void GraphExecutor::InitCachedOps() {
         #endif
         }
         on_complete();
-        Swap::Get()->PrePostAccess(false);
+        if(this->memory_strategy_ == "SwapOnDemand") {
+          Swap::Get()->PrePostAccess(false); 
+        }
       }
 #if SWAP_ADVISOR_FLOW_TRACE
       std::cout << "[RUNNING]: DONE, " << nid << std::endl;
@@ -1515,8 +1519,11 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
     } else if (opnode.cached_opr != nullptr) {
       bool profiling = profiler::Profiler::Get()->GetState() == profiler::Profiler::kRunning;
       // Pass node id if enabled for scheduling
-      bool node_id = pass_node_id_? nid : 0;
-      Engine::Get()->Push(opnode.cached_opr, opnode.ctx, node_id, profiling);
+      int priority = 0; 
+      if(memory_strategy_ == "SwapAdv") {
+        priority = nid;
+      }
+      Engine::Get()->Push(opnode.cached_opr, opnode.ctx, priority, profiling);
     } else {
       LOG(FATAL) << "Not accessed";
     }
@@ -1569,10 +1576,12 @@ GraphExecutor::CachedSegOpr GraphExecutor::CreateCachedSegOpr(size_t topo_start,
   Engine::Get()->DeduplicateVarHandle(&use_vars, &mutate_vars);
 
   bool is_gpu = pctx->dev_mask() == gpu::kDevMask;
-  auto exec_fun = [exec_list, is_gpu] (
+  auto exec_fun = [this, exec_list, is_gpu] (
       RunContext ctx, Engine::CallbackOnComplete on_complete) {
     // Run all opr in the sub-graph
-    Swap::Get()->PrePostAccess(true);
+    if(this->memory_strategy_ == "SwapOnDemand") {
+      Swap::Get()->PrePostAccess(true);
+    }
     for (auto &exec : exec_list) {
       exec->Run(ctx, is_gpu);
     }
@@ -1586,7 +1595,9 @@ GraphExecutor::CachedSegOpr GraphExecutor::CreateCachedSegOpr(size_t topo_start,
 #endif
     }
     on_complete();
-    Swap::Get()->PrePostAccess(false);
+    if(this->memory_strategy_ == "SwapOnDemand") {
+      Swap::Get()->PrePostAccess(false);
+    }
   };
   opr_names.pop_back();
   opr_names += "]";
