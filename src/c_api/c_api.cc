@@ -36,6 +36,7 @@
 #include <mxnet/kvstore.h>
 #include <mxnet/rtc.h>
 #include <mxnet/storage.h>
+#include <mxnet/mm_dptr.h>
 #include <vector>
 #include <sstream>
 #include <string>
@@ -105,15 +106,27 @@ int MXNotifyShutdown() {
   API_END();
 }
 
+int MXSwapStartBinding() {
+  API_BEGIN();
+  storage::MM_DPTR()->StartBinding();
+  API_END();
+}
+
+int MXSwapStopBinding() {
+  API_BEGIN();
+  storage::MM_DPTR()->StopBinding();
+  API_END();
+}
+
 int MXSwapStartIteration() {
   API_BEGIN();
-  MemoryHistory::Get()->StartIteration();
+  storage::MM_DPTR()->StartIteration();
   API_END();
 }
 
 int MXSwapStopIteration() {
   API_BEGIN();
-  MemoryHistory::Get()->StopIteration();
+  storage::MM_DPTR()->StopIteration();
   API_END();
 }
 

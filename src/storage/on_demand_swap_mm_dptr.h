@@ -40,6 +40,22 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     dptr_mapping_[id] = ptr;
   }
 
+  void StartBinding() {
+    MemoryHistory::Get()->StartIteration();
+  }
+
+  void StopBinding() {
+    MemoryHistory::Get()->StopIteration();
+  }
+
+  void StartIteration() {
+    MemoryHistory::Get()->StartIteration();
+  }
+
+  void StopIteration() {
+    MemoryHistory::Get()->StopIteration();
+  }
+
   void RegisterEntry(uint32_t nid, uint32_t idx, handle_id_t hid,
                      uint32_t old_nid, uint32_t old_idx, handle_id_t old_hid,
                      size_t hdl_size, bool is_var) {

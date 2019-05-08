@@ -229,6 +229,8 @@ MXNET_DLL int MXRandomSeedContext(int seed, int dev_type, int dev_id);
  */
 MXNET_DLL int MXNotifyShutdown();
 
+MXNET_DLL int MXSwapStartBinding();
+MXNET_DLL int MXSwapStopBinding();
 MXNET_DLL int MXSwapStartIteration();
 MXNET_DLL int MXSwapStopIteration();
 MXNET_DLL int MXSwapStatistics();

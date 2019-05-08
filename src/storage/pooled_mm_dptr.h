@@ -37,6 +37,26 @@ class Pooled_MM_Dptr : virtual public MM_Dptr {
     dptr_mapping_[id] = ptr;
   }
 
+  void StartBinding() {
+    // Nothing to do for pooled_mm_dptr.
+    return;
+  }
+
+  void StopBinding() {
+    // Nothing to do for pooled_mm_dptr.
+    return;
+  }
+
+  void StartIteration() {
+    // Nothing to do for pooled_mm_dptr.
+    return;
+  }
+
+  void StopIteration() {
+    // Nothing to do for pooled_mm_dptr.
+    return;
+  }
+
   void RegisterEntry(uint32_t nid, uint32_t idx, handle_id_t hid,
                      uint32_t old_nid, uint32_t old_idx, handle_id_t old_hid,
                      size_t hdl_size, bool is_var) {
