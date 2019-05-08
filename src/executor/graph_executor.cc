@@ -34,7 +34,7 @@
 #include "../profiler/profiler.h"
 #include "../common/utils.h"
 #include "../common/exec_utils.h"
-#include "../storage/gpu_swap.h"
+#include "../storage/gpu_odswap.h"
 #include "../storage/gpu_swap_prefetch.h"
 
 namespace mxnet {
@@ -1266,7 +1266,7 @@ void GraphExecutor::InitCachedOps() {
                 << std::endl;
 #endif
       if(this->memory_strategy_ == "SwapOnDemand") {
-        Swap::Get()->PrePostAccess(true);
+        ODSwap::Get()->PrePostAccess(true);
       }
       exec->Run(ctx, is_gpu);
       // call on complete only if it is async op
@@ -1282,7 +1282,7 @@ void GraphExecutor::InitCachedOps() {
         }
         on_complete();
         if(this->memory_strategy_ == "SwapOnDemand") {
-          Swap::Get()->PrePostAccess(false); 
+          ODSwap::Get()->PrePostAccess(false); 
         }
       }
 #if SWAP_ADVISOR_FLOW_TRACE
@@ -1580,7 +1580,7 @@ GraphExecutor::CachedSegOpr GraphExecutor::CreateCachedSegOpr(size_t topo_start,
       RunContext ctx, Engine::CallbackOnComplete on_complete) {
     // Run all opr in the sub-graph
     if(this->memory_strategy_ == "SwapOnDemand") {
-      Swap::Get()->PrePostAccess(true);
+      ODSwap::Get()->PrePostAccess(true);
     }
     for (auto &exec : exec_list) {
       exec->Run(ctx, is_gpu);
@@ -1596,7 +1596,7 @@ GraphExecutor::CachedSegOpr GraphExecutor::CreateCachedSegOpr(size_t topo_start,
     }
     on_complete();
     if(this->memory_strategy_ == "SwapOnDemand") {
-      Swap::Get()->PrePostAccess(false);
+      ODSwap::Get()->PrePostAccess(false);
     }
   };
   opr_names.pop_back();

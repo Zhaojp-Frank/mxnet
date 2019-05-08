@@ -1,5 +1,5 @@
-#ifndef MXNET_STORAGE_SWAP_H_
-#define MXNET_STORAGE_SWAP_H_
+#ifndef MXNET_STORAGE_ODSWAP_H_
+#define MXNET_STORAGE_ODSWAP_H_
 
 #include <atomic>
 #include <map>
@@ -70,11 +70,11 @@ private:
   unsigned running_threshold_;
 };
 
-class Swap {
+class ODSwap {
 public:
-  ~Swap();
-  static Swap* Get();
-  static std::shared_ptr<Swap> _GetSharedRef();
+  ~ODSwap();
+  static ODSwap* Get();
+  static std::shared_ptr<ODSwap> _GetSharedRef();
   void SwapOut(unsigned required_memory, int device_id, bool async);
   void SwapOutLocked(unsigned required_memory, int device_id, bool async);
   void SwapIn(SwapInfo *info, bool async);
@@ -94,7 +94,7 @@ public:
   void PrintHandles();
 
 private:
-  Swap();
+  ODSwap();
   // FIXME(fegin): The design of the following two variables doesn't support
   // multiple GPUs.
   std::shared_ptr<SwapInfoGroups> swapinfo_groups_;

@@ -33,7 +33,7 @@
 #include <vector>
 #include <mutex>
 #include <new>
-#include "./gpu_swap.h"
+#include "./gpu_odswap.h"
 #include "./storage_manager.h"
 #include "../common/cuda_utils.h"
 
@@ -54,7 +54,7 @@ class GPUOnDemandSwapStorageManager final : public StorageManager {
     reserve_ = dmlc::GetEnv("MXNET_GPU_MEM_POOL_RESERVE", 5);
     //memory_manager_ = MemoryManager::_GetSharedRef();
     memory_manager_ = GetMemoryManagerRef();
-    swap_ = Swap::_GetSharedRef();
+    swap_ = ODSwap::_GetSharedRef();
     do_reuse_ = true;
     device_id_ = device_id;
   }
@@ -88,7 +88,7 @@ class GPUOnDemandSwapStorageManager final : public StorageManager {
   // percentage of reserved memory
   int reserve_;
   // shared pointer for swap
-  std::shared_ptr<Swap> swap_;
+  std::shared_ptr<ODSwap> swap_;
   // number of devices
   const int NDEV = 0;
   //shared pointer for memory manager
