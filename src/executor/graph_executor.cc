@@ -1267,6 +1267,7 @@ void GraphExecutor::InitCachedOps() {
 #endif
       if(this->memory_strategy_ == "SwapOnDemand") {
         ODSwap::Get()->PrePostAccess(true);
+        Prefetch::Get()->SignalStartComputing();
       }
       exec->Run(ctx, is_gpu);
       // call on complete only if it is async op
@@ -1283,6 +1284,7 @@ void GraphExecutor::InitCachedOps() {
         on_complete();
         if(this->memory_strategy_ == "SwapOnDemand") {
           ODSwap::Get()->PrePostAccess(false); 
+          Prefetch::Get()->SignalStopComputing();
         }
       }
 #if SWAP_ADVISOR_FLOW_TRACE
