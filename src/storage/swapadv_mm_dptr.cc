@@ -344,8 +344,8 @@ void* SA_MM_Dptr::GetDptr(handle_id_t id) {
   sa_log << "SA_MM_Dptr GetDptr " << id << std::endl;
 #if SWAPADV_REPORT_PROGRESS
   if (std::this_thread::get_id() == model_tid_) {
-    auto it = model_access_.rbegin();
-    if (it == model_access_.rend() || *it != id) {
+    if (std::find(model_access_.begin(), model_access_.end(), id) ==
+        model_access_.end()) {
       model_access_.push_back(id);
     }
   }
