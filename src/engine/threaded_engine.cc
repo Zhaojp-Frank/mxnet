@@ -113,9 +113,9 @@ inline void ThreadedVar::CompleteReadDependency(Dispatcher dispatcher) {
       }
     }
   }
-  if (trigger != nullptr && trigger->opr->node_name) {
-    std::cout << trigger->opr->node_name << ",READ_COMPLETE" << std::endl;
-  }
+  //if (trigger != nullptr && trigger->opr->node_name) {
+    //std::cout << trigger->opr->node_name << ",READ_COMPLETE" << std::endl;
+  //}
   if (trigger != nullptr && trigger->decr_wait() == 0) {
     dispatcher(trigger);
   }
@@ -175,10 +175,10 @@ inline bool ThreadedVar::CompleteWriteDependency(Dispatcher dispatcher) {
   VersionedVarBlock::Delete(old_pending_write);
   // dispatch all the events
   while (cur_head != end_of_read_chain) {
-    if (cur_head->trigger->opr->node_name) {
-      std::cout << cur_head->trigger->opr->node_name
-                << ",WRITE_COMPLETE" << std::endl;
-    }
+    //if (cur_head->trigger->opr->node_name) {
+      //std::cout << cur_head->trigger->opr->node_name
+                //<< ",WRITE_COMPLETE" << std::endl;
+    //}
     if (cur_head->trigger->decr_wait() == 0) {
       dispatcher(cur_head->trigger);
     }
@@ -187,12 +187,12 @@ inline bool ThreadedVar::CompleteWriteDependency(Dispatcher dispatcher) {
     assert(cur_head != nullptr);
     VersionedVarBlock::Delete(prev);
   }
-  if (trigger_write != nullptr) {
-    if (trigger_write->opr->node_name) {
-      std::cout << trigger_write->opr->node_name
-                << ",WRITE_COMPLETE" << std::endl;
-    }
-  }
+  //if (trigger_write != nullptr) {
+    //if (trigger_write->opr->node_name) {
+      //std::cout << trigger_write->opr->node_name
+                //<< ",WRITE_COMPLETE" << std::endl;
+    //}
+  //}
   if (trigger_write != nullptr && trigger_write->decr_wait() == 0) {
     dispatcher(trigger_write);
   }

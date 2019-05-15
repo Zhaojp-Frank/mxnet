@@ -109,16 +109,18 @@ void SA_MM_Dptr::ReadDeallocationRst() {
   std::ifstream ifs("deallocation.rst");
   std::string line;
 
-  size_t next = 0, last = 0;
-  std::getline(ifs, line);
-  next = line.find(",", last);
-  uint32_t nid = std::stoi(line.substr(last, next - last));
-  last = next + 1;
-  while ((next = line.find(",", last)) != std::string::npos) {
-    uint32_t hid = std::stoi(line.substr(last, next - last));
+  while (std::getline(ifs, line)) {
+    size_t next = 0, last = 0;
+    next = line.find(",", last);
+    uint32_t nid = std::stoi(line.substr(last, next - last));
     last = next + 1;
-    deallocations_[nid].push_back(hid);
+    while ((next = line.find(",", last)) != std::string::npos) {
+      handle_id_t hid = std::stoi(line.substr(last, next - last));
+      last = next + 1;
+      deallocations_[nid].push_back(hid);
+    }
   }
+  sa_log << "Deallocations_.size() = " << deallocations_.size() << std::endl;
 }
 
 void SA_MM_Dptr::ReadInitialHandlesRst() {
@@ -144,10 +146,11 @@ void* SA_MM_Dptr::Alloc_(handle_id_t id, bool do_swapin) {
     lock_.UnLock();
     return it->second;
   }
+  sa_log << "Alloc_ " << id << " not in memory " << std::endl;
   CHECK(!alloc_finalized_ || new_to_old_hids_.count(id) > 0);
   // Check if we still have mempool.
   uint32_t mempool_idx = hdl_to_mempool_.at(id);
-  auto& mempool = mempools_[mempool_idx];
+  auto& mempool = mempools_.at(mempool_idx);
   size_t counter = 0;
   while (mempool.size() == 0) {
     lock_.UnLock();
@@ -158,12 +161,13 @@ void* SA_MM_Dptr::Alloc_(handle_id_t id, bool do_swapin) {
       sa_log << std::dec << "Wait!!!" << id << " " << new_to_old_hids_.at(id)
              << " " << mempool_idx << " " << mempools_[mempool_idx].size()
              << std::endl;
-      for (auto it : used_mempools_[mempool_idx]) {
-        sa_log << it.second << "," << new_to_old_nids_.at(it.second)
+      for (auto it : used_mempools_.at(mempool_idx)) {
+        sa_log << it.second << "," << new_to_old_hids_.at(it.second)
                << std::endl;
       }
     }
   }
+  sa_log << "Alloc_ " << id << " found " << std::endl;
   void* address = mempool.back();
   mempool.pop_back();
   used_mempools_[mempool_idx][address] = id;
@@ -389,6 +393,9 @@ void SA_MM_Dptr::ReportProgress() {
     for (auto hid : model_access_) {
       if (new_to_old_hids_.count(hid) == 0) continue;
       handle_id_t old_hid = new_to_old_hids_.at(hid);
+      if (new_to_old_nids_.at(model_nid_) == 1457) {
+        sa_log << "1475=====" << model_access_.size() << std::endl;
+      }
       result << new_to_old_nids_.at(model_nid_) << ", " <<  old_hid << ":";
       int mempool_idx = hdl_to_mempool_.at(hid);
       std::vector<handle_id_t> handles;
@@ -416,10 +423,10 @@ void SA_MM_Dptr::ReportProgress() {
 }
 
 void SA_MM_Dptr::NotifyDone(uint32_t id) {
-  sa_log << "NotifyDone " << std::this_thread::get_id() << std::endl;
-  auto new_it = new_to_old_nids_.find(id);
-  if (new_it != new_to_old_nids_.end()) {
-    auto it = deallocations_.find(new_it->second);
+  sa_log << "NotifyDone " << id << std::endl;
+  auto old_it = new_to_old_nids_.find(id);
+  if (old_it != new_to_old_nids_.end()) {
+    auto it = deallocations_.find(old_it->second);
     if (it != deallocations_.end()) {
       sa_log << "Doing deallocation for nid = " << id << std::endl;
       for (auto hid : it->second) {

@@ -92,6 +92,22 @@ class SwapAdvisorEngine final : public ThreadedEngine {
  protected:
   // priority variable stores node id of the node for this engine.
   void PushToExecute(OprBlock *opr_block, bool pusher_thread) override {
+    const char* opr_name = opr_block->opr->opr_name;
+    if (strlen(opr_name) < 6 || opr_name[0] != 'S' || opr_name[1] != 'w' ||
+        opr_name[2] != 'a' || opr_name[3] != 'p') {
+      opr_block->priority = 0;
+    } else if (opr_name[4] == 'i' && opr_name[5] == 'n' &&
+               opr_name[6] == '\0') {
+      opr_block->priority = 1;
+    } else if (opr_name[4] == 'o' && opr_name[5] == 'u' &&
+               opr_name[6] == 't') {
+      opr_block->priority = 2;
+    } else if (opr_name[4] == '_' && opr_name[5] == 'e' &&
+               opr_name[6] == 'n' && opr_name[7] == 't') {
+      opr_block->priority = 1;
+    } else {
+      opr_block->priority = 0;
+    }
     if (opr_block->opr->node_name != nullptr) {
       std::cout << "Opr = " << opr_block->opr->opr_name << ", "
                 << "name = " << opr_block->opr->node_name << ", isGPU: "
@@ -100,12 +116,14 @@ class SwapAdvisorEngine final : public ThreadedEngine {
       std::cout << "Opr = " << opr_block->opr->opr_name << ", isGPU: "
                 << (int)(opr_block->ctx.dev_mask() == gpu::kDevMask) << std::endl;
     }
-    if(std::string(opr_block->opr->opr_name) == "Swapout") {
-      swapout_task_queue_->Push(opr_block);
-    } else if(std::string(opr_block->opr->opr_name) == "Swapin") {
-      swapin_task_queue_->Push(opr_block);
-    } else {
+    if (opr_block->priority == 0) {
       task_queue_->Push(opr_block);
+    } else if (opr_block->priority == 1) {
+      swapin_task_queue_->Push(opr_block);
+    } else if (opr_block->priority == 2) {
+      swapout_task_queue_->Push(opr_block);
+    } else {
+      CHECK(false) << "No right engine priority";
     }
   }
 
@@ -118,14 +136,15 @@ class SwapAdvisorEngine final : public ThreadedEngine {
       size_t dev_id = static_cast<size_t>(opr_block->ctx.dev_id);
       //MSHADOW_CATCH_ERROR(mshadow::SetDevice<gpu>(opr_block->ctx.dev_id));
       CUDA_CALL(cudaSetDevice(opr_block->ctx.dev_id));
-      mshadow::Stream<gpu>* cur_stream;
-      std::string opr_name = std::string(opr_block->opr->opr_name);
-      if(opr_name == "Swapout") {
-        cur_stream = this->GetStream(swapout_streams_, dev_id);
-      } else if(opr_name == "Swapin"){
-        cur_stream = this->GetStream(swapin_streams_, dev_id);
-      } else {
+      mshadow::Stream<gpu>* cur_stream = nullptr;
+      if (opr_block->priority == 0) {
         cur_stream = this->GetStream(streams_, dev_id);
+      } else if (opr_block->priority == 1) {
+        cur_stream = this->GetStream(swapin_streams_, dev_id);
+      } else if (opr_block->priority == 2) {
+        cur_stream = this->GetStream(swapout_streams_, dev_id);
+      } else {
+        CHECK(false) << "No right engine priority";
       }
       this->ExecuteOprBlock((RunContext){opr_block->ctx, cur_stream},
             opr_block);
