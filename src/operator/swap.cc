@@ -13,11 +13,15 @@
 #include <zmq.h>
 #include "./operator_common.h"
 #include "./swap-inl.h"
+#include "../storage/swapadv_mm_dptr.h"
 
 namespace mxnet {
 namespace op {
 
 DMLC_REGISTER_PARAMETER(SwapOpParam);
+
+// Ugly but efficient
+bool swap_doit = false;
 
 inline bool SwapEntryInferShape(const nnvm::NodeAttrs& attrs,
                                 std::vector<TShape> *in_shapes,
@@ -52,7 +56,11 @@ void SwapEntryCompute(const nnvm::NodeAttrs& attrs,
   (void)inputs;
   (void)req;
   (void)outputs;
-  std::cout << "SwapEntryCompute" << std::endl;
+  const char *type = getenv("MXNET_GPU_MEM_POOL_TYPE");
+  if (type != nullptr && strcmp(type, "SwapAdv") == 0) {
+    swap_doit = true;
+  }
+  std::cout << "SwapEntryCompute " << swap_doit << std::endl;
 }
 
 NNVM_REGISTER_OP(SwapEntry)
@@ -96,7 +104,7 @@ void SwapoutSinkCompute(const nnvm::NodeAttrs& attrs,
   (void)inputs;
   (void)req;
   (void)outputs;
-  std::cout << "SwapSinkCompute" << std::endl;
+  std::cout << "SwapoutSinkCompute" << std::endl;
 }
 
 NNVM_REGISTER_OP(SwapoutSink)
@@ -145,6 +153,9 @@ void SwapoutCompute(const nnvm::NodeAttrs& attrs,
   std::cout << "SwapoutCompute src = (" << param.src_tensor_nid << ", "
             << param.src_tensor_idx << ")" << std::endl;
 #endif
+  if (swap_doit) {
+    storage::SA_MM_DPTR()->Swapout(param.src_tensor_nid, param.src_tensor_idx);
+  }
 }
 
 NNVM_REGISTER_OP(Swapout)
@@ -193,6 +204,9 @@ void SwapinCompute(const nnvm::NodeAttrs& attrs,
   std::cout << "SwapinCompute src = (" << param.src_tensor_nid << ", "
             << param.src_tensor_idx << ")" << std::endl;
 #endif
+  if (swap_doit) {
+    storage::SA_MM_DPTR()->Swapin(param.src_tensor_nid, param.src_tensor_idx);
+  }
 }
 
 NNVM_REGISTER_OP(Swapin)

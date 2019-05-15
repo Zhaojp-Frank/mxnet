@@ -504,6 +504,12 @@ def _notify_shutdown():
 
 atexit.register(_notify_shutdown)
 
+def swap_start_allocargs():
+    check_call(_LIB.MXSwapStartAllocArgs())
+
+def swap_stop_allocargs():
+    check_call(_LIB.MXSwapStopAllocArgs())
+
 def swap_start_binding():
     check_call(_LIB.MXSwapStartBinding())
 

@@ -38,7 +38,7 @@ namespace engine {
 class SwapAdvisorEngine final : public ThreadedEngine {
  public:
   SwapAdvisorEngine() {
-    this->Start();     
+    this->Start();
   }
   // virtual destructor
   virtual ~SwapAdvisorEngine() {
@@ -77,30 +77,34 @@ class SwapAdvisorEngine final : public ThreadedEngine {
     swapout_task_queue_.reset(new dmlc::ConcurrentBlockingQueue<OprBlock*>());
     thread_pool_.reset(new ThreadPool(1,
                        [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
-                        ThreadWorker(task_queue_, ready_event); 
+                        ThreadWorker(task_queue_, ready_event);
                        }, true));
     swapin_thread_pool_.reset(new ThreadPool(1,
                        [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
-                        ThreadWorker(swapin_task_queue_, ready_event); 
+                        ThreadWorker(swapin_task_queue_, ready_event);
                        }, true));
     swapout_thread_pool_.reset(new ThreadPool(1,
                        [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
-                        ThreadWorker(swapout_task_queue_, ready_event); 
+                        ThreadWorker(swapout_task_queue_, ready_event);
                        }, true));
   }
 
  protected:
   // priority variable stores node id of the node for this engine.
   void PushToExecute(OprBlock *opr_block, bool pusher_thread) override {
-    std::cout << "Opr = " << opr_block->opr->opr_name << ", GPU: " 
-              << (int)(opr_block->ctx.dev_mask() == gpu::kDevMask) << std::endl;
+    if (opr_block->opr->node_name != nullptr) {
+      std::cout << "Opr = " << opr_block->opr->opr_name << ", "
+                << "name = " << opr_block->opr->node_name << ", isGPU: "
+                << (int)(opr_block->ctx.dev_mask() == gpu::kDevMask) << std::endl;
+    } else {
+      std::cout << "Opr = " << opr_block->opr->opr_name << ", isGPU: "
+                << (int)(opr_block->ctx.dev_mask() == gpu::kDevMask) << std::endl;
+    }
     if(std::string(opr_block->opr->opr_name) == "Swapout") {
       swapout_task_queue_->Push(opr_block);
-    }
-    else if(std::string(opr_block->opr->opr_name) == "Swapin") {
+    } else if(std::string(opr_block->opr->opr_name) == "Swapin") {
       swapin_task_queue_->Push(opr_block);
-    }
-    else {
+    } else {
       task_queue_->Push(opr_block);
     }
   }
@@ -118,11 +122,9 @@ class SwapAdvisorEngine final : public ThreadedEngine {
       std::string opr_name = std::string(opr_block->opr->opr_name);
       if(opr_name == "Swapout") {
         cur_stream = this->GetStream(swapout_streams_, dev_id);
-      }
-      else if(opr_name == "Swapin"){
+      } else if(opr_name == "Swapin"){
         cur_stream = this->GetStream(swapin_streams_, dev_id);
-      }
-      else {
+      } else {
         cur_stream = this->GetStream(streams_, dev_id);
       }
       this->ExecuteOprBlock((RunContext){opr_block->ctx, cur_stream},
@@ -133,7 +135,7 @@ class SwapAdvisorEngine final : public ThreadedEngine {
     } else {
       this->ExecuteOprBlock((RunContext){opr_block->ctx, &cpu_stream_}, opr_block);
     }
-  } 
+  }
 
   void ThreadWorker(std::shared_ptr<dmlc::ConcurrentBlockingQueue<OprBlock*>> task_queue,
                     const std::shared_ptr<dmlc::ManualEvent>& ready_event) {

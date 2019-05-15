@@ -22,7 +22,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     return ptr;
   }
 
-  void* Free(handle_id_t id) {
+  void* Free (handle_id_t id) override {
 #if SWAP_ADVISOR_FLOW_TRACE
     std::cout << "Free " << id << std::endl;
 #endif
@@ -33,41 +33,40 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     return ptr;
   }
 
-  void Release(handle_id_t id, void* ptr) {
+  void Release (handle_id_t id, void* ptr) override {
 #if SWAP_ADVISOR_FLOW_TRACE
     std::cout << "Release " << id << std::endl;
 #endif
     dptr_mapping_[id] = ptr;
   }
 
-  void StartBinding() {
-    MemoryHistory::Get()->StartIteration();
+  void StartAllocArgs () override { }
+
+  void StopAllocArgs () override { }
+
+  void StartBinding () override { MemoryHistory::Get()->StartIteration(); }
+
+  void StopBinding () override { MemoryHistory::Get()->StopIteration(); }
+
+  void StartIteration () override { MemoryHistory::Get()->StartIteration(); }
+
+  void StopIteration () override { MemoryHistory::Get()->StopIteration(); }
+
+  void RegisterEntry (uint32_t nid, uint32_t idx, handle_id_t hid,
+                      uint32_t old_nid, uint32_t old_idx, handle_id_t old_hid,
+                      size_t hdl_size, bool is_var) override { }
+
+  void FinalizeRegular() override { }
+
+  void NotifyBegin (uint32_t nid, const std::string& name) override { }
+
+  void NotifyDone (uint32_t nid) override { }
+
+  std::vector<uint32_t> GetScheduleDeps(uint32_t nid) override {
+    return std::vector<uint32_t>();
   }
 
-  void StopBinding() {
-    MemoryHistory::Get()->StopIteration();
-  }
-
-  void StartIteration() {
-    MemoryHistory::Get()->StartIteration();
-  }
-
-  void StopIteration() {
-    MemoryHistory::Get()->StopIteration();
-  }
-
-  void RegisterEntry(uint32_t nid, uint32_t idx, handle_id_t hid,
-                     uint32_t old_nid, uint32_t old_idx, handle_id_t old_hid,
-                     size_t hdl_size, bool is_var) {
-    // Nothing to do for pooled_mm_dptr.
-    return;
-  }
-
-  void FinalizeRegular() {
-    return;
-  }
-
-  void* GetDptr(handle_id_t id) {
+  void* GetDptr (handle_id_t id) override {
 #if SWAP_ADVISOR_FLOW_TRACE
     std::cout << "GetDptr " << id << std::endl;
 #endif
@@ -78,7 +77,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     return dptr_mapping_[id];
   }
 
-  void SetDptr(handle_id_t id, void* ptr, uint32_t dev_id) {
+  void SetDptr (handle_id_t id, void* ptr, uint32_t dev_id) override {
 #if SWAP_ADVISOR_FLOW_TRACE
     std::cout << "SetDptr " << id << " " << ptr << std::endl;
 #endif

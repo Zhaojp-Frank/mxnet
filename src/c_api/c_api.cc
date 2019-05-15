@@ -106,6 +106,18 @@ int MXNotifyShutdown() {
   API_END();
 }
 
+int MXSwapStartAllocArgs() {
+  API_BEGIN();
+  storage::MM_DPTR()->StartAllocArgs();
+  API_END();
+}
+
+int MXSwapStopAllocArgs() {
+  API_BEGIN();
+  storage::MM_DPTR()->StopAllocArgs();
+  API_END();
+}
+
 int MXSwapStartBinding() {
   API_BEGIN();
   storage::MM_DPTR()->StartBinding();

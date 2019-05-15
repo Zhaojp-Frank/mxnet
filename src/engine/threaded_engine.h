@@ -233,6 +233,7 @@ struct ThreadedOpr final : public Opr,
   FnProperty prop;
   /*! \brief The name of the operator */
   const char* opr_name{nullptr};
+  const char* node_name{nullptr};
   /*!
    * \brief Whether this is an temporary operator
    *        that can be deleted right after the operation completed.
@@ -274,7 +275,8 @@ class ThreadedEngine : public Engine {
                            std::vector<VarHandle> const& mutable_vars,
                            FnProperty prop = FnProperty::kNormal,
                            const char* opr_name = nullptr,
-                           bool wait = false) override;
+                           bool wait = false,
+                           const char* node_name = nullptr) override;
   void DeleteOperator(OprHandle op) override;
   void Push(OprHandle op, Context exec_ctx, int priority = 0, bool profiling = false) override;
   void PushAsync(AsyncFn exec_fun, Context exec_ctx,
@@ -290,6 +292,16 @@ class ThreadedEngine : public Engine {
                 FnProperty prop = FnProperty::kNormal,
                 int priority = 0,
                 const char* opr_name = nullptr) override;
+  void PushFin1(OprHandle op,
+                Context exec_ctx,
+                VarHandle fin,
+                int priority,
+                bool profiling) override;
+  void PushFin2(OprHandle op,
+                Context exec_ctx,
+                VarHandle fin,
+                int priority,
+                bool profiling) override;
   void DeleteVariable(SyncFn delete_fn, Context exec_ctx, VarHandle var) override;
   void WaitForVar(VarHandle var) override;
   void WaitForAll() override;

@@ -1,6 +1,7 @@
 #ifndef MXNET_MM_DPTR_H_
 #define MXNET_MM_DPTR_H_
 
+#include<vector>
 
 namespace mxnet {
 namespace storage {
@@ -28,6 +29,12 @@ class MM_Dptr {
   // This function should be used exclusively for storage managers.
   virtual void  Release(handle_id_t id, void* ptr) = 0;
 
+  // StartAllocArgs()
+  virtual void  StartAllocArgs() = 0;
+
+  // StopAllocArgs()
+  virtual void  StopAllocArgs() = 0;
+
   // StartBinding()
   virtual void  StartBinding() = 0;
 
@@ -50,6 +57,15 @@ class MM_Dptr {
   // Let the manager know that all regular tensor allocations are finished.
   // All rest memory allocations will be temporary memory allocations.
   virtual void FinalizeRegular() = 0;
+
+  virtual void NotifyBegin(uint32_t nid, const std::string& name) = 0 ;
+
+  // Notify mm_dptr that a node is executed.
+  virtual void NotifyDone(uint32_t id) = 0;
+
+  //
+  virtual std::vector<uint32_t> GetScheduleDeps(uint32_t nid) = 0;
+
 
   // Can be called by both handles and storage managers.
   virtual void* GetDptr(handle_id_t id) = 0;

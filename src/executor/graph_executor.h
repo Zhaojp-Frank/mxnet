@@ -133,6 +133,7 @@ class GraphExecutor : public Executor {
     bool skip_exec_node{false};
     // cached operator handle
     Engine::OprHandle cached_opr{nullptr};
+    Engine::VarHandle finish_var;
     // cached const vars, used for seg ops creation
     std::vector<Engine::VarHandle> use_vars;
     // cached mutate vars, used for seg ops creation
@@ -193,6 +194,7 @@ class GraphExecutor : public Executor {
                       const std::vector<OpReqType>& grad_req_types);
   // initialize the cached operator
   void InitCachedOps();
+  void ExportEntryHandle();
   void SaveEntryMapping();
   // initialize the opr segments for bulk exec
   void InitOpSegs();

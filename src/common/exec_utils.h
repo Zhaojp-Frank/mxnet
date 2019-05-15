@@ -56,9 +56,11 @@ inline bool SetupDefaultBlobsIn(const std::vector<NDArray>& src,
                                 std::vector<NDArray> *temp_dst,
                                 std::unordered_map<uint32_t, uint32_t> *idx_map) {
   bool require_cast = false;
+#if SWAP_ADVISOR_FLOW_TRACE
   std::cout << "SetupDefaultBlobsIn" << std::endl;
+#endif
   for (size_t i = 0; i < src.size(); i++) {
-#if SWAP_ADVISOR_FLOW_TRACE 
+#if SWAP_ADVISOR_FLOW_TRACE
     std::cout << "SetupDefaultBlobsIn " << i << std::endl;
 #endif
     auto& nd = src[i];
@@ -82,7 +84,7 @@ inline bool SetupDefaultBlobsIn(const std::vector<NDArray>& src,
       blobs->push_back(nd.data());
     }
   }
-#if SWAP_ADVISOR_FLOW_TRACE 
+#if SWAP_ADVISOR_FLOW_TRACE
   std::cout << "SetupDefaultBlobsIn end" << std::endl;
 #endif
   return require_cast;
@@ -95,9 +97,11 @@ inline bool SetupDefaultBlobsOut(const std::vector<NDArray>& src,
                                  std::vector<NDArray> *temp_src,
                                  std::vector<NDArray> *temp_dst) {
   bool require_cast = false;
+#if SWAP_ADVISOR_FLOW_TRACE
   std::cout << "SetupDefaultBlobsOut" << std::endl;
+#endif
   for (size_t i = 0; i < src.size(); i++) {
-#if SWAP_ADVISOR_FLOW_TRACE 
+#if SWAP_ADVISOR_FLOW_TRACE
     std::cout << "SetupDefaultBlobsOut " << i << std::endl;
 #endif
     auto& nd = src[i];
@@ -138,7 +142,7 @@ inline bool SetupDefaultBlobsOut(const std::vector<NDArray>& src,
       blobs->push_back(nd.data());
     }
   }
-#if SWAP_ADVISOR_FLOW_TRACE 
+#if SWAP_ADVISOR_FLOW_TRACE
   std::cout << "SetupDefaultBlobsOut end" << std::endl;
 #endif
   return require_cast;
@@ -165,7 +169,9 @@ inline void SetupDefaultBlobsInOut(const std::vector<NDArray> &ndinputs,
                                    std::unordered_map<uint32_t, uint32_t> *in_temp_idx_map,
                                    const std::vector<uint32_t> &mutate_idx) {
   // populate input blobs
+#if SWAP_ADVISOR_FLOW_TRACE
   std::cout << "SetupDefaultBlobsInOut" << std::endl;
+#endif
   SetupDefaultBlobsIn(ndinputs, in_bufs, input_blobs, pre_temp_src, pre_temp_dst,
                       in_temp_idx_map);
   // populate output blobs
@@ -179,7 +185,9 @@ inline void SetupDefaultBlobsInOut(const std::vector<NDArray> &ndinputs,
       post_temp_dst->push_back(ndinputs[idx]);
     }
   }
+#if SWAP_ADVISOR_FLOW_TRACE
   std::cout << "SetupDefaultBlobsInOut end" << std::endl;
+#endif
 }
 
 /*

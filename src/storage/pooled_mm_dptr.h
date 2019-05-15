@@ -12,7 +12,7 @@ namespace storage {
 
 class Pooled_MM_Dptr : virtual public MM_Dptr {
  public:
-  void* Alloc(handle_id_t id, size_t size, void* ptr) {
+  void* Alloc(handle_id_t id, size_t size, void* ptr) override {
 #if SWAP_ADVISOR_FLOW_TRACE
     std::cout << "Alloc " << id << std::endl;
 #endif
@@ -20,7 +20,7 @@ class Pooled_MM_Dptr : virtual public MM_Dptr {
     return ptr;
   }
 
-  void* Free(handle_id_t id) {
+  void* Free(handle_id_t id) override {
 #if SWAP_ADVISOR_FLOW_TRACE
     std::cout << "Free " << id << std::endl;
 #endif
@@ -30,52 +30,47 @@ class Pooled_MM_Dptr : virtual public MM_Dptr {
     return ptr;
   }
 
-  void Release(handle_id_t id, void* ptr) {
+  void Release(handle_id_t id, void* ptr) override {
 #if SWAP_ADVISOR_FLOW_TRACE
     std::cout << "Release " << id << std::endl;
 #endif
     dptr_mapping_[id] = ptr;
   }
 
-  void StartBinding() {
-    // Nothing to do for pooled_mm_dptr.
-    return;
-  }
+  void StartAllocArgs() override { }
 
-  void StopBinding() {
-    // Nothing to do for pooled_mm_dptr.
-    return;
-  }
+  void StopAllocArgs() override { }
 
-  void StartIteration() {
-    // Nothing to do for pooled_mm_dptr.
-    return;
-  }
+  void StartBinding() override { }
 
-  void StopIteration() {
-    // Nothing to do for pooled_mm_dptr.
-    return;
-  }
+  void StopBinding() override { }
+
+  void StartIteration() override { }
+
+  void StopIteration() override { }
 
   void RegisterEntry(uint32_t nid, uint32_t idx, handle_id_t hid,
                      uint32_t old_nid, uint32_t old_idx, handle_id_t old_hid,
-                     size_t hdl_size, bool is_var) {
-    // Nothing to do for pooled_mm_dptr.
-    return;
+                     size_t hdl_size, bool is_var) override { }
+
+  void FinalizeRegular() override { }
+
+  void NotifyBegin(uint32_t nid, const std::string& name) override { }
+
+  void NotifyDone(uint32_t nid) override { }
+
+  std::vector<uint32_t> GetScheduleDeps(uint32_t nid) override {
+    return std::vector<uint32_t>();
   }
 
-  void FinalizeRegular() {
-    return;
-  }
-
-  void* GetDptr(handle_id_t id) {
+  void* GetDptr(handle_id_t id) override {
 #if SWAP_ADVISOR_FLOW_TRACE
     std::cout << "GetDptr " << id << std::endl;
 #endif
     return dptr_mapping_.at(id);
   }
 
-  void SetDptr(handle_id_t id, void* ptr, uint32_t dev_id) {
+  void SetDptr(handle_id_t id, void* ptr, uint32_t dev_id) override {
 #if SWAP_ADVISOR_FLOW_TRACE
     std::cout << "SetDptr " << id << std::endl;
 #endif

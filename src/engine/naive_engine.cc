@@ -80,7 +80,8 @@ class NaiveEngine final : public Engine {
                         std::vector<VarHandle> const& mutable_vars,
                         FnProperty prop = FnProperty::kNormal,
                         const char* opr_name = nullptr,
-                        bool wait = false) override {
+                        bool wait = false,
+                        const char* node_name = nullptr) override {
     NaiveOpr *opr = new NaiveOpr();
     opr->fn = fn;
     opr->const_vars = const_vars;
@@ -120,6 +121,12 @@ class NaiveEngine final : public Engine {
       priority,
       opr->opr_name);
   }
+
+
+   void PushFin1(OprHandle op, Context exec_ctx, VarHandle fin, int priority = 0, bool profiling = false) {}
+
+   void PushFin2(OprHandle op, Context exec_ctx, VarHandle fin, int priority = 0, bool profiling = false) { Push(op, exec_ctx, priority, profiling); }
+
 
   void PushAsync(AsyncFn exec_fun,
                  Context exec_ctx,

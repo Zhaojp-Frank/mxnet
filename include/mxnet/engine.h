@@ -151,7 +151,8 @@ class MXNET_API Engine {
                                 std::vector<VarHandle> const& mutable_vars,
                                 FnProperty prop = FnProperty::kNormal,
                                 const char* opr_name = nullptr,
-                                bool wait = false) = 0;
+                                bool wait = false,
+                                const char* node_name = nullptr) = 0;
   /*!
    * \brief Delete the given operator.
    * \param op The operator to delete.
@@ -168,7 +169,13 @@ class MXNET_API Engine {
    * \param profiling The variable indicate whether to profile this operator.
    */
   virtual void Push(OprHandle op, Context exec_ctx, int priority = 0, bool profiling = false) = 0;
+
+  virtual void PushFin1(OprHandle op, Context exec_ctx, VarHandle fin, int priority = 0, bool profiling = false) = 0;
+
+  virtual void PushFin2(OprHandle op, Context exec_ctx, VarHandle fin, int priority = 0, bool profiling = false) = 0;
+
   /*!
+  virtual void Push(OprHandle op, Context exec_ctx, int priority = 0, bool profiling = false) = 0;
    * \brief Push an asynchronous operation to the engine.
    * \param exec_fun Execution function, this function takes a parameter
    *                 on_complete that must be called when the execution

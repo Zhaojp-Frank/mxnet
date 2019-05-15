@@ -761,7 +761,11 @@ void GraphExecutor::FinishInitGraph(nnvm::Symbol symbol,
 #if SWAP_ADVISOR_FLOW_TRACE
   std::cout << "After InitCachedOps" << std::endl;
 #endif
-  this->SaveEntryMapping();
+  bool swap_advisor = dmlc::GetEnv("MXNET_SWAP_ADVISOR", 0);
+  if (swap_advisor) {
+    this->SaveEntryMapping();
+  }
+  this->ExportEntryHandle();
 #if SWAP_ADVISOR_FLOW_TRACE
   std::cout << "Before InitOpSegs" << std::endl;
 #endif
@@ -1219,31 +1223,93 @@ void GraphExecutor::InitCachedOps() {
     op_nodes_[e.node_id].exec->req[e.index] =
         grad_store_[j - num_forward_outputs_].first;
   }
+
+#if 0
+  // FIXM(fegiin): If enable this, the finish_var below must be disabled.
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
     if (inode.source->is_variable()) continue;
     if (op_nodes_[nid].skip_exec_node) continue;
+    op_nodes_[nid].finish_var = Engine::Get()->NewVariable();
+  }
+
+  const nnvm::IdMapping
+    old_to_new_nids(graph_.GetAttr<nnvm::IdMapping>("old_to_new_nids"));
+  const nnvm::IdMapping& new_to_old_nids =
+    graph_.GetAttr<nnvm::IdMapping>("new_to_old_nids");
+#endif
+  for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
+    const auto& inode = idx[nid];
+    if (inode.source->is_variable()) continue;
+    if (op_nodes_[nid].skip_exec_node) continue;
+    op_nodes_[nid].finish_var = Engine::Get()->NewVariable();
     auto& exec = op_nodes_[nid].exec;
     bool is_async = op_nodes_[nid].exec->exec_type() == ExecType::kAsync;
     bool is_gpu = op_nodes_[nid].ctx.dev_mask() == gpu::kDevMask;
 
     // the variables
     std::vector<Engine::VarHandle> use_vars, mutate_vars;
+    // Handle control dependencies.
+    for (auto & dep_node : inode.source->control_deps) {
+      const uint32_t dep_nid = idx.node_id(dep_node.get());
+      CHECK_LT(dep_nid, nid);
+      std::cout << inode.source->attrs.name << " DEPENDS ON "
+                << dep_nid << std::endl;
+      use_vars.push_back(op_nodes_[dep_nid].finish_var);
+    }
+#if 0
+    auto old_it = new_to_old_nids.find(nid);
+    if (old_it != new_to_old_nids.end()) {
+      for (uint32_t dep_nid :
+           storage::MM_DPTR()->GetScheduleDeps(old_it->second)) {
+          uint32_t new_dep_nid = old_to_new_nids.at(dep_nid);
+          std::cout << inode.source->attrs.name << " DEPENDS ON2 "
+                    << new_dep_nid << std::endl;
+          use_vars.push_back(op_nodes_[new_dep_nid].finish_var);
+      }
+    }
+#endif
+    std::cout << inode.source->attrs.name << " HAS "
+              << use_vars.size() << std::endl;
     for (size_t i = 0; i < exec->in_array.size(); ++i) {
       auto& nd = exec->in_array[i];
       use_vars.push_back(nd.var());
     }
+    std::cout << inode.source->attrs.name << " HAS2 "
+              << use_vars.size() << std::endl;
     for (auto& r : exec->op_ctx.requested) {
       mutate_vars.push_back(r.var);
     }
-    for (auto& nd : exec->out_array) {
-      mutate_vars.push_back(nd.var());
+    std::cout << inode.source->attrs.name << " HASA "
+              << mutate_vars.size() << std::endl;
+    if (strcmp(op_nodes_[nid].opr_name, "Swapout") != 0 &&
+        strcmp(op_nodes_[nid].opr_name, "Swapin") != 0) {
+      for (auto& nd : exec->out_array) {
+        mutate_vars.push_back(nd.var());
+      }
     }
+    std::cout << inode.source->attrs.name << " HASA2 "
+              << mutate_vars.size() << std::endl;
     if (exec->var() != nullptr) {
       mutate_vars.push_back(exec->var());
     }
+    std::cout << inode.source->attrs.name << " HASA3 "
+              << mutate_vars.size() << std::endl;
+    mutate_vars.push_back(op_nodes_[nid].finish_var);
+    std::cout << inode.source->attrs.name << " HASA4 "
+              << mutate_vars.size() << std::endl;
     // dedup vars
+    for (auto var : use_vars) {
+      std::cout << var << std::endl;
+    }
+    for (auto var : mutate_vars) {
+      std::cout << var << std::endl;
+    }
     Engine::Get()->DeduplicateVarHandle(&use_vars, &mutate_vars);
+    std::cout << inode.source->attrs.name << " HAS3 "
+              << use_vars.size() << std::endl;
+    std::cout << inode.source->attrs.name << " HASA5 "
+              << mutate_vars.size() << std::endl;
     // all vars include both mutate vars and use vars
     std::vector<Engine::VarHandle> all_vars(use_vars);
     std::copy(mutate_vars.begin(), mutate_vars.end(),
@@ -1266,7 +1332,8 @@ void GraphExecutor::InitCachedOps() {
                 << std::endl;
 #endif
       // FIXME(fegin): This should have some switch to turn it off.
-      Swap::Get()->PrePostAccess(true);
+      //Swap::Get()->PrePostAccess(true);
+      storage::MM_DPTR()->NotifyBegin(nid, name);
       exec->Run(ctx, is_gpu);
       // call on complete only if it is async op
       if (!is_async) {
@@ -1274,14 +1341,15 @@ void GraphExecutor::InitCachedOps() {
         #if MXNET_USE_CUDA
           // Wait GPU kernel to finish.
           ctx.get_stream<gpu>()->Wait();
-          Prefetch::Get()->SignalStopComputing();
+          //Prefetch::Get()->SignalStopComputing();
         #else
           LOG(FATAL) << MXNET_GPU_NOT_ENABLED_ERROR;
         #endif
         }
         on_complete();
-        Swap::Get()->PrePostAccess(false);
+        //Swap::Get()->PrePostAccess(false);
       }
+      storage::MM_DPTR()->NotifyDone(nid);
 #if SWAP_ADVISOR_FLOW_TRACE
       std::cout << "[RUNNING]: DONE, " << nid << std::endl;
 #endif
@@ -1289,18 +1357,42 @@ void GraphExecutor::InitCachedOps() {
     // setup the vars
     op_nodes_[nid].cached_opr = Engine::Get()->NewOperator(
         exec_fun, use_vars, mutate_vars, FnProperty::kNormal,
-        op_nodes_[nid].opr_name);
+        op_nodes_[nid].opr_name, false, inode.source->attrs.name.c_str());
     op_nodes_[nid].mutate_vars = mutate_vars;
     op_nodes_[nid].use_vars = use_vars;
   }
 }
 
+void GraphExecutor::ExportEntryHandle() {
+  std::cout << "ExportEntryHandle" << std::endl;
+  const auto& idx = graph_.indexed_graph();
+  std::vector<std::vector<size_t>> output_handles;
+  bool export_graph = dmlc::GetEnv("MXNET_SWAP_EXPORT_GRAPH", 0);
+  for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
+    const auto& inode = idx[nid];
+    std::vector<std::vector<size_t>> output_handles_;
+    for (uint32_t index = 0; index < inode.source->num_outputs(); ++index) {
+      uint32_t eid = idx.entry_id(nid, index);
+      uint32_t hid = data_entry_[eid].storage_handle().ID();
+      std::vector<size_t> output_handle;
+      if (export_graph) {
+        output_handle.push_back(nid);
+        output_handle.push_back(index);
+        output_handle.push_back(hid);
+        output_handles.emplace_back(output_handle);
+      }
+    }
+  }
+  if (export_graph) {
+    graph_.attrs["output_handles"] =
+      std::make_shared<dmlc::any>(std::move(output_handles));
+  }
+}
 
 void GraphExecutor::SaveEntryMapping() {
   std::cout << "SaveEntryMapping" << std::endl;
   const auto& idx = graph_.indexed_graph();
   std::vector<std::vector<size_t>> output_handles;
-  bool export_graph = dmlc::GetEnv("MXNET_SWAP_EXPORT_GRAPH", 0);
   nnvm::IdMapping old_to_new_nids(
                       graph_.GetAttr<nnvm::IdMapping>("old_to_new_nids"));
   const nnvm::IdMapping& new_to_old_nids =
@@ -1334,34 +1426,23 @@ void GraphExecutor::SaveEntryMapping() {
       } else {
         new_to_old_hids[hid] = old_hid;
       }
-#if SWAP_ADVISOR_FLOW_TRACE
       std::cout << "SaveEntryMapping Name: " << inode.source->attrs.name
                 << ", NID: " << nid << ", EID: " << eid << ", handle id: "
                 << hid << std::endl;
-#endif
       size_t hdl_size = hdl_sizes.at(old_hid);
-      // FIXME(fegin): Check if the size is the same or not.
+      std::cout << "HDL_SIZE " << nid << " " << old_nid << std::endl;
       CHECK_EQ(hdl_size, data_entry_[eid].storage_handle().size);
-      std::cout << "FEGIN " << hdl_size << " " << data_entry_[eid].storage_handle().size << std::endl;
+      std::cout << "FEGIN " << hdl_size << " "
+                << data_entry_[eid].storage_handle().size << std::endl;
       storage::MM_DPTR()->RegisterEntry(nid, index, hid, old_nid, index,
                                         old_hid, hdl_size, true);
-      if (export_graph) {
-        std::vector<size_t> output_handle;
-        output_handle.push_back(nid);
-        output_handle.push_back(index);
-        output_handle.push_back(hid);
-        output_handles.emplace_back(output_handle);
-      }
     }
   }
   CHECK_EQ(old_to_new_nids.size(), 0);
-  std::cout << "Length of newtoold_hids:" << new_to_old_hids.size()
+  std::cout << "Length of new_to_old_hids:" << new_to_old_hids.size()
             << std::endl;
-  if (export_graph) {
-    graph_.attrs["output_handles"] =
-      std::make_shared<dmlc::any>(std::move(output_handles));
-  }
 }
+
 
 void GraphExecutor::InitOpSegs() {
   size_t total_num_nodes = graph_.indexed_graph().num_nodes();
@@ -1507,6 +1588,22 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
   }
 
   // Push Ops
+#if 0
+  // FIXME(fegin): Turning this should also turn of pushfin2
+  for (size_t nid = topo_start; nid < topo_end; ++nid) {
+    const auto& inode = idx[nid];
+    if (inode.source->is_variable()) continue;
+    OpNode& opnode = op_nodes_[nid];
+    if (op_nodes_[nid].skip_exec_node) continue;
+    if (opnode.exec->exec_type() == ExecType::kCrossDeviceCopy) {
+      continue;
+    } else if (opnode.exec->exec_type() == ExecType::kSubgraphExec) {
+      continue;
+    } else if (opnode.cached_opr != nullptr) {
+      Engine::Get()->PushFin1(opnode.cached_opr, opnode.ctx, opnode.finish_var, 0, false);
+    }
+  }
+#endif
   for (size_t nid = topo_start; nid < topo_end; ++nid) {
     auto seg_op = cached_seg_opr_[nid];
     // Check segments first
@@ -1535,7 +1632,9 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
       bool profiling = profiler::Profiler::Get()->GetState() == profiler::Profiler::kRunning;
       // Pass node id if enabled for scheduling
       bool node_id = pass_node_id_? nid : 0;
+      std::cout << "Push " << inode.source->attrs.name << std::endl;
       Engine::Get()->Push(opnode.cached_opr, opnode.ctx, node_id, profiling);
+      //Engine::Get()->PushFin2(opnode.cached_opr, opnode.ctx, opnode.finish_var, node_id, profiling);
     } else {
       LOG(FATAL) << "Not accessed";
     }
@@ -1591,7 +1690,7 @@ GraphExecutor::CachedSegOpr GraphExecutor::CreateCachedSegOpr(size_t topo_start,
   auto exec_fun = [exec_list, is_gpu] (
       RunContext ctx, Engine::CallbackOnComplete on_complete) {
     // Run all opr in the sub-graph
-    Swap::Get()->PrePostAccess(true);
+    //Swap::Get()->PrePostAccess(true);
     for (auto &exec : exec_list) {
       exec->Run(ctx, is_gpu);
     }
@@ -1599,13 +1698,13 @@ GraphExecutor::CachedSegOpr GraphExecutor::CreateCachedSegOpr(size_t topo_start,
 #if MXNET_USE_CUDA
       // Wait GPU kernel to finish.
       ctx.get_stream<gpu>()->Wait();
-      Prefetch::Get()->SignalStopComputing();
+      //Prefetch::Get()->SignalStopComputing();
 #else
       LOG(FATAL) << MXNET_GPU_NOT_ENABLED_ERROR;
 #endif
     }
     on_complete();
-    Swap::Get()->PrePostAccess(false);
+    //Swap::Get()->PrePostAccess(false);
   };
   opr_names.pop_back();
   opr_names += "]";
