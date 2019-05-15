@@ -3,6 +3,7 @@
 #include <cuda_runtime.h>
 #include <unordered_map>
 #include <mxnet/mm_dptr.h>
+#include <mxnet/sa_util.h>
 #include "./swapadv_mm_dptr.h"
 
 namespace mxnet {
@@ -51,11 +52,11 @@ SA_MM_Dptr::SA_MM_Dptr() {
   temp_user_ = 0;
   iteration_started = false;
   curr_iteration = -1;
-  std::cout << "SA_MM_Dptr initialized" << std::endl;
+  sa_log << "SA_MM_Dptr initialized" << std::endl;
 }
 
 void SA_MM_Dptr::ReadScheduleDepsRst() {
-  std::cout << "ReadScheduleDepsRst" << std::endl;
+  sa_log << "ReadScheduleDepsRst" << std::endl;
   std::ifstream ifs("schedule.rst");
   std::string line;
   size_t next = 0, last = 0;
@@ -68,7 +69,7 @@ void SA_MM_Dptr::ReadScheduleDepsRst() {
 }
 
 void SA_MM_Dptr::ReadAllocationRst() {
-  std::cout << "ReadAllocationRst" << std::endl;
+  sa_log << "ReadAllocationRst" << std::endl;
   std::ifstream ifs("memalloc.rst");
   std::string line;
 
@@ -104,7 +105,7 @@ void SA_MM_Dptr::ReadAllocationRst() {
 }
 
 void SA_MM_Dptr::ReadDeallocationRst() {
-  std::cout << "ReadDeallocationRst" << std::endl;
+  sa_log << "ReadDeallocationRst" << std::endl;
   std::ifstream ifs("deallocation.rst");
   std::string line;
 
@@ -121,7 +122,7 @@ void SA_MM_Dptr::ReadDeallocationRst() {
 }
 
 void SA_MM_Dptr::ReadInitialHandlesRst() {
-  std::cout << "ReadInitialHandlesRst" << std::endl;
+  sa_log << "ReadInitialHandlesRst" << std::endl;
   std::ifstream ifs("initial_handles.rst");
   std::string line;
 
@@ -135,7 +136,7 @@ void SA_MM_Dptr::ReadInitialHandlesRst() {
 }
 
 void* SA_MM_Dptr::Alloc_(handle_id_t id, bool do_swapin) {
-  std::cout << "Alloc_ " << id << std::endl;
+  sa_log << "Alloc_ " << id << std::endl;
   // Check if the handle is already in memory.
   lock_.Lock();
   auto it = hdl_dptr_mapping_.find(id);
@@ -154,11 +155,12 @@ void* SA_MM_Dptr::Alloc_(handle_id_t id, bool do_swapin) {
     counter += 1;
     lock_.Lock();
     if (counter % 10000 == 9999) {
-      std::cout << std::dec << "Wait!!!" << id << " "
-                << new_to_old_hids_.at(id) << " " << mempool_idx << " "
-                << mempools_[mempool_idx].size() << std::endl;
+      sa_log << std::dec << "Wait!!!" << id << " " << new_to_old_hids_.at(id)
+             << " " << mempool_idx << " " << mempools_[mempool_idx].size()
+             << std::endl;
       for (auto it : used_mempools_[mempool_idx]) {
-        std::cout << it.second << "," << new_to_old_nids_.at(it.second) << std::endl;
+        sa_log << it.second << "," << new_to_old_nids_.at(it.second)
+               << std::endl;
       }
     }
   }
@@ -179,18 +181,18 @@ void* SA_MM_Dptr::Alloc_(handle_id_t id, bool do_swapin) {
 }
 
 void SA_MM_Dptr::Free_(handle_id_t id, bool do_swapout) {
-  std::cout << "FREE_ 1 " << id << std::endl;
+  sa_log << "FREE_ 1 " << id << std::endl;
   lock_.Lock();
-  std::cout << "FREE_ 2" << std::endl;
+  sa_log << "FREE_ 2" << std::endl;
   uint32_t mempool = hdl_to_mempool_.at(id);
   auto it = hdl_dptr_mapping_.find(id);
   if (it == hdl_dptr_mapping_.end()) {
-    std::cout << "FREE_ 2.1" << std::endl;
+    sa_log << "FREE_ 2.1" << std::endl;
     CHECK(false);
   }
-  std::cout << "FREE_ 3" << std::endl;
+  sa_log << "FREE_ 3" << std::endl;
   size_t size = hdl_size_mapping_.at(id);
-  std::cout << "FREE_ 3" << id << std::endl;
+  sa_log << "FREE_ 3" << id << std::endl;
   void* address = it->second;
   if (do_swapout) {
     lock_.UnLock();
@@ -206,7 +208,7 @@ void SA_MM_Dptr::Free_(handle_id_t id, bool do_swapout) {
 }
 
 void* SA_MM_Dptr::FreeAlloc_(handle_id_t id) {
-  std::cout << "FreeAlloc_ " << id << std::endl;
+  sa_log << "FreeAlloc_ " << id << std::endl;
   CHECK(!iteration_started);
   CHECK_EQ(curr_iteration, -1);
   uint32_t mempool = hdl_to_mempool_.at(id);
@@ -219,7 +221,7 @@ void* SA_MM_Dptr::FreeAlloc_(handle_id_t id) {
 }
 
 void SA_MM_Dptr::StartIteration() {
-  std::cout << "StartIteration " << std::endl;
+  sa_log << "StartIteration " << std::endl;
   iteration_started = true;
   curr_iteration += 1;
   if (curr_iteration == 0) {
@@ -230,9 +232,9 @@ void SA_MM_Dptr::StartIteration() {
     }
     for (uint32_t i = 0; i < used_mempools_.size(); i++) {
       if (used_mempools_[i].size() != 0) {
-        std::cout << "used_mempools_[" << i << "] = "
-                  << used_mempools_[i].begin()->first << ","
-                  << used_mempools_[i].begin()->second << std::endl;
+        sa_log << "used_mempools_[" << i << "] = "
+               << used_mempools_[i].begin()->first << ","
+               << used_mempools_[i].begin()->second << std::endl;
       }
       CHECK_EQ(used_mempools_[i].size(), 0);
     }
@@ -240,7 +242,7 @@ void SA_MM_Dptr::StartIteration() {
     for (auto old_hid : initial_handles_) {
       handle_id_t hid = old_to_new_hids_.at(old_hid);
       void* address = Alloc_(hid, false);
-      std::cout << "Initial handles " << hid << " " << old_hid << " "
+      sa_log << "Initial handles " << hid << " " << old_hid << " "
                 << address << std::endl;
     }
   } else {
@@ -256,14 +258,14 @@ void SA_MM_Dptr::StartIteration() {
 }
 
 void* SA_MM_Dptr::Alloc(handle_id_t id, size_t size, void* ptr=nullptr) {
-  std::cout << "SA_MM_Dptr Alloc " << id << ", size " << size << std::endl;
+  sa_log << "SA_MM_Dptr Alloc " << id << ", size " << size << std::endl;
   //std::lock_guard<std::mutex> lock(Storage::Get()->GetMutex(Context::kGPU));
   if (alloc_finalized_) {
     // FIXME(fegin)
     // CHECK_EQ(temp_user_, 0);
     temp_user_ = id;
     hdl_dptr_mapping_[id] = temp_memory_;
-    std::cout << "SA_MM_Dptr Alloc temporary memory done " << id << std::endl;
+    sa_log << "SA_MM_Dptr Alloc temporary memory done " << id << std::endl;
     return temp_memory_;
   } else {
     if (size == 4) {
@@ -282,7 +284,7 @@ void* SA_MM_Dptr::Alloc(handle_id_t id, size_t size, void* ptr=nullptr) {
     } else {
       address = Alloc_(id, false);
     }
-    std::cout << "SA_MM_Dptr Alloc done " << address << std::endl;
+    sa_log << "SA_MM_Dptr Alloc done " << address << std::endl;
     return address;
   }
 }
@@ -290,32 +292,32 @@ void* SA_MM_Dptr::Alloc(handle_id_t id, size_t size, void* ptr=nullptr) {
 void SA_MM_Dptr::Swapin(uint32_t old_nid, uint32_t idx) {
   uint32_t nid = old_to_new_nids_[old_nid];
   handle_id_t hid = entry_hdl_mapping_.at(EID(nid, idx)).first;
-  std::cout << "About to swapin " << hid << std::endl;
+  sa_log << "About to swapin " << hid << std::endl;
   Alloc_(hid, true);
 }
 
 void SA_MM_Dptr::Swapout(uint32_t old_nid, uint32_t idx) {
   uint32_t nid = old_to_new_nids_[old_nid];
   handle_id_t hid = entry_hdl_mapping_.at(EID(nid, idx)).first;
-  std::cout << "About to swapout " << hid << std::endl;
+  sa_log << "About to swapout " << hid << std::endl;
   Free_(hid, true);
 }
 
 void* SA_MM_Dptr::GetDptr_(handle_id_t id) {
   auto old_it = new_to_old_hids_.find(id);
   if (old_it != new_to_old_hids_.end()) {
-    std::cout << std::dec << "GetDptr_ " << id << " "
-              << new_to_old_hids_.at(id) << std::endl;
+    sa_log << std::dec << "GetDptr_ " << id << " " << new_to_old_hids_.at(id)
+           << std::endl;
   } else {
-    std::cout << std::dec << "GetDptr_ " << id << " " << -1 << std::endl;
+    sa_log << std::dec << "GetDptr_ " << id << " " << -1 << std::endl;
   }
   void* address = nullptr;
   if (created_handles_.count(id) == 0) {
-    std::cout << "Not created handle" << std::endl;
+    sa_log << "Not created handle" << std::endl;
     address = Alloc_(id, false);
     created_handles_.insert(id);
   } else {
-    std::cout << "Created handle" << std::endl;
+    sa_log << "Created handle" << std::endl;
     lock_.Lock();
     auto it = hdl_dptr_mapping_.find(id);
     while (it == hdl_dptr_mapping_.end()) {
@@ -327,10 +329,10 @@ void* SA_MM_Dptr::GetDptr_(handle_id_t id) {
     lock_.UnLock();
     if (lock_.TryLock()) {
       lock_.UnLock();
-      std::cout << "TryLock success" << std::endl;
+      sa_log << "TryLock success" << std::endl;
     }
     address = it->second;
-    std::cout << "Created handle done " << std::endl;
+    sa_log << "Created handle done " << std::endl;
   }
   return address;
 }
@@ -339,7 +341,7 @@ void* SA_MM_Dptr::GetDptr(handle_id_t id) {
   if (swap_handles_.count(id) == 1) {
     return (void*)1;
   }
-  std::cout << "SA_MM_Dptr GetDptr " << id << std::endl;
+  sa_log << "SA_MM_Dptr GetDptr " << id << std::endl;
 #if SWAPADV_REPORT_PROGRESS
   if (std::this_thread::get_id() == model_tid_) {
     auto it = model_access_.rbegin();
@@ -355,13 +357,13 @@ void* SA_MM_Dptr::GetDptr(handle_id_t id) {
     auto it = hdl_dptr_mapping_.find(id);
     address = (it != hdl_dptr_mapping_.end()) ? it->second : FreeAlloc_(id);
   }
-  std::cout << "SA_MM_Dptr GetDptr done " << address << std::endl;
+  sa_log << "SA_MM_Dptr GetDptr done " << address << std::endl;
   return address;
 }
 
 void SA_MM_Dptr::SetDptr(handle_id_t id, void* ptr, uint32_t dev_id) {
   if (ptr == nullptr) return;
-  std::cout << "SA_MM_Dptr SetDptr " << id << " " << ptr << std::endl;
+  sa_log << "SA_MM_Dptr SetDptr " << id << " " << ptr << std::endl;
   for (auto& used_mempool : used_mempools_) {
     auto it = used_mempool.find(ptr);
     if (it != used_mempool.end()) {
@@ -414,12 +416,12 @@ void SA_MM_Dptr::ReportProgress() {
 }
 
 void SA_MM_Dptr::NotifyDone(uint32_t id) {
-  std::cout << "NotifyDone " << std::this_thread::get_id() << std::endl;
+  sa_log << "NotifyDone " << std::this_thread::get_id() << std::endl;
   auto new_it = new_to_old_nids_.find(id);
   if (new_it != new_to_old_nids_.end()) {
     auto it = deallocations_.find(new_it->second);
     if (it != deallocations_.end()) {
-      std::cout << "Doing deallocation for nid = " << id << std::endl;
+      sa_log << "Doing deallocation for nid = " << id << std::endl;
       for (auto hid : it->second) {
         Free_(old_to_new_hids_.at(hid), false);
       }

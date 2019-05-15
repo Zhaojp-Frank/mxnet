@@ -7,6 +7,7 @@
 #include <dmlc/logging.h>
 #include <dmlc/parameter.h>
 #include <mxnet/operator.h>
+#include <mxnet/sa_util.h>
 #include <nnvm/op.h>
 #include <nnvm/node.h>
 #include <nnvm/op_attr_types.h>
@@ -149,10 +150,8 @@ void SwapoutCompute(const nnvm::NodeAttrs& attrs,
   (void)inputs;
   (void)req;
   (void)outputs;
-#if SWAP_ADVISOR_FLOW_TRACE
-  std::cout << "SwapoutCompute src = (" << param.src_tensor_nid << ", "
-            << param.src_tensor_idx << ")" << std::endl;
-#endif
+  sa_log << "SwapoutCompute src = (" << param.src_tensor_nid << ", "
+         << param.src_tensor_idx << ")" << std::endl;
   if (swap_doit) {
     storage::SA_MM_DPTR()->Swapout(param.src_tensor_nid, param.src_tensor_idx);
   }
@@ -200,10 +199,8 @@ void SwapinCompute(const nnvm::NodeAttrs& attrs,
   (void)inputs;
   (void)req;
   (void)outputs;
-#if SWAP_ADVISOR_FLOW_TRACE
-  std::cout << "SwapinCompute src = (" << param.src_tensor_nid << ", "
-            << param.src_tensor_idx << ")" << std::endl;
-#endif
+  sa_log << "SwapinCompute src = (" << param.src_tensor_nid << ", "
+         << param.src_tensor_idx << ")" << std::endl;
   if (swap_doit) {
     storage::SA_MM_DPTR()->Swapin(param.src_tensor_nid, param.src_tensor_idx);
   }

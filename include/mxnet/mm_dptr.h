@@ -47,6 +47,8 @@ class MM_Dptr {
   // StopIteration()
   virtual void  StopIteration() = 0;
 
+  virtual void Statistics () = 0;
+
   // Register the mapping from an entry to a handle. The mapping is
   // many-(entry)-to-one(handle).
   virtual void  RegisterEntry(uint32_t nid, uint32_t idx, handle_id_t hid,

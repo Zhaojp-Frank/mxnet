@@ -5,6 +5,7 @@
 #include <cuda_runtime.h>
 #include <mxnet/base.h>
 #include <mxnet/storage.h>
+#include <mxnet/sa_util.h>
 #include <unordered_map>
 #include <algorithm>
 #include <thread>
@@ -61,7 +62,7 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   void* Alloc (handle_id_t id, size_t size, void* ptr) override;
 
   void* Free(handle_id_t id) override {
-    std::cout << "SA_MM_Dptr Free" << std::endl;
+    sa_log << "SA_MM_Dptr Free" << std::endl;
     if (id == temp_user_) {
       temp_user_ = 0;
       CHECK_EQ(hdl_dptr_mapping_.erase(id), 1);
@@ -77,10 +78,10 @@ class SA_MM_Dptr : virtual public MM_Dptr {
 
   void StopAllocArgs() override { doing_allocargs_ = false; }
 
-  void StartBinding() override { std::cout << "StartBinding " << std::endl; }
+  void StartBinding() override { sa_log << "StartBinding " << std::endl; }
 
   void StopBinding() override {
-    std::cout << "StopBinding " << std::endl;
+    sa_log << "StopBinding " << std::endl;
     alloc_finalized_ = true;
     remove("mxnet_model_progress.rst");
     remove("mxnet_swapo_progress.rst");
@@ -90,10 +91,12 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   void StartIteration() override;
 
   void StopIteration() override {
-    std::cout << "StopIteration " << std::endl;
+    sa_log << "StopIteration " << std::endl;
     iteration_started = false;
     return;
   }
+
+  void Statistics () override { }
 
   void* GetDptr (handle_id_t id) override;
 
@@ -103,8 +106,8 @@ class SA_MM_Dptr : virtual public MM_Dptr {
                      uint32_t old_nid, uint32_t old_idx,
                      handle_id_t old_hid, size_t hdl_size,
                      bool is_var) override {
-    std::cout << "RegisterEntry, nid = " << nid << " " << old_nid
-              << ", hid = " << hid << " " << old_hid << std::endl;
+    sa_log << "RegisterEntry, nid = " << nid << " " << old_nid << ", hid = "
+           << hid << " " << old_hid << std::endl;
     entry_hdl_mapping_[EID(nid, idx)] = std::make_pair(hid, is_var);
     new_to_old_nids_[nid] = old_nid;
     old_to_new_nids_[old_nid] = nid;
@@ -113,7 +116,7 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   }
 
   void FinalizeRegular() override {
-    std::cout << "SA_MM_Dptr FinalizeRegular" << std::endl;
+    sa_log << "SA_MM_Dptr FinalizeRegular" << std::endl;
     alloc_finalized_ = true;
   }
 

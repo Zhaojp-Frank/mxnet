@@ -144,7 +144,7 @@ int MXSwapStopIteration() {
 
 int MXSwapStatistics() {
   API_BEGIN();
-  MemoryHistory::Get()->Statistics();
+  storage::MM_DPTR()->Statistics();
   API_END();
 }
 

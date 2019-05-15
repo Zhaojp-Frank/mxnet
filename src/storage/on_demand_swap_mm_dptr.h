@@ -3,6 +3,7 @@
 
 #include <mxnet/base.h>
 #include <mxnet/storage.h>
+#include <mxnet/sa_util.h>
 #include <unordered_map>
 #include <algorithm>
 #include <vector>
@@ -14,18 +15,14 @@ namespace storage {
 class OD_MM_Dptr : virtual public MM_Dptr {
  public:
   void* Alloc(handle_id_t id, size_t size, void* ptr) {
-#if SWAP_ADVISOR_FLOW_TRACE
-    std::cout << "Alloc " << id << std::endl;
-#endif
+    sa_log << "Alloc " << id << std::endl;
     dptr_mapping_[id] = ptr;
     dptr_size_[ptr] = size;
     return ptr;
   }
 
   void* Free (handle_id_t id) override {
-#if SWAP_ADVISOR_FLOW_TRACE
-    std::cout << "Free " << id << std::endl;
-#endif
+    sa_log << "Free " << id << std::endl;
     auto it = dptr_mapping_.find(id);
     void* ptr = it->second;
     dptr_mapping_.erase(it);
@@ -34,9 +31,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   }
 
   void Release (handle_id_t id, void* ptr) override {
-#if SWAP_ADVISOR_FLOW_TRACE
-    std::cout << "Release " << id << std::endl;
-#endif
+    sa_log << "Release " << id << std::endl;
     dptr_mapping_[id] = ptr;
   }
 
@@ -51,6 +46,8 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   void StartIteration () override { MemoryHistory::Get()->StartIteration(); }
 
   void StopIteration () override { MemoryHistory::Get()->StopIteration(); }
+
+  void Statistics () override { MemoryHistory::Get()->Statistics(); }
 
   void RegisterEntry (uint32_t nid, uint32_t idx, handle_id_t hid,
                       uint32_t old_nid, uint32_t old_idx, handle_id_t old_hid,
@@ -67,9 +64,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   }
 
   void* GetDptr (handle_id_t id) override {
-#if SWAP_ADVISOR_FLOW_TRACE
-    std::cout << "GetDptr " << id << std::endl;
-#endif
+    sa_log << "GetDptr " << id << std::endl;
     void* old_ptr = dptr_mapping_[id];
     dptr_mapping_[id] = Swap::Get()->GetAddr(id);
     dptr_size_[dptr_mapping_[id]] = dptr_size_[old_ptr];
@@ -78,9 +73,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   }
 
   void SetDptr (handle_id_t id, void* ptr, uint32_t dev_id) override {
-#if SWAP_ADVISOR_FLOW_TRACE
-    std::cout << "SetDptr " << id << " " << ptr << std::endl;
-#endif
+    sa_log << "SetDptr " << id << " " << ptr << std::endl;
     if(ptr != nullptr && dptr_size_.find(ptr) == dptr_size_.end()) {
         LOG(FATAL) << "Can't find the size for id " << id << ".";
     }

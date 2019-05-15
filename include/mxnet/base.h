@@ -36,7 +36,6 @@
 #include <nnvm/symbolic.h>
 #include <string>
 
-#define SWAP_ADVISOR_FLOW_TRACE 0
 
 /*!
  *\brief whether to use opencv support
