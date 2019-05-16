@@ -5,7 +5,14 @@
 #include <thread>
 #include <iostream>
 
-#if 1
+//#define SWAPADV_DEBUG
+
+
+#define sa_likely(x)      __builtin_expect(!!(x), 1)
+#define sa_unlikely(x)    __builtin_expect(!!(x), 0)
+
+
+#ifdef SWAPADV_DEBUG
 #define SWAPADV_REPORT_PROGRESS 1
 #define sa_log \
   SA_Log().GetStream()
@@ -17,7 +24,7 @@
 
 class SA_Log {
  public:
-  explicit SA_Log() { 
+  explicit SA_Log() {
     id_ = std::this_thread::get_id();
     sstream_ << "[" << id_ << "] ";
   }

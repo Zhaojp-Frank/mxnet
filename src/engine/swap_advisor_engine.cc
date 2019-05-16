@@ -78,15 +78,15 @@ class SwapAdvisorEngine final : public ThreadedEngine {
     swapout_task_queue_.reset(new dmlc::ConcurrentBlockingQueue<OprBlock*>());
     thread_pool_.reset(new ThreadPool(1,
                        [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
-                        ThreadWorker(task_queue_, ready_event);
+                        ThreadWorker(task_queue_, ready_event, 2);
                        }, true));
     swapin_thread_pool_.reset(new ThreadPool(1,
                        [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
-                        ThreadWorker(swapin_task_queue_, ready_event);
+                        ThreadWorker(swapin_task_queue_, ready_event, 4);
                        }, true));
     swapout_thread_pool_.reset(new ThreadPool(1,
                        [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
-                        ThreadWorker(swapout_task_queue_, ready_event);
+                        ThreadWorker(swapout_task_queue_, ready_event, 6);
                        }, true));
   }
 
@@ -157,8 +157,16 @@ class SwapAdvisorEngine final : public ThreadedEngine {
     }
   }
 
-  void ThreadWorker(std::shared_ptr<dmlc::ConcurrentBlockingQueue<OprBlock*>> task_queue,
-                    const std::shared_ptr<dmlc::ManualEvent>& ready_event) {
+  void ThreadWorker(
+          std::shared_ptr<dmlc::ConcurrentBlockingQueue<OprBlock*>> task_queue,
+          const std::shared_ptr<dmlc::ManualEvent>& ready_event,
+          int core) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core, &cpuset);
+    int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+    CHECK_EQ(rc, 0) << "Error calling pthread_setaffinity_np: " << rc;
+
     OprBlock* opr_block;
     ready_event->signal();
     while(task_queue->Pop(&opr_block)) {

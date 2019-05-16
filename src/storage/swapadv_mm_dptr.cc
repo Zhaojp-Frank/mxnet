@@ -195,9 +195,10 @@ void* SA_MM_Dptr::Alloc_(handle_t hid, bool do_swapin) {
   size_t counter = 0;
   while (mempool.size() == 0) {
     lock_.UnLock();
-    usleep(30);
+    usleep(50);
     counter += 1;
     lock_.Lock();
+#if SWAPADV_DEBUG
     if (counter % 10000 == 9999) {
       sa_log << std::dec << "Wait!!!" << hid << " " << new_to_old_hids_.at(hid)
              << " " << mempool_idx << " " << mempools_[mempool_idx].size()
@@ -207,6 +208,7 @@ void* SA_MM_Dptr::Alloc_(handle_t hid, bool do_swapin) {
                << std::endl;
       }
     }
+#endif
   }
   sa_log << "Alloc_ " << hid << " found " << std::endl;
   void* address = mempool.back();
@@ -229,7 +231,6 @@ void SA_MM_Dptr::Free_(handle_t hid, bool do_swapout) {
   sa_log << "FREE_ 1 " << hid << std::endl;
   lock_.Lock();
   sa_log << "FREE_ 2" << std::endl;
-  uint32_t mempool = hdl_to_mempool_.at(hid);
   auto it = hdl_dptr_mapping_.find(hid);
   if (it == hdl_dptr_mapping_.end()) {
     sa_log << "FREE_ 2.1" << std::endl;
@@ -247,6 +248,7 @@ void SA_MM_Dptr::Free_(handle_t hid, bool do_swapout) {
     lock_.Lock();
   }
   hdl_dptr_mapping_.erase(it);
+  uint32_t mempool = hdl_to_mempool_.at(hid);
   CHECK_EQ(used_mempools_[mempool].erase(address), 1);
   mempools_.at(mempool).push_back(address);
   lock_.UnLock();
@@ -341,14 +343,14 @@ void* SA_MM_Dptr::Alloc(handle_t hid, size_t size, void* ptr=nullptr) {
 }
 
 void SA_MM_Dptr::Swapin(node_t old_nid, uint32_t idx) {
-  node_t nid = old_to_new_nids_[old_nid];
+  node_t nid = old_to_new_nids_.at(old_nid);
   handle_t hid = entry_hdl_mapping_.at(EID(nid, idx));
   sa_log << "About to swapin " << hid << std::endl;
   Alloc_(hid, true);
 }
 
 void SA_MM_Dptr::Swapout(node_t old_nid, uint32_t idx) {
-  node_t nid = old_to_new_nids_[old_nid];
+  node_t nid = old_to_new_nids_.at(old_nid);
   handle_t hid = entry_hdl_mapping_.at(EID(nid, idx));
   sa_log << "About to swapout " << hid << std::endl;
   Free_(hid, true);
@@ -373,15 +375,11 @@ void* SA_MM_Dptr::GetDptr_(handle_t hid) {
     auto it = hdl_dptr_mapping_.find(hid);
     while (it == hdl_dptr_mapping_.end()) {
       lock_.UnLock();
-      usleep(30);
+      usleep(50);
       lock_.Lock();
       it = hdl_dptr_mapping_.find(hid);
     }
     lock_.UnLock();
-    if (lock_.TryLock()) {
-      lock_.UnLock();
-      sa_log << "TryLock success" << std::endl;
-    }
     address = it->second;
     sa_log << "Created handle done " << std::endl;
   }
@@ -402,7 +400,7 @@ void* SA_MM_Dptr::GetDptr(handle_t hid) {
   pgr_tracker_.HdlAccess(hid);
 #endif
   void* address = nullptr;
-  if (alloc_finalized_) {
+  if (sa_likely(alloc_finalized_)) {
     address = GetDptr_(hid);
   } else {
     auto it = hdl_dptr_mapping_.find(hid);
