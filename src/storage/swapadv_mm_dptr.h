@@ -63,8 +63,8 @@ class SA_MM_Dptr : virtual public MM_Dptr {
 
   void* Free(handle_id_t id) override {
     sa_log << "SA_MM_Dptr Free" << std::endl;
-    if (id == temp_user_) {
-      temp_user_ = 0;
+    if (id == temp_hdl_) {
+      temp_hdl_ = 0;
       CHECK_EQ(hdl_dptr_mapping_.erase(id), 1);
     } else {
       Free_(id, false);
@@ -210,7 +210,7 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   // The size which the memory manager is allowed to use for the temp memory.
   size_t temp_memory_size_;
   // Who is using temp_memory
-  size_t temp_user_;
+  handle_id_t temp_hdl_;
   // Memory pool index to memory pool size.
   std::vector<size_t> mempool_to_size_;
   // Memory pool objects count

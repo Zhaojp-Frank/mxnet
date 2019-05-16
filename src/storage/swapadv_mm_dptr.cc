@@ -49,7 +49,7 @@ SA_MM_Dptr::SA_MM_Dptr() {
   }
   alloc_finalized_ = false;
   used_memory_ = 0;
-  temp_user_ = 0;
+  temp_hdl_ = 0;
   iteration_started = false;
   curr_iteration = -1;
   sa_log << "SA_MM_Dptr initialized" << std::endl;
@@ -147,7 +147,7 @@ void* SA_MM_Dptr::Alloc_(handle_id_t id, bool do_swapin) {
     return it->second;
   }
   sa_log << "Alloc_ " << id << " not in memory " << std::endl;
-  CHECK(!alloc_finalized_ || new_to_old_hids_.count(id) > 0);
+  CHECK(!alloc_finalized_ || new_to_old_hids_.count(id) > 0) << id;
   // Check if we still have mempool.
   uint32_t mempool_idx = hdl_to_mempool_.at(id);
   auto& mempool = mempools_.at(mempool_idx);
@@ -250,10 +250,23 @@ void SA_MM_Dptr::StartIteration() {
                 << address << std::endl;
     }
   } else {
+    CHECK_EQ(hdl_dptr_mapping_.erase(temp_hdl_), 1);
+    temp_hdl_ = 0;
     size_t size_in_memory = 0;
     for (uint32_t i = 0; i < used_mempools_.size(); i++) {
       size_in_memory += used_mempools_[i].size();
     }
+    //for (auto& it : hdl_dptr_mapping_) {
+      //if (new_to_old_hids_.count(it.first) > 0) {
+        //sa_log << new_to_old_hids_.at(it.first) << std::endl;
+      //} else {
+        //sa_log << "@@" << it.first << std::endl;
+      //}
+    //}
+    //sa_log << "===" << std::endl;
+    //for (auto hid : initial_handles_) {
+      //sa_log << hid << std::endl;
+    //}
     CHECK_EQ(size_in_memory, hdl_dptr_mapping_.size());
     CHECK_EQ(size_in_memory, initial_handles_.size());
   }
@@ -266,8 +279,8 @@ void* SA_MM_Dptr::Alloc(handle_id_t id, size_t size, void* ptr=nullptr) {
   //std::lock_guard<std::mutex> lock(Storage::Get()->GetMutex(Context::kGPU));
   if (alloc_finalized_) {
     // FIXME(fegin)
-    // CHECK_EQ(temp_user_, 0);
-    temp_user_ = id;
+    // CHECK_EQ(temp_hdl_, 0);
+    temp_hdl_ = id;
     hdl_dptr_mapping_[id] = temp_memory_;
     sa_log << "SA_MM_Dptr Alloc temporary memory done " << id << std::endl;
     return temp_memory_;
