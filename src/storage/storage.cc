@@ -212,6 +212,6 @@ Storage* Storage::Get() {
   return ptr;
 }
 
-std::atomic<storage::handle_id_t> Storage::Handle::base_id_(0);
+std::atomic<storage::handle_t> Storage::Handle::base_id_(0);
 
 }  // namespace mxnet

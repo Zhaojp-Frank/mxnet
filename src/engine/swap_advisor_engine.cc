@@ -23,8 +23,9 @@
  * \brief Implementation of SwapAdvisorEngine
  *  It is build upon implementation of Naive Engine.
  */
-#include<dmlc/base.h>
-#include<dmlc/concurrency.h>
+#include <dmlc/base.h>
+#include <dmlc/concurrency.h>
+#include <mxnet/sa_util.h>
 #include <atomic>
 #include <thread>
 #include "./threaded_engine.h"
@@ -109,12 +110,12 @@ class SwapAdvisorEngine final : public ThreadedEngine {
       opr_block->priority = 0;
     }
     if (opr_block->opr->node_name != nullptr) {
-      std::cout << "Opr = " << opr_block->opr->opr_name << ", "
-                << "name = " << opr_block->opr->node_name << ", isGPU: "
-                << (int)(opr_block->ctx.dev_mask() == gpu::kDevMask) << std::endl;
+      sa_log << "Ready Opr = " << opr_block->opr->opr_name << ", "
+             << "name = " << opr_block->opr->node_name << ", isGPU: "
+             << (int)(opr_block->ctx.dev_mask() == gpu::kDevMask) << std::endl;
     } else {
-      std::cout << "Opr = " << opr_block->opr->opr_name << ", isGPU: "
-                << (int)(opr_block->ctx.dev_mask() == gpu::kDevMask) << std::endl;
+      sa_log << "Ready Opr = " << opr_block->opr->opr_name << ", isGPU: "
+             << (int)(opr_block->ctx.dev_mask() == gpu::kDevMask) << std::endl;
     }
     if (opr_block->priority == 0) {
       task_queue_->Push(opr_block);

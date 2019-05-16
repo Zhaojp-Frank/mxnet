@@ -1230,7 +1230,7 @@ void GraphExecutor::InitCachedOps() {
     std::vector<Engine::VarHandle> use_vars, mutate_vars;
     // Handle control dependencies.
     for (auto & dep_node : inode.source->control_deps) {
-      const uint32_t dep_nid = idx.node_id(dep_node.get());
+      const storage::node_t dep_nid = idx.node_id(dep_node.get());
       CHECK_LT(dep_nid, nid);
       sa_log << inode.source->attrs.name << " DEPENDS ON " << dep_nid
              << std::endl;
@@ -1239,12 +1239,12 @@ void GraphExecutor::InitCachedOps() {
 #if 0
     auto old_it = new_to_old_nids.find(nid);
     if (old_it != new_to_old_nids.end()) {
-      for (uint32_t dep_nid :
+      for (storage::node_t dep_nid :
            storage::MM_DPTR()->GetScheduleDeps(old_it->second)) {
-          uint32_t new_dep_nid = old_to_new_nids.at(dep_nid);
-          std::cout << inode.source->attrs.name << " DEPENDS ON2 "
-                    << new_dep_nid << std::endl;
-          use_vars.push_back(op_nodes_[new_dep_nid].finish_var);
+        storage::node_t new_dep_nid = old_to_new_nids.at(dep_nid);
+        std::cout << inode.source->attrs.name << " DEPENDS ON2 "
+                  << new_dep_nid << std::endl;
+        use_vars.push_back(op_nodes_[new_dep_nid].finish_var);
       }
     }
 #endif
@@ -1343,12 +1343,11 @@ void GraphExecutor::ExportEntryHandle() {
   const auto& idx = graph_.indexed_graph();
   std::vector<std::vector<size_t>> output_handles;
   bool export_graph = dmlc::GetEnv("MXNET_SWAP_EXPORT_GRAPH", 0);
-  for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
+  for (storage::node_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
-    std::vector<std::vector<size_t>> output_handles_;
     for (uint32_t index = 0; index < inode.source->num_outputs(); ++index) {
       uint32_t eid = idx.entry_id(nid, index);
-      uint32_t hid = data_entry_[eid].storage_handle().ID();
+      storage::handle_t hid = data_entry_[eid].storage_handle().ID();
       std::vector<size_t> output_handle;
       if (export_graph) {
         output_handle.push_back(nid);
@@ -1369,47 +1368,51 @@ void GraphExecutor::SaveEntryMapping() {
   const auto& idx = graph_.indexed_graph();
   std::vector<std::vector<size_t>> output_handles;
   nnvm::IdMapping old_to_new_nids(
-                      graph_.GetAttr<nnvm::IdMapping>("old_to_new_nids"));
+    graph_.GetAttr<nnvm::IdMapping>("old_to_new_nids"));
   const nnvm::IdMapping& new_to_old_nids =
     graph_.GetAttr<nnvm::IdMapping>("new_to_old_nids");
   const nnvm::HandleUsages& old_hdl_usages =
     graph_.GetAttr<nnvm::HandleUsages>("old_hdl_usages");
   const nnvm::HandleSizes& hdl_sizes =
     graph_.GetAttr<nnvm::HandleSizes>("hdl_sizes");
-  std::unordered_map<uint32_t, uint32_t> new_to_old_hids;
-  sa_log << "Length of newtoold_nids:" << new_to_old_nids.size()
-            << std::endl;
-  for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
-    const auto& inode = idx[nid];
-    std::vector<std::vector<size_t>> output_handles_;
-    sa_log << "new nid:" << nid << " " << inode.source->attrs.name << std::endl;
+  std::unordered_map<storage::handle_t, storage::handle_t>  new_to_old_hids;
+
+  for (storage::node_t nid = 0; nid < idx.num_nodes(); ++nid) {
+    const auto node = idx[nid].source;
     auto old_nid_it = new_to_old_nids.find(nid);
+
     if (old_nid_it == new_to_old_nids.end()) {
+      // This is swap related nodes.
+      sa_log << "new nid:" << nid << " " << node->attrs.name << std::endl;
+      uint32_t eid = idx.entry_id(nid, 0);
+      storage::handle_t hid = data_entry_.at(eid).storage_handle().ID();
+      size_t hdl_size = data_entry_.at(eid).storage_handle().size;
+      storage::MM_DPTR()->RegisterEntry(nid, 0, hid, 0, 0, 0, hdl_size, false,
+                                        true);
       continue;
     }
-    uint32_t old_nid = old_nid_it->second;
+
+    storage::node_t old_nid = old_nid_it->second;
     old_to_new_nids.erase(old_nid);
-    sa_log << "old nid:" << old_nid << std::endl;
-    for (uint32_t index = 0; index < inode.source->num_outputs(); ++index) {
+    sa_log << "new nid: " << nid << " " << node->attrs.name << ", "
+           << "old nid: " << old_nid << std::endl;
+    for (uint32_t index = 0; index < node->num_outputs(); ++index) {
       uint32_t eid = idx.entry_id(nid, index);
-      uint32_t hid = data_entry_[eid].storage_handle().ID();
-      uint32_t old_hid = old_hdl_usages.at(old_nid)[index];
+      storage::handle_t hid = data_entry_[eid].storage_handle().ID();
+      handle_t old_hid = old_hdl_usages.at(old_nid)[index];
       auto old_hid_it = new_to_old_hids.find(hid);
       if (old_hid_it != new_to_old_hids.end()) {
         CHECK_EQ(old_hid_it->second, old_hid);
       } else {
         new_to_old_hids[hid] = old_hid;
       }
-      sa_log << "SaveEntryMapping Name: " << inode.source->attrs.name
-             << ", NID: " << nid << ", EID: " << eid << ", handle id: "
-             << hid << std::endl;
+      sa_log << "SaveEntryMapping Name: " << node->attrs.name << ", NID: "
+             << nid << ", EID: " << eid << ", handle id: " << hid << std::endl;
       size_t hdl_size = hdl_sizes.at(old_hid);
-      sa_log << "HDL_SIZE " << nid << " " << old_nid << std::endl;
       CHECK_EQ(hdl_size, data_entry_[eid].storage_handle().size);
-      sa_log << "FEGIN " << hdl_size << " "
-             << data_entry_[eid].storage_handle().size << std::endl;
       storage::MM_DPTR()->RegisterEntry(nid, index, hid, old_nid, index,
-                                        old_hid, hdl_size, true);
+                                        old_hid, hdl_size, node->is_variable(),
+                                        false);
     }
   }
   CHECK_EQ(old_to_new_nids.size(), 0);

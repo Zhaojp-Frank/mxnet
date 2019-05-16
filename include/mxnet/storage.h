@@ -72,13 +72,13 @@ class Storage {
       return storage::MM_DPTR()->GetDptr(id_);
     }
 
-    storage::handle_id_t ID() {
+    storage::handle_t ID() {
       return id_;
     }
   private:
-    static std::atomic<storage::handle_id_t> base_id_;
+    static std::atomic<storage::handle_t> base_id_;
     //void* dptr_;
-    storage::handle_id_t id_;
+    storage::handle_t id_;
   }; // class handle
   /*!
    * \brief Allocate a new contiguous memory for a given size.

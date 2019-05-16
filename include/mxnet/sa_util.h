@@ -3,11 +3,14 @@
 
 #include <sstream>
 #include <thread>
+#include <iostream>
 
 #if 1
+#define SWAPADV_REPORT_PROGRESS 1
 #define sa_log \
   SA_Log().GetStream()
 #else
+#define SWAPADV_REPORT_PROGRESS 0
 #define sa_log \
   if (false) SA_Log().GetStream()
 #endif

@@ -15,14 +15,14 @@ namespace storage {
 
 class OD_MM_Dptr : virtual public MM_Dptr {
  public:
-  void* Alloc(handle_id_t id, size_t size, void* ptr) {
+  void* Alloc(handle_t id, size_t size, void* ptr) {
     sa_log << "Alloc " << id << std::endl;
     dptr_mapping_[id] = ptr;
     dptr_size_[ptr] = size;
     return ptr;
   }
 
-  void* Free (handle_id_t id) override {
+  void* Free (handle_t id) override {
     sa_log << "Free " << id << std::endl;
     auto it = dptr_mapping_.find(id);
     void* ptr = it->second;
@@ -31,7 +31,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     return ptr;
   }
 
-  void Release (handle_id_t id, void* ptr) override {
+  void Release (handle_t id, void* ptr) override {
     sa_log << "Release " << id << std::endl;
     dptr_mapping_[id] = ptr;
   }
@@ -50,27 +50,27 @@ class OD_MM_Dptr : virtual public MM_Dptr {
 
   void Statistics () override { MemoryHistory::Get()->Statistics(); }
 
-  void RegisterEntry (uint32_t nid, uint32_t idx, handle_id_t hid,
-                      uint32_t old_nid, uint32_t old_idx, handle_id_t old_hid,
-                      size_t hdl_size, bool is_var) override { }
+  void RegisterEntry (node_t nid, uint32_t idx, handle_t hid,
+                      node_t old_nid, uint32_t old_idx, handle_t old_hid,
+                      size_t hdl_size, bool is_var, bool is_swap) override { }
 
-  void FinalizeRegular() override { }
-
-  void NotifyBegin (uint32_t nid, const std::string& name) override {
+  void NotifyBegin (node_t nid, const std::string& name) override {
     ODSwap::Get()->PrePostAccess(true);
     Prefetch::Get()->SignalStartComputing();
   }
 
-  void NotifyDone (uint32_t nid) override {
+  void NotifyDone (node_t nid) override {
     ODSwap::Get()->PrePostAccess(false);
     Prefetch::Get()->SignalStopComputing();
   }
 
+#if 0
   std::vector<uint32_t> GetScheduleDeps(uint32_t nid) override {
     return std::vector<uint32_t>();
   }
+#endif
 
-  void* GetDptr (handle_id_t id) override {
+  void* GetDptr (handle_t id) override {
     sa_log << "GetDptr " << id << std::endl;
     void* old_ptr = dptr_mapping_[id];
     dptr_mapping_[id] = ODSwap::Get()->GetAddr(id);
@@ -79,7 +79,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     return dptr_mapping_[id];
   }
 
-  void SetDptr (handle_id_t id, void* ptr, uint32_t dev_id) override {
+  void SetDptr (handle_t id, void* ptr, uint32_t dev_id) override {
     sa_log << "SetDptr " << id << " " << ptr << std::endl;
     if(ptr != nullptr && dptr_size_.find(ptr) == dptr_size_.end()) {
         LOG(FATAL) << "Can't find the size for id " << id << ".";
@@ -93,7 +93,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   }
 
  private:
-  std::unordered_map<handle_id_t, void*> dptr_mapping_;
+  std::unordered_map<handle_t, void*> dptr_mapping_;
   std::unordered_map<void*, size_t> dptr_size_;
 };
 
