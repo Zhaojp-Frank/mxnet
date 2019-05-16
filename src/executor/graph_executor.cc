@@ -35,7 +35,7 @@
 #include "../profiler/profiler.h"
 #include "../common/utils.h"
 #include "../common/exec_utils.h"
-#include "../storage/gpu_swap.h"
+#include "../storage/gpu_odswap.h"
 #include "../storage/gpu_swap_prefetch.h"
 
 namespace mxnet {

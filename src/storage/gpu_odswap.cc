@@ -1,7 +1,7 @@
 #include <dmlc/logging.h>
 #include <dmlc/parameter.h>
 #include "../common/cuda_utils.h"
-#include "./gpu_swap.h"
+#include "./gpu_odswap.h"
 
 //#define FEGIN_DEBUG
 
@@ -140,18 +140,18 @@ void ThreadAccessInfo::Remove(handle_id_t hid) {
   hid_to_threads.clear();
 }
 
-std::shared_ptr<Swap> Swap::_GetSharedRef() {
-  static std::shared_ptr<Swap> inst(new Swap());
+std::shared_ptr<ODSwap> ODSwap::_GetSharedRef() {
+  static std::shared_ptr<ODSwap> inst(new ODSwap());
   return inst;
 }
 
-Swap* Swap::Get() {
-  static Swap *s = _GetSharedRef().get();
+ODSwap* ODSwap::Get() {
+  static ODSwap *s = _GetSharedRef().get();
   return s;
 }
 
-Swap::Swap() {
-  std::cout << "Initialize Swap" << std::endl;
+ODSwap::ODSwap() {
+  std::cout << "Initialize ODSwap" << std::endl;
   swapinfo_groups_ = SwapInfoGroups::_GetSharedRef();
   thread_info_ = ThreadAccessInfo::_GetSharedRef();
   memory_history_ = MemoryHistory::_GetSharedRef();
@@ -167,21 +167,21 @@ Swap::Swap() {
     cudaStreamCreate(&streams_in_[i]);
   }
   std::cout << "SWAP_ASYNC=" << swap_async_ << std::endl;
-  std::cout << "Initialize Swap done" << std::endl;
+  std::cout << "Initialize ODSwap done" << std::endl;
 }
 
-Swap::~Swap() {
-  std::cout << "Destroy Swap" << std::endl;
+ODSwap::~ODSwap() {
+  std::cout << "Destroy ODSwap" << std::endl;
 }
 
-void Swap::SwapOutLocked(unsigned required_memory, int device_id, bool async) {
+void ODSwap::SwapOutLocked(unsigned required_memory, int device_id, bool async) {
   pthread_rwlock_wrlock(&swap_lock_);
   SwapOut(required_memory, device_id, async);
   pthread_rwlock_unlock(&swap_lock_);
 }
 
 // Caller holds swap_lock_
-void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
+void ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
   while (!memory_manager_->TryAllocate(device_id, required_memory)) {
     SwapParams param = {0, required_memory, &divided_handles_[device_id]};
 #ifdef FEGIN_DEBUG
@@ -242,7 +242,7 @@ void Swap::SwapOut(unsigned required_memory, int device_id, bool async) {
 }
 
 // Caller holds swap_lock_
-void Swap::SwapIn(SwapInfo *info, bool async) {
+void ODSwap::SwapIn(SwapInfo *info, bool async) {
   while (info->is_swapping.test_and_set(std::memory_order_acquire)) {
     // TODO(fegin): usleep may not be efficient and may cause unstable
     //              execution. This is not important for now but can be
@@ -295,8 +295,8 @@ void Swap::SwapIn(SwapInfo *info, bool async) {
   info->is_swapping.clear(std::memory_order_release);
 }
 
-void Swap::SetAddr(handle_id_t handle_id, void* dptr, size_t size,
-                  int device_id) {
+void ODSwap::SetAddr(handle_id_t handle_id, void* dptr, size_t size,
+                     int device_id) {
   if (device_id != -1) {
     memory_history_->PutRecord(handle_id, device_id, MemoryHistory::SET_ADDR,
                                size);
@@ -333,7 +333,7 @@ void Swap::SetAddr(handle_id_t handle_id, void* dptr, size_t size,
   pthread_rwlock_unlock(&swap_lock_);
 }
 
-void Swap::FreeAddr(handle_id_t handle_id) {
+void ODSwap::FreeAddr(handle_id_t handle_id) {
   pthread_rwlock_wrlock(&swap_lock_);
   //std::cout << "FreeAddr " << handle_id << std::endl;
   auto info = swap_info_.at(handle_id);
@@ -364,7 +364,7 @@ void Swap::FreeAddr(handle_id_t handle_id) {
   pthread_rwlock_unlock(&swap_lock_);
 }
 
-void Swap::DelAddr(handle_id_t handle_id) {
+void ODSwap::DelAddr(handle_id_t handle_id) {
   pthread_rwlock_wrlock(&swap_lock_);
   //std::cout << "DelAddr " << handle_id << std::endl;
   auto info = swap_info_.at(handle_id);
@@ -394,7 +394,7 @@ void Swap::DelAddr(handle_id_t handle_id) {
   pthread_rwlock_unlock(&swap_lock_);
 }
 
-void* Swap::GetAddr(handle_id_t handle_id, bool prefetch) {
+void* ODSwap::GetAddr(handle_id_t handle_id, bool prefetch) {
 #ifdef FEGIN_DEBUG
   std::cout << "GetAddr="<< handle_id << "," << std::this_thread::get_id()
             << std::endl;
@@ -437,7 +437,7 @@ void* Swap::GetAddr(handle_id_t handle_id, bool prefetch) {
   return info->dptr;
 }
 
-void Swap::PrePostAccess(bool is_pre) {
+void ODSwap::PrePostAccess(bool is_pre) {
   // FIXME(fegin): If multiple thread access the same record,
   // how are we going to handle this?
 #ifdef FEGIN_DEBUG
@@ -466,7 +466,7 @@ void Swap::PrePostAccess(bool is_pre) {
   pthread_rwlock_unlock(&swap_lock_);
 }
 
-void Swap::PrintHandles() {
+void ODSwap::PrintHandles() {
   std::cout << "Print Handles" << std::endl;
   //std::map<size_t, std::unordered_set<handle_id_t> > _divided_handles_;
   for (auto it : swap_info_) {

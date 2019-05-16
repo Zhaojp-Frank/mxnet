@@ -5,7 +5,7 @@
 #include <map>
 #include <dmlc/parameter.h>
 #include <dmlc/logging.h>
-#include "./gpu_swap.h"
+#include "./gpu_odswap.h"
 #include "./gpu_swap_history.h"
 #include "./gpu_swap_prefetch.h"
 
@@ -88,7 +88,7 @@ void Prefetch::StopPrefetching() {
     prefetcher_[device].join();
     lookahead_pos_[device] = 0;
   }
-  // Swap::Get()->PrintHandles();
+  // ODSwap::Get()->PrintHandles();
 }
 
 
@@ -123,7 +123,7 @@ void Prefetch::PrefetchWhileComputing(int device) {
         (*history.ordered_history)[++lookahead_pos_[device]];
     if (r.operation_id == MemoryHistory::GET_ADDR) {
       ++history.prefetch_count;
-      Swap::Get()->GetAddr(r.handle_id, true);
+      ODSwap::Get()->GetAddr(r.handle_id, true);
     } else {
       std::cout << "non-read operation found" << std::endl;
     }
@@ -145,7 +145,7 @@ void Prefetch::HistoryBasedPrefetch(int device) {
         (*history.ordered_history)[++lookahead_pos_[device]];
     if (r.operation_id == MemoryHistory::GET_ADDR) {
       ++history.prefetch_count;
-      Swap::Get()->GetAddr(r.handle_id, true);
+      ODSwap::Get()->GetAddr(r.handle_id, true);
     } else {
       std::cout << "non-read operation found" << std::endl;
     }

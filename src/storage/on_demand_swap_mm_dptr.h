@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <vector>
-#include "./gpu_swap.h"
+#include "./gpu_odswap.h"
 
 namespace mxnet {
 namespace storage {
@@ -26,7 +26,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     auto it = dptr_mapping_.find(id);
     void* ptr = it->second;
     dptr_mapping_.erase(it);
-    Swap::Get()->DelAddr(id);
+    ODSwap::Get()->DelAddr(id);
     return ptr;
   }
 
@@ -55,9 +55,15 @@ class OD_MM_Dptr : virtual public MM_Dptr {
 
   void FinalizeRegular() override { }
 
-  void NotifyBegin (uint32_t nid, const std::string& name) override { }
+  void NotifyBegin (uint32_t nid, const std::string& name) override {
+    ODSwap::Get()->PrePostAccess(true);
+    Prefetch::Get()->SignalStartComputing();
+  }
 
-  void NotifyDone (uint32_t nid) override { }
+  void NotifyDone (uint32_t nid) override {
+    ODSwap::Get()->PrePostAccess(false);
+    Prefetch::Get()->SignalStopComputing();
+  }
 
   std::vector<uint32_t> GetScheduleDeps(uint32_t nid) override {
     return std::vector<uint32_t>();
@@ -66,7 +72,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   void* GetDptr (handle_id_t id) override {
     sa_log << "GetDptr " << id << std::endl;
     void* old_ptr = dptr_mapping_[id];
-    dptr_mapping_[id] = Swap::Get()->GetAddr(id);
+    dptr_mapping_[id] = ODSwap::Get()->GetAddr(id);
     dptr_size_[dptr_mapping_[id]] = dptr_size_[old_ptr];
     dptr_size_.erase(old_ptr);
     return dptr_mapping_[id];
@@ -81,7 +87,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     if(ptr != nullptr) {
       ptr_size = dptr_size_[ptr];
     }
-    Swap::Get()->SetAddr(id, ptr, ptr_size, dev_id);
+    ODSwap::Get()->SetAddr(id, ptr, ptr_size, dev_id);
     dptr_mapping_[id] = ptr;
   }
 

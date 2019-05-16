@@ -47,7 +47,6 @@
 #include "./c_api_common.h"
 #include "../operator/custom/custom-inl.h"
 #include "../operator/tensor/matrix_op-inl.h"
-#include "../storage/gpu_swap_history.h"
 
 using namespace mxnet;
 
