@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <vector>
 #include "./gpu_odswap.h"
+#include "./gpu_swap_prefetch.h"
 
 namespace mxnet {
 namespace storage {
