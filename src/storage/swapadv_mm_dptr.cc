@@ -53,7 +53,8 @@ SA_MM_Dptr::SA_MM_Dptr() {
   // TODO(fegin): Determine this dynamically.
   memory_size_ = 3L * 1024 * 1024 * 1024;
   temp_size_ = 0.5L * 1024 * 1024 * 1024;
-  cudaHostAlloc((void**)&(cpu_memory_), 1L * 1024 * 1024 * 1024, 0);
+  cudaHostAlloc((void**)&(cpu_memory_), 1L * 1024 * 1024 * 1024,
+                cudaHostAllocPortable);
   if (cpu_memory_ == nullptr) {
     LOG(FATAL) << "Can't allocate the CPU memory in the initialization of "
                << "the memory manager. The required size = ";
@@ -196,7 +197,7 @@ void* SA_MM_Dptr::Alloc_(handle_t hid, bool do_swapin) {
   size_t counter = 0;
   while (mempool.size() == 0) {
     lock_.UnLock();
-    usleep(30);
+    usleep(40);
     lock_.Lock();
 #ifdef SWAPADV_DEBUG
     counter += 1;
@@ -215,16 +216,14 @@ void* SA_MM_Dptr::Alloc_(handle_t hid, bool do_swapin) {
   void* address = mempool.back();
   mempool.pop_back();
   used_mempools_[mempool_idx][address] = hid;
+  hdl_dptr_mapping_[hid] = address;
+  lock_.UnLock();
   if (do_swapin) {
     size_t size = hdl_size_mapping_.at(hid);
-    lock_.UnLock();
     cudaMemcpyAsync(address, cpu_memory_, size, cudaMemcpyHostToDevice,
                     stream_in_);
     cudaStreamSynchronize(stream_in_);
-    lock_.Lock();
   }
-  hdl_dptr_mapping_[hid] = address;
-  lock_.UnLock();
   return address;
 }
 
@@ -239,19 +238,19 @@ void SA_MM_Dptr::Free_(handle_t hid, bool do_swapout) {
     lock_.UnLock();
     return;
   }
-  size_t size = hdl_size_mapping_.at(hid);
   void* address = it->second;
   if (do_swapout) {
     lock_.UnLock();
+    size_t size = hdl_size_mapping_.at(hid);
     cudaMemcpyAsync(address, cpu_memory_, size, cudaMemcpyDeviceToHost,
                     stream_out_);
     cudaStreamSynchronize(stream_out_);
     lock_.Lock();
   }
   hdl_dptr_mapping_.erase(it);
-  uint32_t mempool = hdl_to_mempool_.at(hid);
-  CHECK_EQ(used_mempools_[mempool].erase(address), 1);
-  mempools_.at(mempool).push_back(address);
+  uint32_t mempool_idx = hdl_to_mempool_.at(hid);
+  CHECK_EQ(used_mempools_[mempool_idx].erase(address), 1);
+  mempools_.at(mempool_idx).push_back(address);
   sa_log << "FREE_ done" << std::endl;
   lock_.UnLock();
 }
@@ -377,7 +376,7 @@ void* SA_MM_Dptr::GetDptr_(handle_t hid) {
     auto it = hdl_dptr_mapping_.find(hid);
     while (it == hdl_dptr_mapping_.end()) {
       lock_.UnLock();
-      usleep(10);
+      usleep(30);
       lock_.Lock();
       it = hdl_dptr_mapping_.find(hid);
     }
