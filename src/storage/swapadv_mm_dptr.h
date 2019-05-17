@@ -101,7 +101,7 @@ class SA_MM_Dptr : virtual public MM_Dptr {
 
   void Swapout(node_t nid, uint32_t idx);
 
-  long EID(node_t nid, uint32_t idx) { return nid * 93333L + idx; }
+  static long EID(node_t nid, uint32_t idx) { return nid * 93333L + idx; }
 
   void* Alloc(handle_t hid, size_t size, void* ptr) override;
 
