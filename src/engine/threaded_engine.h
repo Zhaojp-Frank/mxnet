@@ -292,6 +292,7 @@ class ThreadedEngine : public Engine {
                 FnProperty prop = FnProperty::kNormal,
                 int priority = 0,
                 const char* opr_name = nullptr) override;
+#if 0
   void PushFin1(OprHandle op,
                 Context exec_ctx,
                 VarHandle fin,
@@ -302,6 +303,7 @@ class ThreadedEngine : public Engine {
                 VarHandle fin,
                 int priority,
                 bool profiling) override;
+#endif
   void DeleteVariable(SyncFn delete_fn, Context exec_ctx, VarHandle var) override;
   void WaitForVar(VarHandle var) override;
   void WaitForAll() override;

@@ -46,8 +46,7 @@ class Storage {
       id_ = (base_id_.fetch_add(1, std::memory_order_relaxed)) + 1;
     }
 
-    ~Handle() {
-    }
+    ~Handle() { }
 
     //void* dptr;
     /*!

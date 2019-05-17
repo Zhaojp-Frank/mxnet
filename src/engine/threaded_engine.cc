@@ -321,6 +321,7 @@ void ThreadedEngine::Push(OprHandle op, Context exec_ctx, int priority, bool pro
 
 std::unordered_map<ThreadedOpr*, OprBlock*> opr_map;
 
+#if 0
 void ThreadedEngine::PushFin1(OprHandle op, Context exec_ctx, VarHandle fin, int priority, bool profiling) {
   BulkFlush();
 
@@ -369,6 +370,8 @@ void ThreadedEngine::PushFin2(OprHandle op, Context exec_ctx, VarHandle fin, int
     std::cout << "IRIS " << opr_block->wait << std::endl;
   }
 }
+
+#endif
 
 void ThreadedEngine::PushAsync(AsyncFn fn, Context exec_ctx,
                                std::vector<VarHandle> const& const_vars,

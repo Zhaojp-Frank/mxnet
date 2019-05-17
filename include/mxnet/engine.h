@@ -170,9 +170,11 @@ class MXNET_API Engine {
    */
   virtual void Push(OprHandle op, Context exec_ctx, int priority = 0, bool profiling = false) = 0;
 
+#if 0
   virtual void PushFin1(OprHandle op, Context exec_ctx, VarHandle fin, int priority = 0, bool profiling = false) = 0;
 
   virtual void PushFin2(OprHandle op, Context exec_ctx, VarHandle fin, int priority = 0, bool profiling = false) = 0;
+#endif
 
   /*!
   virtual void Push(OprHandle op, Context exec_ctx, int priority = 0, bool profiling = false) = 0;

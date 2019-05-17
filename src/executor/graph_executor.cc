@@ -1204,7 +1204,7 @@ void GraphExecutor::InitCachedOps() {
   }
 
 #if 0
-  // FIXM(fegiin): If enable this, the finish_var below must be disabled.
+  // FIXME(fegin): If enable this, the finish_var below must be disabled.
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
     if (inode.source->is_variable()) continue;
@@ -1248,47 +1248,25 @@ void GraphExecutor::InitCachedOps() {
       }
     }
 #endif
-    sa_log << inode.source->attrs.name << " HAS " << use_vars.size()
-           << std::endl;
     for (size_t i = 0; i < exec->in_array.size(); ++i) {
       auto& nd = exec->in_array[i];
       use_vars.push_back(nd.var());
     }
-    sa_log << inode.source->attrs.name << " HAS2 " << use_vars.size()
-           << std::endl;
     for (auto& r : exec->op_ctx.requested) {
       mutate_vars.push_back(r.var);
     }
-    sa_log << inode.source->attrs.name << " HASA " << mutate_vars.size()
-           << std::endl;
     if (strcmp(op_nodes_[nid].opr_name, "Swapout") != 0 &&
         strcmp(op_nodes_[nid].opr_name, "Swapin") != 0) {
       for (auto& nd : exec->out_array) {
         mutate_vars.push_back(nd.var());
       }
     }
-    sa_log << inode.source->attrs.name << " HASA2 " << mutate_vars.size()
-           << std::endl;
     if (exec->var() != nullptr) {
       mutate_vars.push_back(exec->var());
     }
-    sa_log << inode.source->attrs.name << " HASA3 " << mutate_vars.size()
-           << std::endl;
     mutate_vars.push_back(op_nodes_[nid].finish_var);
-    sa_log << inode.source->attrs.name << " HASA4 " << mutate_vars.size()
-           << std::endl;
     // dedup vars
-    for (auto var : use_vars) {
-      sa_log << var << std::endl;
-    }
-    for (auto var : mutate_vars) {
-      sa_log << var << std::endl;
-    }
     Engine::Get()->DeduplicateVarHandle(&use_vars, &mutate_vars);
-    sa_log << inode.source->attrs.name << " HAS3 " << use_vars.size()
-           << std::endl;
-    sa_log << inode.source->attrs.name << " HASA5 " << mutate_vars.size()
-           << std::endl;
     // all vars include both mutate vars and use vars
     std::vector<Engine::VarHandle> all_vars(use_vars);
     std::copy(mutate_vars.begin(), mutate_vars.end(),
@@ -1308,8 +1286,6 @@ void GraphExecutor::InitCachedOps() {
       }
       sa_log << "[RUNNING]: ID = " <<  nid << ", " << "NAME = " << name
              << std::endl;
-      // FIXME(fegin): This should have some switch to turn it off.
-      //Swap::Get()->PrePostAccess(true);
       storage::MM_DPTR()->NotifyBegin(nid, name);
       exec->Run(ctx, is_gpu);
       // call on complete only if it is async op
@@ -1318,13 +1294,11 @@ void GraphExecutor::InitCachedOps() {
         #if MXNET_USE_CUDA
           // Wait GPU kernel to finish.
           ctx.get_stream<gpu>()->Wait();
-          //Prefetch::Get()->SignalStopComputing();
         #else
           LOG(FATAL) << MXNET_GPU_NOT_ENABLED_ERROR;
         #endif
         }
         on_complete();
-        //Swap::Get()->PrePostAccess(false);
       }
       storage::MM_DPTR()->NotifyDone(nid);
       sa_log << "[RUNNING]: DONE, " << nid << std::endl;
@@ -1666,7 +1640,6 @@ GraphExecutor::CachedSegOpr GraphExecutor::CreateCachedSegOpr(size_t topo_start,
   auto exec_fun = [exec_list, is_gpu] (
       RunContext ctx, Engine::CallbackOnComplete on_complete) {
     // Run all opr in the sub-graph
-    //Swap::Get()->PrePostAccess(true);
     for (auto &exec : exec_list) {
       exec->Run(ctx, is_gpu);
     }
@@ -1680,7 +1653,6 @@ GraphExecutor::CachedSegOpr GraphExecutor::CreateCachedSegOpr(size_t topo_start,
 #endif
     }
     on_complete();
-    //Swap::Get()->PrePostAccess(false);
   };
   opr_names.pop_back();
   opr_names += "]";

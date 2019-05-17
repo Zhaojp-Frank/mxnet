@@ -16,7 +16,6 @@
 namespace mxnet {
 namespace storage {
 
-
 using NidMapping = std::unordered_map<node_t, node_t>;
 using HidSizeMapping = std::unordered_map<node_t, size_t>;
 using HidMapping = std::unordered_map<handle_t, handle_t>;

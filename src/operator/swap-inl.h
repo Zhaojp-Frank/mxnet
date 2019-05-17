@@ -5,7 +5,6 @@
 #include <mxnet/operator_util.h>
 #include "./mxnet_op.h"
 
-
 namespace mxnet {
 namespace op {
 

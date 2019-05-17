@@ -123,9 +123,11 @@ class NaiveEngine final : public Engine {
   }
 
 
+#if 0
    void PushFin1(OprHandle op, Context exec_ctx, VarHandle fin, int priority = 0, bool profiling = false) {}
 
    void PushFin2(OprHandle op, Context exec_ctx, VarHandle fin, int priority = 0, bool profiling = false) { Push(op, exec_ctx, priority, profiling); }
+#endif
 
 
   void PushAsync(AsyncFn exec_fun,
