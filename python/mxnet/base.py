@@ -504,6 +504,18 @@ def _notify_shutdown():
 
 atexit.register(_notify_shutdown)
 
+def swap_start_allocargs():
+    check_call(_LIB.MXSwapStartAllocArgs())
+
+def swap_stop_allocargs():
+    check_call(_LIB.MXSwapStopAllocArgs())
+
+def swap_start_binding():
+    check_call(_LIB.MXSwapStartBinding())
+
+def swap_stop_binding():
+    check_call(_LIB.MXSwapStopBinding())
+
 def swap_start_iteration():
     check_call(_LIB.MXSwapStartIteration())
 
@@ -512,6 +524,9 @@ def swap_stop_iteration():
 
 def swap_statistics():
     check_call(_LIB.MXSwapStatistics())
+
+def swap_finish():
+    check_call(_LIB.MXSwapFinish())
 
 def add_fileline_to_docstring(module, incursive=True):
     """Append the definition position to each function contained in module.

@@ -23,8 +23,9 @@
  * \brief Implementation of SwapAdvisorEngine
  *  It is build upon implementation of Naive Engine.
  */
-#include<dmlc/base.h>
-#include<dmlc/concurrency.h>
+#include <dmlc/base.h>
+#include <dmlc/concurrency.h>
+#include <mxnet/sa_util.h>
 #include <atomic>
 #include <thread>
 #include "./threaded_engine.h"
@@ -38,7 +39,7 @@ namespace engine {
 class SwapAdvisorEngine final : public ThreadedEngine {
  public:
   SwapAdvisorEngine() {
-    this->Start();     
+    this->Start();
   }
   // virtual destructor
   virtual ~SwapAdvisorEngine() {
@@ -77,31 +78,53 @@ class SwapAdvisorEngine final : public ThreadedEngine {
     swapout_task_queue_.reset(new dmlc::ConcurrentBlockingQueue<OprBlock*>());
     thread_pool_.reset(new ThreadPool(1,
                        [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
-                        ThreadWorker(task_queue_, ready_event); 
+                        ThreadWorker(task_queue_, ready_event, 2);
                        }, true));
     swapin_thread_pool_.reset(new ThreadPool(1,
                        [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
-                        ThreadWorker(swapin_task_queue_, ready_event); 
+                        ThreadWorker(swapin_task_queue_, ready_event, 4);
                        }, true));
     swapout_thread_pool_.reset(new ThreadPool(1,
                        [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
-                        ThreadWorker(swapout_task_queue_, ready_event); 
+                        ThreadWorker(swapout_task_queue_, ready_event, 6);
                        }, true));
   }
 
  protected:
   // priority variable stores node id of the node for this engine.
   void PushToExecute(OprBlock *opr_block, bool pusher_thread) override {
-    std::cout << "Opr = " << opr_block->opr->opr_name << ", GPU: " 
-              << (int)(opr_block->ctx.dev_mask() == gpu::kDevMask) << std::endl;
-    if(std::string(opr_block->opr->opr_name) == "Swapout") {
-      swapout_task_queue_->Push(opr_block);
+    const char* opr_name = opr_block->opr->opr_name;
+    if (strlen(opr_name) < 6 || opr_name[0] != 'S' || opr_name[1] != 'w' ||
+        opr_name[2] != 'a' || opr_name[3] != 'p') {
+      opr_block->priority = 0;
+    } else if (opr_name[4] == 'i' && opr_name[5] == 'n' &&
+               opr_name[6] == '\0') {
+      opr_block->priority = 1;
+    } else if (opr_name[4] == 'o' && opr_name[5] == 'u' &&
+               opr_name[6] == 't') {
+      opr_block->priority = 2;
+    } else if (opr_name[4] == '_' && opr_name[5] == 'e' &&
+               opr_name[6] == 'n' && opr_name[7] == 't') {
+      opr_block->priority = 1;
+    } else {
+      opr_block->priority = 0;
     }
-    else if(std::string(opr_block->opr->opr_name) == "Swapin") {
-      swapin_task_queue_->Push(opr_block);
+    if (opr_block->opr->node_name != nullptr) {
+      sa_log << "Ready Opr = " << opr_block->opr->opr_name << ", "
+             << "name = " << opr_block->opr->node_name << ", isGPU: "
+             << (int)(opr_block->ctx.dev_mask() == gpu::kDevMask) << std::endl;
+    } else {
+      sa_log << "Ready Opr = " << opr_block->opr->opr_name << ", isGPU: "
+             << (int)(opr_block->ctx.dev_mask() == gpu::kDevMask) << std::endl;
     }
-    else {
+    if (opr_block->priority == 0) {
       task_queue_->Push(opr_block);
+    } else if (opr_block->priority == 1) {
+      swapin_task_queue_->Push(opr_block);
+    } else if (opr_block->priority == 2) {
+      swapout_task_queue_->Push(opr_block);
+    } else {
+      CHECK(false) << "No right engine priority";
     }
   }
 
@@ -114,16 +137,15 @@ class SwapAdvisorEngine final : public ThreadedEngine {
       size_t dev_id = static_cast<size_t>(opr_block->ctx.dev_id);
       //MSHADOW_CATCH_ERROR(mshadow::SetDevice<gpu>(opr_block->ctx.dev_id));
       CUDA_CALL(cudaSetDevice(opr_block->ctx.dev_id));
-      mshadow::Stream<gpu>* cur_stream;
-      std::string opr_name = std::string(opr_block->opr->opr_name);
-      if(opr_name == "Swapout") {
-        cur_stream = this->GetStream(swapout_streams_, dev_id);
-      }
-      else if(opr_name == "Swapin"){
-        cur_stream = this->GetStream(swapin_streams_, dev_id);
-      }
-      else {
+      mshadow::Stream<gpu>* cur_stream = nullptr;
+      if (opr_block->priority == 0) {
         cur_stream = this->GetStream(streams_, dev_id);
+      } else if (opr_block->priority == 1) {
+        cur_stream = this->GetStream(swapin_streams_, dev_id);
+      } else if (opr_block->priority == 2) {
+        cur_stream = this->GetStream(swapout_streams_, dev_id);
+      } else {
+        CHECK(false) << "No right engine priority";
       }
       this->ExecuteOprBlock((RunContext){opr_block->ctx, cur_stream},
             opr_block);
@@ -133,10 +155,18 @@ class SwapAdvisorEngine final : public ThreadedEngine {
     } else {
       this->ExecuteOprBlock((RunContext){opr_block->ctx, &cpu_stream_}, opr_block);
     }
-  } 
+  }
 
-  void ThreadWorker(std::shared_ptr<dmlc::ConcurrentBlockingQueue<OprBlock*>> task_queue,
-                    const std::shared_ptr<dmlc::ManualEvent>& ready_event) {
+  void ThreadWorker(
+          std::shared_ptr<dmlc::ConcurrentBlockingQueue<OprBlock*>> task_queue,
+          const std::shared_ptr<dmlc::ManualEvent>& ready_event,
+          int core) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core, &cpuset);
+    int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+    CHECK_EQ(rc, 0) << "Error calling pthread_setaffinity_np: " << rc;
+
     OprBlock* opr_block;
     ready_event->signal();
     while(task_queue->Pop(&opr_block)) {

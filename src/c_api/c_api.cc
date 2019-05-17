@@ -36,6 +36,7 @@
 #include <mxnet/kvstore.h>
 #include <mxnet/rtc.h>
 #include <mxnet/storage.h>
+#include <mxnet/mm_dptr.h>
 #include <vector>
 #include <sstream>
 #include <string>
@@ -46,7 +47,6 @@
 #include "./c_api_common.h"
 #include "../operator/custom/custom-inl.h"
 #include "../operator/tensor/matrix_op-inl.h"
-#include "../storage/gpu_swap_history.h"
 
 using namespace mxnet;
 
@@ -105,21 +105,51 @@ int MXNotifyShutdown() {
   API_END();
 }
 
+int MXSwapStartAllocArgs() {
+  API_BEGIN();
+  storage::MM_DPTR()->StartAllocArgs();
+  API_END();
+}
+
+int MXSwapStopAllocArgs() {
+  API_BEGIN();
+  storage::MM_DPTR()->StopAllocArgs();
+  API_END();
+}
+
+int MXSwapStartBinding() {
+  API_BEGIN();
+  storage::MM_DPTR()->StartBinding();
+  API_END();
+}
+
+int MXSwapStopBinding() {
+  API_BEGIN();
+  storage::MM_DPTR()->StopBinding();
+  API_END();
+}
+
 int MXSwapStartIteration() {
   API_BEGIN();
-  MemoryHistory::Get()->StartIteration();
+  storage::MM_DPTR()->StartIteration();
   API_END();
 }
 
 int MXSwapStopIteration() {
   API_BEGIN();
-  MemoryHistory::Get()->StopIteration();
+  storage::MM_DPTR()->StopIteration();
   API_END();
 }
 
 int MXSwapStatistics() {
   API_BEGIN();
-  MemoryHistory::Get()->Statistics();
+  storage::MM_DPTR()->Statistics();
+  API_END();
+}
+
+int MXSwapFinish() {
+  API_BEGIN();
+  storage::MM_DPTR()->Finish();
   API_END();
 }
 

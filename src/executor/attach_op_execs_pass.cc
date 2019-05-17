@@ -26,6 +26,7 @@
 #include <mxnet/operator.h>
 #include <mxnet/op_attr_types.h>
 #include <mxnet/graph_attr_types.h>
+#include <mxnet/sa_util.h>
 #include <nnvm/graph_attr_types.h>
 #include "../common/utils.h"
 #include "../common/exec_utils.h"
@@ -122,13 +123,9 @@ class StatefulComputeExecutor : public StorageFallbackOpExecutor {
     InvalidateOutputs(out_array, req);
 #endif
     PreFCompute(is_gpu);
-#if SWAP_ADVISOR_FLOW_TRACE
-    std::cout << "Before fcompute_ 1" << std::endl;
-#endif
+    sa_log << "Before fcompute_ 1" << std::endl;
     fcompute_(state_, op_ctx, in_data_, req, out_data_);
-#if SWAP_ADVISOR_FLOW_TRACE
-    std::cout << "After fcompute_ 1" << std::endl;
-#endif
+    sa_log << "After fcompute_ 1" << std::endl;
     PostFCompute(is_gpu);
   }
 
@@ -205,13 +202,9 @@ class FComputeExecutor : public StorageFallbackOpExecutor {
     InvalidateOutputs(out_array, req);
 #endif
     PreFCompute(is_gpu);
-#if SWAP_ADVISOR_FLOW_TRACE
-    std::cout << "Before fcompute_ 2" << std::endl;
-#endif
+    sa_log << "Before fcompute_ 2" << std::endl;
     fcompute_(attrs_, op_ctx, in_data_, req, out_data_);
-#if SWAP_ADVISOR_FLOW_TRACE
-    std::cout << "After fcompute_ 2" << std::endl;
-#endif
+    sa_log << "After fcompute_ 2" << std::endl;
     PostFCompute(is_gpu);
   }
 

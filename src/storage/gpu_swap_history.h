@@ -18,7 +18,7 @@ using namespace std::chrono;
 
 namespace mxnet {
 
-using handle_id_t = unsigned long long;
+using handle_t = unsigned long long;
 using timestamp_t = unsigned long long;
 using timestep_t = unsigned long long;
 
@@ -27,14 +27,14 @@ const int NUMBER_OF_GPU = 1;
 struct SwapParams {
   size_t no_swap_steps;
   size_t required_memory;
-  std::map<size_t, std::unordered_set<handle_id_t> >* divided_handles;
+  std::map<size_t, std::unordered_set<handle_t> >* divided_handles;
 };
 
 class MemoryHistory {
 public:
   enum record_t {GET_ADDR, SET_ADDR, DEL_ADDR};
   struct MemRecord {
-    handle_id_t handle_id;
+    handle_t handle_id;
     record_t operation_id;
     timestamp_t time;
     size_t record_step;
@@ -42,12 +42,12 @@ public:
   };
   struct DeviceHistory {
     static const size_t kMaxPreservedIteration = 10;
-    std::list<std::map<handle_id_t, std::vector<MemRecord>>> all_handle_history;
-    std::map<handle_id_t, std::vector<MemRecord>> *handle_history;
+    std::list<std::map<handle_t, std::vector<MemRecord>>> all_handle_history;
+    std::map<handle_t, std::vector<MemRecord>> *handle_history;
     std::list<std::vector<MemRecord>> all_ordered_history;
     std::vector<MemRecord> *ordered_history;
-    std::list<handle_id_t> lru_list;
-    std::unordered_map<handle_id_t, std::list<handle_id_t>::iterator> lru_map;
+    std::list<handle_t> lru_list;
+    std::unordered_map<handle_t, std::list<handle_t>::iterator> lru_map;
     size_t curr_idx;
     // Statistics
     size_t prefetch_count;
@@ -71,27 +71,27 @@ public:
   bool IsRecording() {return is_recording_;}
   DeviceHistory& DevHistory(int device) {return dev_history_[device];}
   size_t GetIterationIdx() {return iteration_idx_;}
-  void PreRecord(handle_id_t handle_id, record_t op, DeviceHistory& history);
-  void PutRecord(handle_id_t handle_id, int device, record_t op, size_t size);
+  void PreRecord(handle_t handle_id, record_t op, DeviceHistory& history);
+  void PutRecord(handle_t handle_id, int device, record_t op, size_t size);
   void PrintRecord(int device);
   void StartIteration();
   void StopIteration();
   void Statistics();
-  handle_id_t DecideVictim(std::unordered_set<handle_id_t> handles, int device,
+  handle_t DecideVictim(std::unordered_set<handle_t> handles, int device,
                            void* arg);
 
 private:
   MemoryHistory();
   std::vector<std::mutex> mutex_ = std::vector<std::mutex>(NUMBER_OF_GPU);
-  handle_id_t (MemoryHistory::*DoDecide)(std::unordered_set<handle_id_t>, int, void*);
+  handle_t (MemoryHistory::*DoDecide)(std::unordered_set<handle_t>, int, void*);
   void PrintSimilarity();
   double LCS_Similarity(std::vector<MemRecord>& base,
                         std::vector<MemRecord>& target);
   // Swap algorithm declaration
-  handle_id_t LRU(std::unordered_set<handle_id_t> handles, int device, void* arg);
-  handle_id_t NaiveHistory(std::unordered_set<handle_id_t> handles, int device,
+  handle_t LRU(std::unordered_set<handle_t> handles, int device, void* arg);
+  handle_t NaiveHistory(std::unordered_set<handle_t> handles, int device,
       void* arg);
-  handle_id_t SizeHistory(std::unordered_set<handle_id_t> handles, int device,
+  handle_t SizeHistory(std::unordered_set<handle_t> handles, int device,
       void* arg);
 
   std::vector<DeviceHistory> dev_history_;

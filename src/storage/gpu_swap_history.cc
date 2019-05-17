@@ -54,7 +54,7 @@ MemoryHistory* MemoryHistory::Get() {
   return s;
 }
 
-void MemoryHistory::PreRecord(handle_id_t handle_id, record_t op,
+void MemoryHistory::PreRecord(handle_t handle_id, record_t op,
                               DeviceHistory& history) {
   if (op == MemoryHistory::SET_ADDR) {
     history.lru_list.push_front(handle_id);
@@ -64,19 +64,19 @@ void MemoryHistory::PreRecord(handle_id_t handle_id, record_t op,
       history.lru_list.push_front(handle_id);
       history.lru_map[handle_id] = history.lru_list.begin();
     } else {
-      std::list<handle_id_t>::iterator hid = history.lru_map[handle_id];
+      std::list<handle_t>::iterator hid = history.lru_map[handle_id];
       history.lru_list.erase(hid);
       history.lru_list.push_front(handle_id);
       history.lru_map[handle_id] = history.lru_list.begin();
     }
   } else {
-    std::list<handle_id_t>::iterator hid = history.lru_map[handle_id];
+    std::list<handle_t>::iterator hid = history.lru_map[handle_id];
     history.lru_list.erase(hid);
     history.lru_map.erase(handle_id);
   }
 }
 
-void MemoryHistory::PutRecord(handle_id_t handle_id, int device,
+void MemoryHistory::PutRecord(handle_t handle_id, int device,
                               record_t op, size_t size) {
   if (!IterationStarted()) {
     return;
@@ -99,13 +99,13 @@ void MemoryHistory::PutRecord(handle_id_t handle_id, int device,
 }
 
 // LRU: Swapout the least recently used handle
-handle_id_t MemoryHistory::LRU(std::unordered_set<handle_id_t> handles,
+handle_t MemoryHistory::LRU(std::unordered_set<handle_t> handles,
                                int device, void* arg) {
   auto& history = dev_history_[device];
-  handle_id_t victim = -1;
+  handle_t victim = -1;
   while (history.lru_list.size() != 0 &&
     handles.find(history.lru_list.back()) == handles.end()) {
-    handle_id_t temp_id = history.lru_list.back();
+    handle_t temp_id = history.lru_list.back();
     history.lru_map[temp_id] = history.lru_list.end();
     history.lru_list.pop_back();
   }
@@ -122,8 +122,8 @@ handle_id_t MemoryHistory::LRU(std::unordered_set<handle_id_t> handles,
 
 // NaiveHistory: assume iterations remain the same; choose the handle
 // whose next reference is furthest in the future as victim.
-handle_id_t MemoryHistory::NaiveHistory(
-  std::unordered_set<handle_id_t> handles, int device, void* arg) {
+handle_t MemoryHistory::NaiveHistory(
+  std::unordered_set<handle_t> handles, int device, void* arg) {
   auto& history = dev_history_[device];
 #ifdef FEGIN_DEBUG
   std::cout << "DoDecide: NaiveHistory, handles numbers = " 
@@ -131,7 +131,7 @@ handle_id_t MemoryHistory::NaiveHistory(
 #endif
   SwapParams* params = (SwapParams*)arg;
   size_t latest_step = 0;
-  handle_id_t latest_id = 0;
+  handle_t latest_id = 0;
   for (auto &id : handles) {
     MemoryHistory::MemRecord r = {0, MemoryHistory::GET_ADDR, 0,
                                history.curr_idx, 0};
@@ -157,8 +157,8 @@ handle_id_t MemoryHistory::NaiveHistory(
   return latest_id;
 }
 
-handle_id_t MemoryHistory::SizeHistory(
-    std::unordered_set<handle_id_t> handles, int device, void* arg) {
+handle_t MemoryHistory::SizeHistory(
+    std::unordered_set<handle_t> handles, int device, void* arg) {
   auto divided_handles  = ((SwapParams*)arg)->divided_handles;
   auto candidates = divided_handles->lower_bound(((SwapParams*)arg)->required_memory);
   auto original_candidates = candidates;
@@ -171,7 +171,7 @@ handle_id_t MemoryHistory::SizeHistory(
   while (true) {
     if (candidates->second.size() != 0) {
       SwapParams new_params = {no_swap_step, 0, nullptr};
-      handle_id_t victim = NaiveHistory(candidates->second, device, &new_params);
+      handle_t victim = NaiveHistory(candidates->second, device, &new_params);
       if (victim != 0) {
         return victim;
       }
@@ -200,7 +200,7 @@ handle_id_t MemoryHistory::SizeHistory(
   return 0;
 }
 
-handle_id_t MemoryHistory::DecideVictim(std::unordered_set<handle_id_t> handles,
+handle_t MemoryHistory::DecideVictim(std::unordered_set<handle_t> handles,
                                         int device, void* arg) {
   std::lock_guard<std::mutex> lock(mutex_[device]);
   if (iteration_idx_ <= kBeginRecordAt) {
@@ -216,7 +216,7 @@ void MemoryHistory::PrintRecord(int device) {
   std::ofstream fp;
   fp.open("history_log.txt");
   std::vector<MemRecord> records;
-  std::map<handle_id_t, std::vector<MemRecord> >::iterator it;
+  std::map<handle_t, std::vector<MemRecord> >::iterator it;
   for (it = history.handle_history->begin();
        it != history.handle_history->end(); ++it) {
     for (size_t i = 0; i < (it->second).size(); i++) {

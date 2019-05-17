@@ -229,9 +229,14 @@ MXNET_DLL int MXRandomSeedContext(int seed, int dev_type, int dev_id);
  */
 MXNET_DLL int MXNotifyShutdown();
 
+MXNET_DLL int MXSwapStartAllocArgs();
+MXNET_DLL int MXSwapStopAllocArgs();
+MXNET_DLL int MXSwapStartBinding();
+MXNET_DLL int MXSwapStopBinding();
 MXNET_DLL int MXSwapStartIteration();
 MXNET_DLL int MXSwapStopIteration();
 MXNET_DLL int MXSwapStatistics();
+MXNET_DLL int MXSwapFinish();
 
 /*!
  * \brief Set up configuration of profiler for the process passed as profile_process in keys

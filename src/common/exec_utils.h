@@ -24,6 +24,7 @@
 #ifndef MXNET_COMMON_EXEC_UTILS_H_
 #define MXNET_COMMON_EXEC_UTILS_H_
 
+#include <mxnet/sa_util.h>
 #include <nnvm/graph.h>
 #include <nnvm/pass_functions.h>
 #include <map>
@@ -56,10 +57,9 @@ inline bool SetupDefaultBlobsIn(const std::vector<NDArray>& src,
                                 std::vector<NDArray> *temp_dst,
                                 std::unordered_map<uint32_t, uint32_t> *idx_map) {
   bool require_cast = false;
+  //sa_log << "SetupDefaultBlobsIn" << std::endl;
   for (size_t i = 0; i < src.size(); i++) {
-#if SWAP_ADVISOR_FLOW_TRACE 
-    std::cout << "SetupDefaultBlobsIn " << i << std::endl;
-#endif
+    //sa_log << "SetupDefaultBlobsIn " << i << std::endl;
     auto& nd = src[i];
     bool is_default = nd.storage_type() == kDefaultStorage;
 #if MXNET_USE_MKLDNN == 1
@@ -81,9 +81,7 @@ inline bool SetupDefaultBlobsIn(const std::vector<NDArray>& src,
       blobs->push_back(nd.data());
     }
   }
-#if SWAP_ADVISOR_FLOW_TRACE 
-  std::cout << "SetupDefaultBlobsIn end" << std::endl;
-#endif
+  //sa_log << "SetupDefaultBlobsIn end" << std::endl;
   return require_cast;
 }
 
@@ -94,10 +92,9 @@ inline bool SetupDefaultBlobsOut(const std::vector<NDArray>& src,
                                  std::vector<NDArray> *temp_src,
                                  std::vector<NDArray> *temp_dst) {
   bool require_cast = false;
+  //sa_log << "SetupDefaultBlobsOut" << std::endl;
   for (size_t i = 0; i < src.size(); i++) {
-#if SWAP_ADVISOR_FLOW_TRACE 
-    std::cout << "SetupDefaultBlobsOut " << i << std::endl;
-#endif
+    //sa_log << "SetupDefaultBlobsOut " << i << std::endl;
     auto& nd = src[i];
     bool is_default = nd.storage_type() == kDefaultStorage;
 #if MXNET_USE_MKLDNN == 1
@@ -136,9 +133,7 @@ inline bool SetupDefaultBlobsOut(const std::vector<NDArray>& src,
       blobs->push_back(nd.data());
     }
   }
-#if SWAP_ADVISOR_FLOW_TRACE 
-  std::cout << "SetupDefaultBlobsOut end" << std::endl;
-#endif
+  //sa_log << "SetupDefaultBlobsOut end" << std::endl;
   return require_cast;
 }
 
@@ -163,6 +158,7 @@ inline void SetupDefaultBlobsInOut(const std::vector<NDArray> &ndinputs,
                                    std::unordered_map<uint32_t, uint32_t> *in_temp_idx_map,
                                    const std::vector<uint32_t> &mutate_idx) {
   // populate input blobs
+  //sa_log << "SetupDefaultBlobsInOut" << std::endl;
   SetupDefaultBlobsIn(ndinputs, in_bufs, input_blobs, pre_temp_src, pre_temp_dst,
                       in_temp_idx_map);
   // populate output blobs
@@ -176,6 +172,7 @@ inline void SetupDefaultBlobsInOut(const std::vector<NDArray> &ndinputs,
       post_temp_dst->push_back(ndinputs[idx]);
     }
   }
+  //sa_log << "SetupDefaultBlobsInOut end" << std::endl;
 }
 
 /*

@@ -132,7 +132,6 @@ void StorageImpl::Alloc(Storage::Handle* handle) {
             } else if (strategy == "SwapOnDemand") {
               ptr = new storage::GPUOnDemandSwapStorageManager(
                     handle->ctx.real_dev_id());
-              //ptr = new storage::GPUPooledStorageManager();
               LOG(INFO) << "Using GPUOnDemandSwapStorageManager.";
             } else if (strategy == "SwapAdv") {
               ptr = new storage::GPUSwapAdvStorageManager();
@@ -213,6 +212,6 @@ Storage* Storage::Get() {
   return ptr;
 }
 
-std::atomic<storage::handle_id_t> Storage::Handle::base_id_(0);
+std::atomic<storage::handle_t> Storage::Handle::base_id_(0);
 
 }  // namespace mxnet

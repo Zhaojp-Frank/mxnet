@@ -233,6 +233,7 @@ struct ThreadedOpr final : public Opr,
   FnProperty prop;
   /*! \brief The name of the operator */
   const char* opr_name{nullptr};
+  const char* node_name{nullptr};
   /*!
    * \brief Whether this is an temporary operator
    *        that can be deleted right after the operation completed.
@@ -274,7 +275,8 @@ class ThreadedEngine : public Engine {
                            std::vector<VarHandle> const& mutable_vars,
                            FnProperty prop = FnProperty::kNormal,
                            const char* opr_name = nullptr,
-                           bool wait = false) override;
+                           bool wait = false,
+                           const char* node_name = nullptr) override;
   void DeleteOperator(OprHandle op) override;
   void Push(OprHandle op, Context exec_ctx, int priority = 0, bool profiling = false) override;
   void PushAsync(AsyncFn exec_fun, Context exec_ctx,
@@ -290,6 +292,18 @@ class ThreadedEngine : public Engine {
                 FnProperty prop = FnProperty::kNormal,
                 int priority = 0,
                 const char* opr_name = nullptr) override;
+#if 0
+  void PushFin1(OprHandle op,
+                Context exec_ctx,
+                VarHandle fin,
+                int priority,
+                bool profiling) override;
+  void PushFin2(OprHandle op,
+                Context exec_ctx,
+                VarHandle fin,
+                int priority,
+                bool profiling) override;
+#endif
   void DeleteVariable(SyncFn delete_fn, Context exec_ctx, VarHandle var) override;
   void WaitForVar(VarHandle var) override;
   void WaitForAll() override;
@@ -376,16 +390,30 @@ class ThreadedEngine : public Engine {
         std::string what = e.what();
         if (what.find("driver shutting down") == std::string::npos &&
             !shutdown_phase_) {
-          LOG(FATAL)
-              << e.what() << "\n"
-              << "A fatal error occurred in asynchronous engine operation. "
-                 "If you do not know what caused this error, "
-                 "you can try set environment variable MXNET_ENGINE_TYPE "
-                 "to NaiveEngine and run with debugger (i.e. gdb). "
-                 "This will force all operations to be synchronous and "
-                 "backtrace will give you the series of calls that lead "
-                 "to this error. Remember to set MXNET_ENGINE_TYPE back to "
-                 "empty after debugging.";
+          if (threaded_opr->node_name) {
+            LOG(FATAL)
+                << threaded_opr->node_name << " "
+                << e.what() << "\n"
+                << "A fatal error occurred in asynchronous engine operation. "
+                   "If you do not know what caused this error, "
+                   "you can try set environment variable MXNET_ENGINE_TYPE "
+                   "to NaiveEngine and run with debugger (i.e. gdb). "
+                   "This will force all operations to be synchronous and "
+                   "backtrace will give you the series of calls that lead "
+                   "to this error. Remember to set MXNET_ENGINE_TYPE back to "
+                   "empty after debugging.";
+          } else {
+            LOG(FATAL)
+                << e.what() << "\n"
+                << "A fatal error occurred in asynchronous engine operation. "
+                   "If you do not know what caused this error, "
+                   "you can try set environment variable MXNET_ENGINE_TYPE "
+                   "to NaiveEngine and run with debugger (i.e. gdb). "
+                   "This will force all operations to be synchronous and "
+                   "backtrace will give you the series of calls that lead "
+                   "to this error. Remember to set MXNET_ENGINE_TYPE back to "
+                   "empty after debugging.";
+          }
         }
       }
     } else {
