@@ -63,8 +63,10 @@ class MM_Dptr {
   // Notify mm_dptr that a node is executed.
   virtual void NotifyDone(node_t nid) = 0;
 
-  //virtual std::vector<node_t> GetScheduleDeps(node_t nid) = 0;
+  // When the whole execution is finished.
+  virtual void Finish() = 0;
 
+  //virtual std::vector<node_t> GetScheduleDeps(node_t nid) = 0;
 
   // Can be called by both handles and storage managers.
   virtual void* GetDptr(handle_t id) = 0;

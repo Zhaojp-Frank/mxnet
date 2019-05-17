@@ -128,9 +128,11 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   void StopBinding() override {
     sa_log << "StopBinding " << std::endl;
     alloc_finalized_ = true;
+#if SWAPADV_REPORT_PROGRESS
     remove("mxnet_model_progress.rst");
     remove("mxnet_swapo_progress.rst");
     remove("mxnet_swapi_progress.rst");
+#endif
   }
 
   void StartIteration() override;
@@ -175,6 +177,8 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   }
 
   void NotifyDone(node_t id) override;
+
+  void Finish() override { is_finished_ = true; }
 
 #if 0
   std::vector<uint32_t> GetScheduleDeps(uint32_t nid) override {
@@ -256,6 +260,8 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   std::vector<std::unordered_map<void*, node_t>> used_mempools_;
   // Are all regular memory allocations finalzed.
   bool alloc_finalized_;
+  // Inidicate that the whole execution is finished.
+  bool is_finished_;
 
   // Read the scedule result.
   //void ReadScheduleDepsRst();

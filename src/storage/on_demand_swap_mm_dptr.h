@@ -64,6 +64,8 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     Prefetch::Get()->SignalStopComputing();
   }
 
+  void Finish() override { }
+
 #if 0
   std::vector<uint32_t> GetScheduleDeps(uint32_t nid) override {
     return std::vector<uint32_t>();

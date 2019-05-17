@@ -54,6 +54,8 @@ class Pooled_MM_Dptr : virtual public MM_Dptr {
 
   void NotifyDone(uint32_t nid) override { }
 
+  void Finish() override { }
+
 #if 0
   std::vector<uint32_t> GetScheduleDeps(node_id nid) override {
     return std::vector<uint32_t>();

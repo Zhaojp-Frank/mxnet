@@ -91,6 +91,7 @@ SA_MM_Dptr::SA_MM_Dptr() {
   temp_hdl_ = 0;
   iteration_started_ = false;
   curr_iteration_ = -1;
+  is_finished_ = true;
   sa_log << "SA_MM_Dptr initialized" << std::endl;
 }
 
@@ -195,10 +196,10 @@ void* SA_MM_Dptr::Alloc_(handle_t hid, bool do_swapin) {
   size_t counter = 0;
   while (mempool.size() == 0) {
     lock_.UnLock();
-    usleep(50);
+    usleep(90);
     counter += 1;
     lock_.Lock();
-#if SWAPADV_DEBUG
+#ifdef SWAPADV_DEBUG
     if (counter % 10000 == 9999) {
       sa_log << std::dec << "Wait!!!" << hid << " " << new_to_old_hids_.at(hid)
              << " " << mempool_idx << " " << mempools_[mempool_idx].size()
@@ -234,11 +235,11 @@ void SA_MM_Dptr::Free_(handle_t hid, bool do_swapout) {
   auto it = hdl_dptr_mapping_.find(hid);
   if (it == hdl_dptr_mapping_.end()) {
     sa_log << "FREE_ 2.1" << std::endl;
-    CHECK(false);
+    CHECK(is_finished_) << "Can't find the handle in the memory to free.";
+    lock_.UnLock();
+    return;
   }
-  sa_log << "FREE_ 3" << std::endl;
   size_t size = hdl_size_mapping_.at(hid);
-  sa_log << "FREE_ 3" << hid << std::endl;
   void* address = it->second;
   if (do_swapout) {
     lock_.UnLock();
@@ -251,6 +252,7 @@ void SA_MM_Dptr::Free_(handle_t hid, bool do_swapout) {
   uint32_t mempool = hdl_to_mempool_.at(hid);
   CHECK_EQ(used_mempools_[mempool].erase(address), 1);
   mempools_.at(mempool).push_back(address);
+  sa_log << "FREE_ done" << std::endl;
   lock_.UnLock();
 }
 
@@ -375,7 +377,7 @@ void* SA_MM_Dptr::GetDptr_(handle_t hid) {
     auto it = hdl_dptr_mapping_.find(hid);
     while (it == hdl_dptr_mapping_.end()) {
       lock_.UnLock();
-      usleep(50);
+      usleep(100);
       lock_.Lock();
       it = hdl_dptr_mapping_.find(hid);
     }
@@ -440,9 +442,12 @@ void SA_MM_Dptr::NotifyDone(node_t nid) {
       }
     }
   }
+  sa_log << "NotifyDone2 " << nid << std::endl;
 #if SWAPADV_REPORT_PROGRESS
+  lock_.Lock();
   pgr_tracker_.ReportProgress(new_to_old_nids_, new_to_old_hids_,
                               hdl_to_mempool_, used_mempools_);
+  lock_.UnLock();
 #endif
 }
 

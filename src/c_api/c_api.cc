@@ -147,6 +147,12 @@ int MXSwapStatistics() {
   API_END();
 }
 
+int MXSwapFinish() {
+  API_BEGIN();
+  storage::MM_DPTR()->Finish();
+  API_END();
+}
+
 int MXSetNumOMPThreads(int thread_num) {
   API_BEGIN();
   omp_set_num_threads(thread_num);

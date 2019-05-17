@@ -5,12 +5,10 @@
 #include <thread>
 #include <iostream>
 
-//#define SWAPADV_DEBUG
-
-
 #define sa_likely(x)      __builtin_expect(!!(x), 1)
 #define sa_unlikely(x)    __builtin_expect(!!(x), 0)
 
+//#define SWAPADV_DEBUG
 
 #ifdef SWAPADV_DEBUG
 #define SWAPADV_REPORT_PROGRESS 1

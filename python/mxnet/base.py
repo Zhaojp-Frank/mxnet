@@ -525,6 +525,9 @@ def swap_stop_iteration():
 def swap_statistics():
     check_call(_LIB.MXSwapStatistics())
 
+def swap_finish():
+    check_call(_LIB.MXSwapFinish())
+
 def add_fileline_to_docstring(module, incursive=True):
     """Append the definition position to each function contained in module.
 
