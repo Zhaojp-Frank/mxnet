@@ -196,10 +196,10 @@ void* SA_MM_Dptr::Alloc_(handle_t hid, bool do_swapin) {
   size_t counter = 0;
   while (mempool.size() == 0) {
     lock_.UnLock();
-    usleep(90);
-    counter += 1;
+    usleep(30);
     lock_.Lock();
 #ifdef SWAPADV_DEBUG
+    counter += 1;
     if (counter % 10000 == 9999) {
       sa_log << std::dec << "Wait!!!" << hid << " " << new_to_old_hids_.at(hid)
              << " " << mempool_idx << " " << mempools_[mempool_idx].size()
@@ -377,7 +377,7 @@ void* SA_MM_Dptr::GetDptr_(handle_t hid) {
     auto it = hdl_dptr_mapping_.find(hid);
     while (it == hdl_dptr_mapping_.end()) {
       lock_.UnLock();
-      usleep(100);
+      usleep(10);
       lock_.Lock();
       it = hdl_dptr_mapping_.find(hid);
     }
