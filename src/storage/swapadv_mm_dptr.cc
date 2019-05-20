@@ -71,8 +71,10 @@ SA_MM_Dptr::SA_MM_Dptr() {
                << "the memory manager. The required size = " << temp_size_
                <<cudaGetErrorString(e);
   }
-  cudaStreamCreate(&stream_out_);
-  cudaStreamCreate(&stream_in_);
+  //cudaStreamCreate(&stream_out_);
+  //cudaStreamCreate(&stream_in_);
+  cudaStreamCreateWithPriority(&stream_out_, cudaStreamNonBlocking, -1);
+  cudaStreamCreateWithPriority(&stream_in_, cudaStreamNonBlocking, -2);
 
   //ReadScheduleDepsRst();
   ReadAllocationRst();
@@ -181,6 +183,11 @@ void SA_MM_Dptr::ReadInitialHandlesRst() {
 }
 
 void SA_MM_Dptr::Remap() {
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  CPU_SET(0, &cpuset);
+  int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+
   std::unordered_map<node_t, std::vector<handle_t>> deallocations;
   for (auto& pair : deallocations_) {
     node_t new_nid = old_to_new_nids_.at(pair.first);
@@ -208,15 +215,15 @@ void* SA_MM_Dptr::Alloc_(handle_t hid, bool do_swapin) {
   size_t counter = 0;
   bool print = true;
   while (mempool.size() == 0) {
-      if (print) {
-          sa_log << "We have to wait1!!!" << std::endl;
-          print = false;
-      }
+    if (print) {
+      sa_log << "We have to wait1!!!" << std::endl;
+      print = false;
+    }
     lock_.UnLock();
-    usleep(30);
+    usleep(200);
     lock_.Lock();
-#ifdef SWAPADV_DEBUG
     counter += 1;
+#ifdef SWAPADV_DEBUG
     if (counter % 10000 == 9999) {
       sa_log << std::dec << "Wait!!!" << hid << " " << new_to_old_hids_.at(hid)
              << " " << mempool_idx << " " << mempools_[mempool_idx].size()
@@ -230,16 +237,19 @@ void* SA_MM_Dptr::Alloc_(handle_t hid, bool do_swapin) {
   }
   sa_log << "Alloc_ " << hid << " found " << std::endl;
   void* address = mempool.back();
-  mempool.pop_back();
-  used_mempools_[mempool_idx][address] = hid;
-  hdl_dptr_mapping_[hid] = address;
-  lock_.UnLock();
   if (do_swapin) {
-    size_t size = hdl_size_mapping_.at(hid);
+    cudaMemcpyAsync(address, cpu_memory_, hdl_size_mapping_.at(hid),
+                    cudaMemcpyHostToDevice, stream_in_);
+    mempool.pop_back();
+    used_mempools_[mempool_idx][address] = hid;
+    hdl_dptr_mapping_[hid] = address;
     lock_.UnLock();
-    cudaMemcpyAsync(address, cpu_memory_, size, cudaMemcpyHostToDevice,
-                    stream_in_);
     cudaStreamSynchronize(stream_in_);
+  } else {
+    mempool.pop_back();
+    used_mempools_[mempool_idx][address] = hid;
+    hdl_dptr_mapping_[hid] = address;
+    lock_.UnLock();
   }
   return address;
 }
@@ -250,26 +260,67 @@ void SA_MM_Dptr::Free_(handle_t hid, bool do_swapout) {
   sa_log << "FREE_ 2" << std::endl;
   auto it = hdl_dptr_mapping_.find(hid);
   if (it == hdl_dptr_mapping_.end()) {
-    sa_log << "FREE_ 2.1" << std::endl;
-    CHECK(is_finished_) << "Can't find the handle in the memory to free.";
     lock_.UnLock();
+    sa_log << "FREE_ 3" << std::endl;
+    CHECK(is_finished_) << "Can't find the handle in the memory to free.";
     return;
   }
   void* address = it->second;
+  uint32_t mempool_idx;
   if (do_swapout) {
+    cudaMemcpyAsync(address, cpu_memory_, hdl_size_mapping_.at(hid),
+                    cudaMemcpyDeviceToHost, stream_out_);
+    hdl_dptr_mapping_.erase(it);
+    mempool_idx = hdl_to_mempool_.at(hid);
+    CHECK_EQ(used_mempools_[mempool_idx].erase(address), 1);
     lock_.UnLock();
-    size_t size = hdl_size_mapping_.at(hid);
-    cudaMemcpyAsync(address, cpu_memory_, size, cudaMemcpyDeviceToHost,
-                    stream_out_);
     cudaStreamSynchronize(stream_out_);
     lock_.Lock();
+  } else {
+    hdl_dptr_mapping_.erase(it);
+    mempool_idx = hdl_to_mempool_.at(hid);
+    CHECK_EQ(used_mempools_[mempool_idx].erase(address), 1);
   }
-  hdl_dptr_mapping_.erase(it);
-  uint32_t mempool_idx = hdl_to_mempool_.at(hid);
-  CHECK_EQ(used_mempools_[mempool_idx].erase(address), 1);
   mempools_.at(mempool_idx).push_back(address);
-  sa_log << "FREE_ done" << std::endl;
   lock_.UnLock();
+  sa_log << "FREE_ done" << std::endl;
+}
+
+void* SA_MM_Dptr::GetDptr_(handle_t hid) {
+#ifdef SWAPADV_DEBUG
+  auto old_it = new_to_old_hids_.find(hid);
+  if (old_it != new_to_old_hids_.end()) {
+    sa_log << std::dec << "GetDptr_ " << hid << " " << new_to_old_hids_.at(hid)
+           << std::endl;
+  } else {
+    sa_log << std::dec << "GetDptr_ " << hid << " " << -1 << std::endl;
+  }
+#endif
+  void* address = nullptr;
+  if (created_handles_.count(hid) == 0) {
+    sa_log << "Not created handle" << std::endl;
+    address = Alloc_(hid, false);
+    created_handles_.insert(hid);
+  } else {
+    sa_log << "Created handle" << std::endl;
+    lock_.Lock();
+    auto it = hdl_dptr_mapping_.find(hid);
+    bool print = true;
+    while (it == hdl_dptr_mapping_.end()) {
+      if (print) {
+          sa_log << "We have to wait2!!!" << std::endl;
+          print = false;
+      }
+      lock_.UnLock();
+      usleep(200);
+      lock_.Lock();
+      it = hdl_dptr_mapping_.find(hid);
+    }
+    lock_.UnLock();
+    address = it->second;
+    sa_log << "Created handle done " << std::endl;
+  }
+  return address;
 }
 
 void* SA_MM_Dptr::FreeAlloc_(handle_t hid) {
@@ -373,41 +424,6 @@ void SA_MM_Dptr::Swapout(node_t old_nid, uint32_t idx) {
   handle_t hid = entry_hdl_mapping_.at(EID(nid, idx));
   sa_log << "About to swapout " << hid << std::endl;
   Free_(hid, true);
-}
-
-void* SA_MM_Dptr::GetDptr_(handle_t hid) {
-  auto old_it = new_to_old_hids_.find(hid);
-  if (old_it != new_to_old_hids_.end()) {
-    sa_log << std::dec << "GetDptr_ " << hid << " " << new_to_old_hids_.at(hid)
-           << std::endl;
-  } else {
-    sa_log << std::dec << "GetDptr_ " << hid << " " << -1 << std::endl;
-  }
-  void* address = nullptr;
-  if (created_handles_.count(hid) == 0) {
-    sa_log << "Not created handle" << std::endl;
-    address = Alloc_(hid, false);
-    created_handles_.insert(hid);
-  } else {
-    sa_log << "Created handle" << std::endl;
-    lock_.Lock();
-    auto it = hdl_dptr_mapping_.find(hid);
-    bool print = true;
-    while (it == hdl_dptr_mapping_.end()) {
-      if (print) {
-          sa_log << "We have to wait2!!!" << std::endl;
-          print = false;
-      }
-      lock_.UnLock();
-      usleep(40);
-      lock_.Lock();
-      it = hdl_dptr_mapping_.find(hid);
-    }
-    lock_.UnLock();
-    address = it->second;
-    sa_log << "Created handle done " << std::endl;
-  }
-  return address;
 }
 
 void* SA_MM_Dptr::GetDptr(handle_t hid) {
