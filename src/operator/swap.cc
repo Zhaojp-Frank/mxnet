@@ -153,7 +153,8 @@ void SwapoutCompute(const nnvm::NodeAttrs& attrs,
   sa_log << "SwapoutCompute src = (" << param.src_tensor_nid << ", "
          << param.src_tensor_idx << ")" << std::endl;
   if (sa_likely(swap_doit)) {
-    storage::SA_MM_DPTR()->Swapout(param.src_tensor_nid, param.src_tensor_idx);
+    storage::SA_MM_DPTR()->Swapout(param.src_tensor_nid, param.src_tensor_idx,
+                                   param.is_noop == 1);
   }
 }
 

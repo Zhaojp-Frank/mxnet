@@ -419,11 +419,12 @@ void SA_MM_Dptr::Swapin(node_t old_nid, uint32_t idx) {
   Alloc_(hid, true);
 }
 
-void SA_MM_Dptr::Swapout(node_t old_nid, uint32_t idx) {
+void SA_MM_Dptr::Swapout(node_t old_nid, uint32_t idx, bool is_noop) {
   node_t nid = old_to_new_nids_.at(old_nid);
   handle_t hid = entry_hdl_mapping_.at(EID(nid, idx));
   sa_log << "About to swapout " << hid << std::endl;
-  Free_(hid, true);
+  //Free_(hid, true);
+  Free_(hid, !is_noop);
 }
 
 void* SA_MM_Dptr::GetDptr(handle_t hid) {
