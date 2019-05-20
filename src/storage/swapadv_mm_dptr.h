@@ -101,6 +101,8 @@ class SA_MM_Dptr : virtual public MM_Dptr {
 
   void Swapout(node_t nid, uint32_t idx);
 
+  void Remap();
+
   static long EID(node_t nid, uint32_t idx) { return nid * 93333L + idx; }
 
   void* Alloc(handle_t hid, size_t size, void* ptr) override;
@@ -126,6 +128,7 @@ class SA_MM_Dptr : virtual public MM_Dptr {
 
   void StopBinding() override {
     sa_log << "StopBinding " << std::endl;
+    Remap();
     alloc_finalized_ = true;
 #if SWAPADV_REPORT_PROGRESS
     remove("mxnet_model_progress.rst");
@@ -222,7 +225,7 @@ class SA_MM_Dptr : virtual public MM_Dptr {
   bool iteration_started_;
   int curr_iteration_;
   bool doing_allocargs_;
-  std::unordered_map<node_t, std::vector<node_t>> deallocations_;
+  std::unordered_map<node_t, std::vector<handle_t>> deallocations_;
 #if SWAPADV_REPORT_PROGRESS
   ProgressTracker pgr_tracker_;
 #endif

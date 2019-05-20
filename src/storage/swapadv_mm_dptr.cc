@@ -51,9 +51,9 @@ void ProgressTracker::ReportProgress(
 
 SA_MM_Dptr::SA_MM_Dptr() {
   // TODO(fegin): Determine this dynamically.
-  memory_size_ = 3L * 1024 * 1024 * 1024;
+  memory_size_ = 14L * 1024 * 1024 * 1024;
   temp_size_ = 0.5L * 1024 * 1024 * 1024;
-  cudaHostAlloc((void**)&(cpu_memory_), 1L * 1024 * 1024 * 1024,
+  cudaHostAlloc((void**)&(cpu_memory_), 8L * 1024 * 1024 * 1024,
                 cudaHostAllocPortable);
   if (cpu_memory_ == nullptr) {
     LOG(FATAL) << "Can't allocate the CPU memory in the initialization of "
@@ -180,6 +180,17 @@ void SA_MM_Dptr::ReadInitialHandlesRst() {
   }
 }
 
+void SA_MM_Dptr::Remap() {
+  std::unordered_map<node_t, std::vector<handle_t>> deallocations;
+  for (auto& pair : deallocations_) {
+    node_t new_nid = old_to_new_nids_.at(pair.first);
+    for (auto old_hid : pair.second) {
+      deallocations[new_nid].push_back(old_to_new_hids_.at(old_hid));
+    }
+  }
+  deallocations_ = deallocations;
+}
+
 void* SA_MM_Dptr::Alloc_(handle_t hid, bool do_swapin) {
   sa_log << "Alloc_ " << hid << std::endl;
   // Check if the handle is already in memory.
@@ -195,7 +206,12 @@ void* SA_MM_Dptr::Alloc_(handle_t hid, bool do_swapin) {
   uint32_t mempool_idx = hdl_to_mempool_.at(hid);
   auto& mempool = mempools_.at(mempool_idx);
   size_t counter = 0;
+  bool print = true;
   while (mempool.size() == 0) {
+      if (print) {
+          sa_log << "We have to wait1!!!" << std::endl;
+          print = false;
+      }
     lock_.UnLock();
     usleep(30);
     lock_.Lock();
@@ -305,6 +321,7 @@ void SA_MM_Dptr::StartIteration() {
     CHECK_EQ(size_in_memory, initial_handles_.size());
   }
   created_handles_ = arg_handles_;
+  sa_log << "StartIteration end" << std::endl;
   return;
 }
 
@@ -375,7 +392,12 @@ void* SA_MM_Dptr::GetDptr_(handle_t hid) {
     sa_log << "Created handle" << std::endl;
     lock_.Lock();
     auto it = hdl_dptr_mapping_.find(hid);
+    bool print = true;
     while (it == hdl_dptr_mapping_.end()) {
+      if (print) {
+          sa_log << "We have to wait2!!!" << std::endl;
+          print = false;
+      }
       lock_.UnLock();
       usleep(40);
       lock_.Lock();
@@ -432,13 +454,12 @@ void SA_MM_Dptr::SetDptr(handle_t hid, void* ptr, uint32_t dev_id) {
 
 void SA_MM_Dptr::NotifyDone(node_t nid) {
   sa_log << "NotifyDone " << nid << std::endl;
-  auto old_it = new_to_old_nids_.find(nid);
-  if (old_it != new_to_old_nids_.end()) {
-    auto it = deallocations_.find(old_it->second);
+  if (new_to_old_nids_.count(nid) > 0) {
+    auto it = deallocations_.find(nid);
     if (it != deallocations_.end()) {
       sa_log << "Doing deallocation for nid = " << nid << std::endl;
       for (handle_t hid : it->second) {
-        Free_(old_to_new_hids_.at(hid), false);
+        Free_(hid, false);
       }
     }
   }
