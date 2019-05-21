@@ -36,6 +36,7 @@
 #include <vector>
 #include <mutex>
 #include <new>
+#include "./pooled_mm_dptr.h"
 #include "./storage_manager.h"
 #include "../common/cuda_utils.h"
 #include "../common/utils.h"
@@ -64,8 +65,10 @@ class GPUPooledStorageManager final : public StorageManager {
                  << ". Got " << page_size_ << ".";
     }
     if (infinite_memory_) {
-      memory_size_ = 10L * 1024 * 1024 * 1024;
+      memory_size_ = 14L * 1024 * 1024 * 1024;
+      temp_memory_size_ = 0.5 * 1024 * 1024 * 1024;
       cudaMalloc(&memory_, memory_size_);
+      cudaMalloc(&temp_memory_, temp_memory_size_);
       memory_offset_ = 0;
     }
   }
@@ -103,7 +106,9 @@ class GPUPooledStorageManager final : public StorageManager {
   // All memory
   bool infinite_memory_;
   size_t memory_size_;
+  size_t temp_memory_size_;
   void *memory_;
+  void *temp_memory_;
   size_t memory_offset_;
 
   // used memory
@@ -123,6 +128,11 @@ void GPUPooledStorageManager::Alloc(Storage::Handle* handle) {
   std::lock_guard<std::mutex> lock(Storage::Get()->GetMutex(Context::kGPU));
   size_t size = std::max(handle->size, page_size_);
   auto&& reuse_it = memory_pool_.find(size);
+
+  if (infinite_memory_ && POOLED_MM_DPTR()->AllocFinished()) {
+    MM_DPTR()->Alloc(handle->ID(), size, temp_memory_);
+    return;
+  }
   if (reuse_it == memory_pool_.end() || reuse_it->second.size() == 0) {
     size_t free, total;
     cudaMemGetInfo(&free, &total);
