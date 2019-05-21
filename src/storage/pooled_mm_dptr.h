@@ -15,7 +15,6 @@ class Pooled_MM_Dptr : virtual public MM_Dptr {
  public:
   Pooled_MM_Dptr () {
     alloc_finalized_ = false;
-    is_finite_ = false;
   }
 
   bool AllocFinished () { return alloc_finalized_; }

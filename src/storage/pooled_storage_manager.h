@@ -65,8 +65,10 @@ class GPUPooledStorageManager final : public StorageManager {
                  << ". Got " << page_size_ << ".";
     }
     if (infinite_memory_) {
-      memory_size_ = 14L * 1024 * 1024 * 1024;
-      temp_memory_size_ = 0.5 * 1024 * 1024 * 1024;
+      memory_size_ = 1024L * 1024 * 1024 *
+                     dmlc::GetEnv("MXNET_SWAP_MEMORY_SIZE", 14.0);
+      temp_memory_size_ = 1024L * 1024 * 1024 *
+                     dmlc::GetEnv("MXNET_SWAP_TEMP_SIZE", 0.5);
       cudaMalloc(&memory_, memory_size_);
       cudaMalloc(&temp_memory_, temp_memory_size_);
       memory_offset_ = 0;

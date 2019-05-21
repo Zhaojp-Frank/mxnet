@@ -51,9 +51,12 @@ void ProgressTracker::ReportProgress(
 
 SA_MM_Dptr::SA_MM_Dptr() {
   // TODO(fegin): Determine this dynamically.
-  memory_size_ = 14L * 1024 * 1024 * 1024;
-  temp_size_ = 0.5L * 1024 * 1024 * 1024;
-  cudaHostAlloc((void**)&(cpu_memory_), 8L * 1024 * 1024 * 1024,
+  memory_size_ = 1024L * 1024 * 1024 *
+                 dmlc::GetEnv("MXNET_SWAP_MEMORY_SIZE", 14.0);
+  temp_size_ = 1024L * 1024 * 1024 *
+                 dmlc::GetEnv("MXNET_SWAP_TEMP_SIZE", 0.5);
+  cudaHostAlloc((void**)&(cpu_memory_),
+                1024L * 1024 * 1024 * dmlc::GetEnv("MXNET_SWAP_HOST_SIZE", 8),
                 cudaHostAllocPortable);
   if (cpu_memory_ == nullptr) {
     LOG(FATAL) << "Can't allocate the CPU memory in the initialization of "
@@ -186,7 +189,7 @@ void SA_MM_Dptr::Remap() {
   cpu_set_t cpuset;
   CPU_ZERO(&cpuset);
   CPU_SET(0, &cpuset);
-  int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+  pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
   std::unordered_map<node_t, std::vector<handle_t>> deallocations;
   for (auto& pair : deallocations_) {
