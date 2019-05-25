@@ -77,7 +77,7 @@ public:
   void SwapOut(unsigned required_memory, int device_id, bool async);
   void SwapOutLocked(unsigned required_memory, int device_id, bool async);
   void SwapIn(SwapInfo *info, bool async);
-  void SetAddr(handle_t handle_id, void* dptr, size_t size, int device_id);
+  void SetAddr(handle_t handle_id, void* dptr, size_t size, int device_id, bool is_pre);
   void DelAddr(handle_t handle_id);
   void FreeAddr(handle_t handle_id);
   void* GetAddr(handle_t handle_id, bool prefetch = false);

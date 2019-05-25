@@ -58,7 +58,9 @@ public:
     size_t swap_out_total;
     size_t num_get_addr;
   };
-  static const size_t kBeginRecordAt = 2;
+  // Iteration 0: Binding stage, no record
+  // Iteration 1: Record History
+  static const size_t kBeginRecordAt = 1;
 
   ~MemoryHistory();
   static bool CompareByStep(const MemRecord &r1, const MemRecord &r2) {
@@ -67,6 +69,7 @@ public:
   static MemoryHistory* Get();
   static std::shared_ptr<MemoryHistory> _GetSharedRef();
   bool IterationStarted() {return iteration_started_;}
+  bool IsPreparing() {return iteration_idx_ == 0;}
   bool IsPreRecording() {return pre_recording_;}
   bool IsRecording() {return is_recording_;}
   DeviceHistory& DevHistory(int device) {return dev_history_[device];}
@@ -74,6 +77,8 @@ public:
   void PreRecord(handle_t handle_id, record_t op, DeviceHistory& history);
   void PutRecord(handle_t handle_id, int device, record_t op, size_t size);
   void PrintRecord(int device);
+  void StartPreparation();
+  void EndPreparation();
   void StartIteration();
   void StopIteration();
   void Statistics();

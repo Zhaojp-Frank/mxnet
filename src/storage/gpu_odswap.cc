@@ -296,7 +296,7 @@ void ODSwap::SwapIn(SwapInfo *info, bool async) {
 }
 
 void ODSwap::SetAddr(handle_t handle_id, void* dptr, size_t size,
-                     int device_id) {
+                     int device_id, bool is_pre) {
   if (device_id != -1) {
     memory_history_->PutRecord(handle_id, device_id, MemoryHistory::SET_ADDR,
                                size);
@@ -309,11 +309,15 @@ void ODSwap::SetAddr(handle_t handle_id, void* dptr, size_t size,
   }
   pthread_rwlock_wrlock(&swap_lock_);
   auto iter = swap_info_.find(handle_id);
-  if (iter == swap_info_.end()) {
+  if (is_pre) {
+    CHECK(iter == swap_info_.end());
     SwapInfo* info = new SwapInfo{handle_id, true, device_id,
       dptr, nullptr, size, 0, ATOMIC_FLAG_INIT};
     swap_info_[handle_id] = info;
-
+    //swapinfo_groups_->NewInfo(dptr, info);
+  } else {
+    CHECK(iter != swap_info_.end());
+    iter->second->dptr = dptr;
     handle_t ready_id = thread_info_->Access(handle_id);
     if (ready_id != thread_info_->kInvalidID) {
       auto ready_iter = swap_info_.find(ready_id);
@@ -325,10 +329,6 @@ void ODSwap::SetAddr(handle_t handle_id, void* dptr, size_t size,
                 << std::endl;
 #endif
     }
-    //swapinfo_groups_->NewInfo(dptr, info);
-  } else {
-    //std::cout << "SetAddr duplicated id " << handle_id << std::endl;
-    //std::cout << "SetAddr " << iter->second->size << " " << size << std::endl;
   }
   pthread_rwlock_unlock(&swap_lock_);
 }

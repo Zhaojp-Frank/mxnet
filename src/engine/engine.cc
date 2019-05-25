@@ -45,6 +45,8 @@ inline Engine* CreateEngine() {
     ret = CreateThreadedEnginePerDevice();
   } else if (stype == "SwapAdvisorEngine") {
     ret = CreateSwapAdvisorEngine();
+  } else if (stype == "ODSwapEngine") {
+    ret = CreateODSwapEngine();
   }
   #else
   ret = CreateNaiveEngine();

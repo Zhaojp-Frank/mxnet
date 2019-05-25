@@ -78,7 +78,7 @@ void MemoryHistory::PreRecord(handle_t handle_id, record_t op,
 
 void MemoryHistory::PutRecord(handle_t handle_id, int device,
                               record_t op, size_t size) {
-  if (!IterationStarted()) {
+  if (!IterationStarted() || iteration_idx_ == 0) {
     return;
   }
   auto& history = dev_history_[device];
@@ -245,11 +245,21 @@ void MemoryHistory::PrintRecord(int device) {
   fp.close();
 }
 
+void MemoryHistory::StartPreparation() {
+
+}
+
+void MemoryHistory::EndPreparation() {
+  iteration_idx_++; 
+}
+
 void MemoryHistory::StartIteration() {
+  /*
   if(dmlc::GetEnv("MXNET_GPU_MEM_POOL_TYPE", std::string("Naive"))
      != "SwapOnDemand") {
     return;
   }
+  */
   iteration_started_ = true;
   for (int i = 0; i < NUMBER_OF_GPU; i++) {
     dev_history_[i].curr_idx = 0;
@@ -257,7 +267,8 @@ void MemoryHistory::StartIteration() {
   // LRU needs to record every iteration. As a result, it is mandatory to do LRU
   // recording even at kBeginRecordAt iteration because the desired swapping
   // algorithm will kick in from (kBeginRecordAt + 1) iteration.
-  if (iteration_idx_ <= kBeginRecordAt || swap_algorithm_ == "LRU") {
+  if ( (iteration_idx_ > 0 && iteration_idx_ <= kBeginRecordAt)
+      || swap_algorithm_ == "LRU") {
     pre_recording_ = true;
   }
   if ((adaptive_history_ && iteration_idx_ >= kBeginRecordAt) ||
