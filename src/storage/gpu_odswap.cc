@@ -190,11 +190,8 @@ void ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
     handle_t victim =
       memory_history_->DecideVictim(swappable_handles_[device_id], device_id,
                                     &param);
-    if (swap_info_.find(victim) == swap_info_.end()) {
-      std::cout << "Victim(" << victim
-                << ") does not exist (deleted?) " << std::endl;
-      CHECK(0);
-    }
+    CHECK(swap_info_.find(victim) != swap_info_.end())
+      << "Victim(" << victim << ") does not exist (deleted?) " << std::endl;
     SwapInfo *target = swap_info_[victim];
 #ifdef FEGIN_DEBUG
     std::cout << "SwapOut " << victim << " " << target->size << " "
@@ -297,7 +294,7 @@ void ODSwap::SwapIn(SwapInfo *info, bool async) {
 
 void ODSwap::SetAddr(handle_t handle_id, void* dptr, size_t size,
                      int device_id, bool is_pre) {
-  if (device_id != -1) {
+  if (device_id != -1 && is_pre) {
     memory_history_->PutRecord(handle_id, device_id, MemoryHistory::SET_ADDR,
                                size);
   }
@@ -331,6 +328,9 @@ void ODSwap::SetAddr(handle_t handle_id, void* dptr, size_t size,
     }
   }
   pthread_rwlock_unlock(&swap_lock_);
+  #ifdef FEGIN_DEBUG
+      std::cout << "SetAddr " << handle_id << " Returning"<< std::endl;
+  #endif
 }
 
 void ODSwap::FreeAddr(handle_t handle_id) {

@@ -125,7 +125,7 @@ void Prefetch::PrefetchWhileComputing(int device) {
       ++history.prefetch_count;
       ODSwap::Get()->GetAddr(r.handle_id, true);
     } else {
-      std::cout << "non-read operation found" << std::endl;
+      std::cout << "[Warning] Prefetch: non-read operation found" << std::endl;
     }
   }
 }

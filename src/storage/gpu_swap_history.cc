@@ -203,11 +203,8 @@ handle_t MemoryHistory::SizeHistory(
 handle_t MemoryHistory::DecideVictim(std::unordered_set<handle_t> handles,
                                         int device, void* arg) {
   std::lock_guard<std::mutex> lock(mutex_[device]);
-  if (iteration_idx_ <= kBeginRecordAt) {
-    return MemoryHistory::LRU(handles, device, nullptr);
-  } else {
-    return (this->*DoDecide)(handles, device, arg);
-  }
+  CHECK(handles.size() > 0) << "The set of swappable handle is exhausted";
+  return (this->*DoDecide)(handles, device, arg);
 }
 
 void MemoryHistory::PrintRecord(int device) {
@@ -264,11 +261,8 @@ void MemoryHistory::StartIteration() {
   for (int i = 0; i < NUMBER_OF_GPU; i++) {
     dev_history_[i].curr_idx = 0;
   }
-  // LRU needs to record every iteration. As a result, it is mandatory to do LRU
-  // recording even at kBeginRecordAt iteration because the desired swapping
-  // algorithm will kick in from (kBeginRecordAt + 1) iteration.
-  if ( (iteration_idx_ > 0 && iteration_idx_ <= kBeginRecordAt)
-      || swap_algorithm_ == "LRU") {
+  // LRU needs to record every iteration after preparation stage and iteration 1.
+  if (iteration_idx_ > kBeginRecordAt && swap_algorithm_ == "LRU") {
     pre_recording_ = true;
   }
   if ((adaptive_history_ && iteration_idx_ >= kBeginRecordAt) ||
@@ -318,7 +312,7 @@ void MemoryHistory::StartIteration() {
 
   // We can't start the prefetching too early, otherwise, the prefetch_count
   // may be incorrect.
-  if (iteration_idx_ > kBeginRecordAt) {
+  if (iteration_idx_ > kBeginRecordAt + 1) {
     Prefetch::Get()->StartPrefetching();
   }
 }
