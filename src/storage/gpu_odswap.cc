@@ -3,7 +3,7 @@
 #include "../common/cuda_utils.h"
 #include "./gpu_odswap.h"
 
-//#define FEGIN_DEBUG
+#define FEGIN_DEBUG
 
 namespace mxnet{
 

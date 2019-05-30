@@ -16,7 +16,7 @@ namespace storage {
 class OD_MM_Dptr : virtual public MM_Dptr {
  public:
   OD_MM_Dptr() {
-    temp_size_ = 0.5L * 1024 * 1024 * 1024;
+    temp_size_ = 1.5L * 1024 * 1024 * 1024;
     cudaError_t e = cudaMalloc(&temp_memory_, temp_size_);
     odswap_ = ODSwap::_GetSharedRef();
     memory_manager_ = GetMemoryManagerRef();
@@ -44,6 +44,8 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       unalloced_dptrs_.insert(ptr);
       SetDptr(id, ptr, device_id_);
     } else if (iteration_idx == 1) {
+      CHECK(size <= temp_size_) << "Temporary Memory too small. Has: "
+        << temp_size_ << " Required: " << size << std::endl;
       ptr = temp_memory_;
       temp_handles_.insert(id);
     } else {
@@ -152,6 +154,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       CHECK(dptr_dev_id_.find(id) != dptr_dev_id_.end())
        << id << " is not setdptred by mm_dptr!";
       CHECK(dptr_dev_id_[id] != -1) << id << " is Alloced for CPU!";
+      unalloced_dptrs_.erase(ptr);
       size_t ptr_size = dptr_size_[ptr];
       void* new_ptr = Alloc_(ptr_size);
       dptr_mapping_[id] = new_ptr;
@@ -160,10 +163,13 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       sa_log << "GetDptr " << id << " Start setting dptr" << std::endl; 
       odswap_->SetAddr(id, new_ptr, ptr_size, 0, false);
     } else {
+      sa_log << "GetDptr Size = " << dptr_size_[ptr] << std::endl;
       void* new_ptr = odswap_->GetAddr(id);
       dptr_mapping_[id] = new_ptr;
       dptr_size_[new_ptr] = dptr_size_[ptr];
-      dptr_size_.erase(ptr);
+      if (ptr != new_ptr) {
+        dptr_size_.erase(ptr);
+      }
     }
     sa_log << "GetDtpr " << id << " return: " << dptr_mapping_[id] << std::endl;
     return dptr_mapping_[id];
