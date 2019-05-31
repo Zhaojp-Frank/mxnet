@@ -59,6 +59,7 @@ public:
   std::set<handle_t>& CheckAndCreate(handle_t hid, bool access, bool& running);
   handle_t Access(handle_t hid);
   void Remove(handle_t hid);
+  std::set<handle_t>& GetProtectedHandles();
 
 private:
   ThreadAccessInfo();

@@ -9,6 +9,7 @@
 #include <vector>
 #include <thread>
 #include <mutex>
+#include <mxnet/sa_util.h>
 
 #if MXNET_USE_CUDA
 #include <cuda_runtime.h>

@@ -16,7 +16,7 @@ namespace storage {
 class OD_MM_Dptr : virtual public MM_Dptr {
  public:
   OD_MM_Dptr() {
-    temp_size_ = 1.5L * 1024 * 1024 * 1024;
+    temp_size_ = 1.0L * 1024 * 1024 * 1024;
     cudaError_t e = cudaMalloc(&temp_memory_, temp_size_);
     odswap_ = ODSwap::_GetSharedRef();
     memory_manager_ = GetMemoryManagerRef();
@@ -95,13 +95,19 @@ class OD_MM_Dptr : virtual public MM_Dptr {
 
   void StopBinding () override { 
     sa_log << "End Binding" << std::endl;
-    //memory_manager_->Free(fake_memory_, 0);
     memory_history_->EndPreparation();
   }
 
   void StartIteration () override { memory_history_->StartIteration(); }
 
-  void StopIteration () override { memory_history_->StopIteration(); }
+  void StopIteration () override {
+    size_t iteration_idx = memory_history_->GetIterationIdx();
+    if (iteration_idx == 1) {
+      sa_log << "Fake Memory is freeed" << std::endl;
+      memory_manager_->Free(fake_memory_, 0);
+    }
+    memory_history_->StopIteration();
+  }
 
   void Statistics () override { memory_history_->Statistics(); }
 
@@ -158,18 +164,21 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       size_t ptr_size = dptr_size_[ptr];
       void* new_ptr = Alloc_(ptr_size);
       dptr_mapping_[id] = new_ptr;
-      dptr_size_[new_ptr] = dptr_size_[ptr];
+      /*
+      dptr_size_[new_ptr] = ptr_size;
       dptr_size_.erase(ptr);
+      */
       sa_log << "GetDptr " << id << " Start setting dptr" << std::endl; 
       odswap_->SetAddr(id, new_ptr, ptr_size, 0, false);
     } else {
-      sa_log << "GetDptr Size = " << dptr_size_[ptr] << std::endl;
       void* new_ptr = odswap_->GetAddr(id);
       dptr_mapping_[id] = new_ptr;
+      /*
       dptr_size_[new_ptr] = dptr_size_[ptr];
       if (ptr != new_ptr) {
         dptr_size_.erase(ptr);
       }
+      */
     }
     sa_log << "GetDtpr " << id << " return: " << dptr_mapping_[id] << std::endl;
     return dptr_mapping_[id];

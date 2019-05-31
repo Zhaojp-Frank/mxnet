@@ -37,8 +37,7 @@ MemoryHistory::MemoryHistory() {
   } else if (swap_algorithm_ == "SizeHistory") {
     DoDecide = &MemoryHistory::SizeHistory;
   } else {
-    std::cout << "Unknown Algorithm Name: " << swap_algorithm_ << std::endl;
-    CHECK(0);
+    CHECK(0) << "Unknown Algorithm Name: " << swap_algorithm_ << std::endl;
   }
 }
 
@@ -109,14 +108,11 @@ handle_t MemoryHistory::LRU(std::unordered_set<handle_t> handles,
     history.lru_map[temp_id] = history.lru_list.end();
     history.lru_list.pop_back();
   }
-  if (history.lru_list.size() == 0) {
-    std::cout << "LRU: No Swappable Handle Found" << std::endl;
-    CHECK(0);
-  } else {
-    victim = history.lru_list.back();
-    history.lru_map[victim] = history.lru_list.end();
-    history.lru_list.pop_back();
-  }
+  CHECK (history.lru_list.size() != 0)
+    << "LRU: No Swappable Handle Found" << std::endl;
+  victim = history.lru_list.back();
+  history.lru_map[victim] = history.lru_list.end();
+  history.lru_list.pop_back();
   return victim;
 }
 
@@ -126,7 +122,7 @@ handle_t MemoryHistory::NaiveHistory(
   std::unordered_set<handle_t> handles, int device, void* arg) {
   auto& history = dev_history_[device];
 #ifdef FEGIN_DEBUG
-  std::cout << "DoDecide: NaiveHistory, handles numbers = " 
+  sa_log << "DoDecide: NaiveHistory, handles numbers = " 
             << history.handle_history.size() << std::endl;
 #endif
   SwapParams* params = (SwapParams*)arg;
@@ -139,13 +135,6 @@ handle_t MemoryHistory::NaiveHistory(
                                history.handle_history->at(id).end(), r,
                                CompareByStep);
     if (it == history.handle_history->at(id).end()) {
-      /*
-      if (it != history.handle_history->at(id).begin() &&
-          history.curr_idx - history.handle_history->at(id).back().record_step < 10) {
-        // Victim just used, skip
-        continue;
-      }
-      */
       return id;
     } else if (it->record_step - history.curr_idx < params->no_swap_steps) {
       continue;
@@ -187,10 +176,8 @@ handle_t MemoryHistory::SizeHistory(
       if (candidates == divided_handles->begin()) {
         candidates = original_candidates;
         reverse_flag = false;
-        if (no_swap_step == 0) {
-          std::cout << "Cannot find victim (algorithm error)" << std::endl;
-          CHECK(0);
-        }
+        CHECK(no_swap_step == 0)
+         << "Cannot find victim (algorithm error)" << std::endl;
         no_swap_step /= 2;
       } else {
         candidates --;
@@ -203,7 +190,6 @@ handle_t MemoryHistory::SizeHistory(
 handle_t MemoryHistory::DecideVictim(std::unordered_set<handle_t> handles,
                                         int device, void* arg) {
   std::lock_guard<std::mutex> lock(mutex_[device]);
-  CHECK(handles.size() > 0) << "The set of swappable handle is exhausted";
   return (this->*DoDecide)(handles, device, arg);
 }
 

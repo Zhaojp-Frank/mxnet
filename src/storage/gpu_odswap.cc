@@ -3,7 +3,7 @@
 #include "../common/cuda_utils.h"
 #include "./gpu_odswap.h"
 
-#define FEGIN_DEBUG
+//#define FEGIN_DEBUG
 
 namespace mxnet{
 
@@ -93,7 +93,7 @@ std::set<handle_t>& ThreadAccessInfo::CheckAndCreate(handle_t hid, bool access,
       std::unordered_set<std::thread::id>& hid_to_threads = hid_to_threads_[*it];
       hid_to_threads.erase(tid);
 #ifdef FEGIN_DEBUG
-      std::cout << "Hid=" << *it << ",size=" << hid_to_threads.size() << ",";
+      sa_log << "Hid=" << *it << ",size=" << hid_to_threads.size() << ",";
       if (hid_to_threads.begin() != hid_to_threads.end()) {
         std::cout << *(hid_to_threads.begin()) << std::endl;
       } else {
@@ -108,7 +108,7 @@ std::set<handle_t>& ThreadAccessInfo::CheckAndCreate(handle_t hid, bool access,
     }
   }
 #ifdef FEGIN_DEBUG
-  std::cout << "TID:" << tid << ",size=" << handles.size();
+  sa_log << "TID:" << tid << ",size=" << handles.size();
   for (auto id : handles) {
     std::cout << "," << id;
   }
@@ -179,14 +179,72 @@ void ODSwap::SwapOutLocked(unsigned required_memory, int device_id, bool async) 
   pthread_rwlock_unlock(&swap_lock_);
 }
 
+std::set<handle_t>& ThreadAccessInfo::GetProtectedHandles() {
+  std::thread::id tid = std::this_thread::get_id();
+  auto pair = all_threads_.emplace(tid, std::set<handle_t>{});
+  CHECK(pair.second == false);
+  std::set<handle_t>& handles = pair.first->second;
+  return handles;
+}
+
 // Caller holds swap_lock_
 void ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
   while (!memory_manager_->TryAllocate(device_id, required_memory)) {
     SwapParams param = {0, required_memory, &divided_handles_[device_id]};
 #ifdef FEGIN_DEBUG
-    std::cout<<"Swapout calling Decide victim. Swappable size = "
-             <<swappable_handles_[device_id].size() << std::endl;
+    sa_log << "Swapout calling Decide victim. Swappable size = "
+           << swappable_handles_[device_id].size() << std::endl;
+    if(swappable_handles_[device_id].size() <= 0) {
+      sa_log << "Handle exhausted!" << std::endl;
+
+      sa_log << "Handles kept by PrePostAccess:" << std::endl;
+      size_t kept_total = 0;
+      auto handles = thread_info_->GetProtectedHandles();
+      for (auto& handle: handles) {
+        CHECK(swap_info_.find(handle) != swap_info_.end());
+        auto& info = swap_info_.at(handle);
+        kept_total += info->size;
+        sa_log << handle << " size: " << info->size << " is_in: "
+               << info->swapped_in << std::endl;
+      }
+      sa_log << "Total Size of kept handles: " << kept_total << std::endl;
+
+      sa_log << "Handles that are swapped in:" << std::endl;
+      size_t swap_total = 0;
+      for (auto& tmp: swap_info_) {
+        auto& info = tmp.second;
+        if(info->swapped_in) {
+          swap_total += info->size;
+          sa_log << tmp.first << " size: " << info->size 
+                 << " Address: " << info->dptr
+                 << " Swap counts: " << info->swap_count << std::endl;
+        }
+      }
+      sa_log << "Total Size of swapped in handles: " << swap_total << std::endl;
+
+      sa_log << "Handles that are swapped out:" << std::endl;
+      swap_total = 0;
+      for (auto& tmp: swap_info_) {
+        auto& info = tmp.second;
+        if(!info->swapped_in) {
+          swap_total += info->size;
+          sa_log << tmp.first << " size: " << info->size 
+                 << " Address: " << info->cpu_address
+                 << " Swap counts: " << info->swap_count << std::endl;
+        }
+      }
+      sa_log << "Total Size of swapped out handles: " << swap_total << std::endl;
+      sa_log << "Sum of kept and swapped out handles: "
+             << swap_total + kept_total << std::endl;
+
+      sa_log << "Memory Info:" << std::endl;
+      size_t total, avail;
+      memory_manager_->MemGetInfo(0, &total, &avail);
+      sa_log << "Total: " << total << " Avail: " << avail << std::endl;
+    }
 #endif
+    CHECK(swappable_handles_[device_id].size() > 0)
+      << "Set of swappable handles is exhausted" << std::endl;
     handle_t victim =
       memory_history_->DecideVictim(swappable_handles_[device_id], device_id,
                                     &param);
@@ -194,8 +252,8 @@ void ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
       << "Victim(" << victim << ") does not exist (deleted?) " << std::endl;
     SwapInfo *target = swap_info_[victim];
 #ifdef FEGIN_DEBUG
-    std::cout << "SwapOut " << victim << " " << target->size << " "
-              << target->swap_count << std::endl;
+    sa_log << "SwapOut " << victim << " " << target->size << " "
+           << target->swap_count << std::endl;
 #endif
     target->swap_count++;
     memory_history_->DevHistory(device_id).num_swap_out++;
@@ -215,7 +273,8 @@ void ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
     swappable_handles_[device_id].erase(victim);
     divided_handles_[device_id][target->size].erase(victim);
 #ifdef FEGIN_DEBUG
-    std::cout << "Remove(1) swappable handle_id = " << victim << std::endl;
+    sa_log << "SwapOut: Swapping out, remove(1) swappable handle_id = "
+           << victim << std::endl;
 #endif
     thread_info_->Remove(victim);
     pthread_rwlock_unlock(&swap_lock_);
@@ -235,6 +294,9 @@ void ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
     memory_manager_->Free(target->dptr, device_id);
     pthread_rwlock_wrlock(&swap_lock_);
     target->is_swapping.clear(std::memory_order_release);
+#ifdef FEGIN_DEBUG
+    sa_log << "SwapOut: Finish swapping out handle: " << victim << std::endl; 
+#endif
   }
 }
 
@@ -254,8 +316,8 @@ void ODSwap::SwapIn(SwapInfo *info, bool async) {
     CHECK(!info->swapped_in);
     CHECK(info->cpu_address != nullptr || infinite_memory_);
 #ifdef FEGIN_DEBUG
-    std::cout << "SwapIn "<< info->handle_id << " " << info->size << " "
-              << info->swap_count << std::endl;
+    sa_log << "SwapIn "<< info->handle_id << " " << info->size << " "
+           << info->swap_count << std::endl;
 #endif
     SwapOut(info->size, info->device_id, async);
     CHECK(memory_manager_->Malloc(info->dptr, info->size, info->device_id) ==
@@ -285,8 +347,8 @@ void ODSwap::SwapIn(SwapInfo *info, bool async) {
     swappable_handles_[info->device_id].insert(info->handle_id);
     divided_handles_[info->device_id][info->size].insert(info->handle_id);
 #ifdef FEGIN_DEBUG
-    std::cout << "Insert(1) swappable handle_id = "
-              << info->handle_id << std::endl;
+    sa_log << "Insert(1) swappable handle_id = "
+           << info->handle_id << std::endl;
 #endif
   }
   info->is_swapping.clear(std::memory_order_release);
@@ -299,7 +361,7 @@ void ODSwap::SetAddr(handle_t handle_id, void* dptr, size_t size,
                                size);
   }
 #ifdef FEGIN_DEBUG
-  std::cout << "SetAddr=" << handle_id << ", size=" << size <<  std::endl;
+  sa_log << "SetAddr=" << handle_id << ", size=" << size <<  std::endl;
 #endif
   if (dptr == nullptr) {
     return;
@@ -322,14 +384,14 @@ void ODSwap::SetAddr(handle_t handle_id, void* dptr, size_t size,
       swappable_handles_[device_id].insert(ready_id);
       divided_handles_[device_id][ready_iter->second->size].insert(ready_id);
 #ifdef FEGIN_DEBUG
-      std::cout << "Insert(2) swappable handle_id = " << ready_id
-                << std::endl;
+      sa_log << "Insert(2) swappable handle_id = " << ready_id
+             << std::endl;
 #endif
     }
   }
   pthread_rwlock_unlock(&swap_lock_);
   #ifdef FEGIN_DEBUG
-      std::cout << "SetAddr " << handle_id << " Returning"<< std::endl;
+      sa_log << "SetAddr " << handle_id << " Returning"<< std::endl;
   #endif
 }
 
@@ -376,8 +438,8 @@ void ODSwap::DelAddr(handle_t handle_id) {
       swappable_handles_[info->device_id].erase(handle_id);
       thread_info_->Remove(handle_id);
 #ifdef FEGIN_DEBUG
-      std::cout << "Remove(2) swappable handle_id = " << handle_id
-                << std::endl;
+      sa_log << "Remove(2) swappable handle_id = " << handle_id
+             << std::endl;
 #endif
     }
     if (divided_handles_[info->device_id][info->size].find(handle_id)
@@ -396,8 +458,11 @@ void ODSwap::DelAddr(handle_t handle_id) {
 
 void* ODSwap::GetAddr(handle_t handle_id, bool prefetch) {
 #ifdef FEGIN_DEBUG
-  std::cout << "GetAddr="<< handle_id << "," << std::this_thread::get_id()
-            << std::endl;
+  sa_log << "GetAddr: "<< handle_id << std::endl;
+  sa_log << "Memory Info:" << std::endl;
+  size_t total, avail;
+  memory_manager_->MemGetInfo(0, &total, &avail);
+  sa_log << "Total: " << total << " Avail: " << avail << std::endl;
 #endif
   pthread_rwlock_wrlock(&swap_lock_);
   auto info = swap_info_.at(handle_id);
@@ -406,17 +471,20 @@ void* ODSwap::GetAddr(handle_t handle_id, bool prefetch) {
     memory_history_->PutRecord(handle_id, info->device_id,
                                MemoryHistory::GET_ADDR, info->size);
   }
+#ifdef FEGIN_DEBUG
+  sa_log << "GetAddr info size = " << info->size << std::endl;
+#endif
   if (!info->swapped_in) {
     if (!prefetch) {
       ++(memory_history_->DevHistory(info->device_id).cache_miss);
     }
     SwapIn(info, swap_async_);
   }
-
+  CHECK(info->swapped_in) << "Info is not swapped in after SwapIn" << std::endl;
   swappable_handles_[info->device_id].erase(handle_id);
   divided_handles_[info->device_id][info->size].erase(handle_id);
 #ifdef FEGIN_DEBUG
-  std::cout << "Remove(3) swappable handle_id = " << handle_id << std::endl;
+  sa_log << "Remove(3) swappable handle_id = " << handle_id << std::endl;
 #endif
 
   if (!prefetch) {
@@ -428,8 +496,8 @@ void* ODSwap::GetAddr(handle_t handle_id, bool prefetch) {
       swappable_handles_[device_id].insert(ready_id);
       divided_handles_[device_id][ready_iter->second->size].insert(ready_id);
 #ifdef FEGIN_DEBUG
-      std::cout << "Insert(3) swappable handle_id = " << ready_id
-                << std::endl;
+      sa_log << "Insert(3) swappable handle_id = " << ready_id
+             << std::endl;
 #endif
     }
   }
@@ -442,9 +510,9 @@ void ODSwap::PrePostAccess(bool is_pre) {
   // how are we going to handle this?
 #ifdef FEGIN_DEBUG
   if (is_pre) {
-    std::cout << "PreAccess " << std::endl;
+    sa_log << "PreAccess " << std::endl;
   } else {
-    std::cout << "PostAccess " << std::endl;
+    sa_log << "PostAccess " << std::endl;
   }
 #endif
   pthread_rwlock_wrlock(&swap_lock_);
@@ -456,9 +524,9 @@ void ODSwap::PrePostAccess(bool is_pre) {
     divided_handles_[it->second->device_id][it->second->size].insert(id);
 #ifdef FEGIN_DEBUG
     if (is_pre) {
-      std::cout << "Insert(Pre) swappable handle_id = " << id << std::endl;
+      sa_log << "Insert(Pre) swappable handle_id = " << id << std::endl;
     } else {
-      std::cout << "Insert(Post) swappable handle_id = " << id << std::endl;
+      sa_log << "Insert(Post) swappable handle_id = " << id << std::endl;
     }
 #endif
   }
