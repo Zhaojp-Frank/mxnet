@@ -16,16 +16,19 @@ namespace storage {
 class OD_MM_Dptr : virtual public MM_Dptr {
  public:
   OD_MM_Dptr() {
-    temp_size_ = 1.0L * 1024 * 1024 * 1024;
+    float temp_ratio = dmlc::GetEnv("MXNET_GPU_TEMP_RATIO", kGPUTempRatio);
+    temp_size_ = (size_t)(temp_ratio * 1024 * 1024 * 1024);
     cudaError_t e = cudaMalloc(&temp_memory_, temp_size_);
+    if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
+      LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
+    }
+    std::cout << "OD_MM_Dptr: initialize fake memory of " << temp_size_ << std::endl;
     odswap_ = ODSwap::_GetSharedRef();
     memory_manager_ = GetMemoryManagerRef();
     memory_history_ = MemoryHistory::_GetSharedRef();
     prefetch_ = Prefetch::_GetSharedRef();
     device_id_ = 0;
-    if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
-      LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
-    }
+    
   }
   ~OD_MM_Dptr() {
     cudaError_t e =  cudaFree(temp_memory_);
@@ -222,6 +225,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   void* temp_memory_;
   void* fake_memory_;
   size_t temp_size_;
+  const float kGPUTempRatio = 0.5;
   int device_id_; // Only support dev_id = 0 currently.
 };
 
