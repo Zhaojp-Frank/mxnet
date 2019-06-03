@@ -176,7 +176,7 @@ handle_t MemoryHistory::SizeHistory(
       if (candidates == divided_handles->begin()) {
         candidates = original_candidates;
         reverse_flag = false;
-        CHECK(no_swap_step == 0)
+        CHECK(no_swap_step != 0)
          << "Cannot find victim (algorithm error)" << std::endl;
         no_swap_step /= 2;
       } else {

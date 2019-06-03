@@ -35,7 +35,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
       LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
     }
-    memory_manager_->Free(fake_memory_, 0);
+    //memory_manager_->Free(fake_memory_, 0);
   }
 
   void* Alloc(handle_t id, size_t size, void* ptr = nullptr) {

@@ -151,13 +151,19 @@ ODSwap* ODSwap::Get() {
 
 ODSwap::ODSwap() {
   std::cout << "Initialize ODSwap" << std::endl;
-  swapinfo_groups_ = SwapInfoGroups::_GetSharedRef();
-  thread_info_ = ThreadAccessInfo::_GetSharedRef();
-  memory_history_ = MemoryHistory::_GetSharedRef();
-  memory_manager_ = GetMemoryManagerRef();
   swap_lock_ = PTHREAD_RWLOCK_INITIALIZER;
   swap_async_ = dmlc::GetEnv("MXNET_SWAP_ASYNC", true);
+  std::cout << "SWAP_ASYNC=" << swap_async_ << std::endl;
   infinite_memory_ = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
+  infinite_cpu_memory_ = dmlc::GetEnv("MXNET_INFINITE_CPU_MEMORY", false);
+  if (infinite_cpu_memory_) {
+    const size_t fake_cpu_size = 50L*1024*1024*1024;
+    cudaHostAlloc((void**)&(fake_cpu_address_), fake_cpu_size, 0);
+    CHECK(fake_cpu_address_ != nullptr)
+      << "Fake cpu memory allocation failed" << std::endl;
+    std::cout << "Initialize fake cpu memory of size: "
+              << fake_cpu_size << "B" << std::endl;
+  }
   for (int i = 0; i < NUMBER_OF_GPU; ++i) {
     locks_[i] = PTHREAD_RWLOCK_INITIALIZER;
     // TODO(fegin): This and other cuda related code should be protected
@@ -165,12 +171,16 @@ ODSwap::ODSwap() {
     cudaStreamCreate(&streams_out_[i]);
     cudaStreamCreate(&streams_in_[i]);
   }
-  std::cout << "SWAP_ASYNC=" << swap_async_ << std::endl;
+  swapinfo_groups_ = SwapInfoGroups::_GetSharedRef();
+  thread_info_ = ThreadAccessInfo::_GetSharedRef();
+  memory_history_ = MemoryHistory::_GetSharedRef();
+  memory_manager_ = GetMemoryManagerRef();
   std::cout << "Initialize ODSwap done" << std::endl;
 }
 
 ODSwap::~ODSwap() {
   std::cout << "Destroy ODSwap" << std::endl;
+  cudaFreeHost(fake_cpu_address_);
 }
 
 void ODSwap::SwapOutLocked(unsigned required_memory, int device_id, bool async) {
@@ -182,7 +192,6 @@ void ODSwap::SwapOutLocked(unsigned required_memory, int device_id, bool async) 
 std::set<handle_t>& ThreadAccessInfo::GetProtectedHandles() {
   std::thread::id tid = std::this_thread::get_id();
   auto pair = all_threads_.emplace(tid, std::set<handle_t>{});
-  CHECK(pair.second == false);
   std::set<handle_t>& handles = pair.first->second;
   return handles;
 }
@@ -194,55 +203,55 @@ void ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
 #ifdef FEGIN_DEBUG
     sa_log << "Swapout calling Decide victim. Swappable size = "
            << swappable_handles_[device_id].size() << std::endl;
+#endif
     if(swappable_handles_[device_id].size() <= 0) {
-      sa_log << "Handle exhausted!" << std::endl;
+      std::cout << "Handle exhausted!" << std::endl;
 
-      sa_log << "Handles kept by PrePostAccess:" << std::endl;
+      std::cout << "Handles kept by PrePostAccess:" << std::endl;
       size_t kept_total = 0;
       auto handles = thread_info_->GetProtectedHandles();
       for (auto& handle: handles) {
         CHECK(swap_info_.find(handle) != swap_info_.end());
         auto& info = swap_info_.at(handle);
         kept_total += info->size;
-        sa_log << handle << " size: " << info->size << " is_in: "
+        std::cout << handle << " size: " << info->size << " is_in: "
                << info->swapped_in << std::endl;
       }
-      sa_log << "Total Size of kept handles: " << kept_total << std::endl;
+      std::cout << "Total Size of kept handles: " << kept_total << std::endl;
 
-      sa_log << "Handles that are swapped in:" << std::endl;
+      std::cout << "Handles that are swapped in:" << std::endl;
       size_t swap_total = 0;
       for (auto& tmp: swap_info_) {
         auto& info = tmp.second;
         if(info->swapped_in) {
           swap_total += info->size;
-          sa_log << tmp.first << " size: " << info->size 
+          std::cout << tmp.first << " size: " << info->size 
                  << " Address: " << info->dptr
                  << " Swap counts: " << info->swap_count << std::endl;
         }
       }
-      sa_log << "Total Size of swapped in handles: " << swap_total << std::endl;
+      std::cout << "Total Size of swapped in handles: " << swap_total << std::endl;
 
-      sa_log << "Handles that are swapped out:" << std::endl;
+      std::cout << "Handles that are swapped out:" << std::endl;
       swap_total = 0;
       for (auto& tmp: swap_info_) {
         auto& info = tmp.second;
         if(!info->swapped_in) {
           swap_total += info->size;
-          sa_log << tmp.first << " size: " << info->size 
+          std::cout << tmp.first << " size: " << info->size 
                  << " Address: " << info->cpu_address
                  << " Swap counts: " << info->swap_count << std::endl;
         }
       }
-      sa_log << "Total Size of swapped out handles: " << swap_total << std::endl;
-      sa_log << "Sum of kept and swapped out handles: "
+      std::cout << "Total Size of swapped out handles: " << swap_total << std::endl;
+      std::cout << "Sum of kept and swapped out handles: "
              << swap_total + kept_total << std::endl;
 
-      sa_log << "Memory Info:" << std::endl;
+      std::cout << "Memory Info:" << std::endl;
       size_t total, avail;
       memory_manager_->MemGetInfo(0, &total, &avail);
-      sa_log << "Total: " << total << " Avail: " << avail << std::endl;
+      std::cout << "Total: " << total << " Avail: " << avail << std::endl;
     }
-#endif
     CHECK(swappable_handles_[device_id].size() > 0)
       << "Set of swappable handles is exhausted" << std::endl;
     handle_t victim =
@@ -260,8 +269,12 @@ void ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
     memory_history_->DevHistory(device_id).swap_out_total += target->size;
     if (!infinite_memory_) {
       if (target->cpu_address == nullptr) {
-        //target->cpu_address = new char[int(target->size)];
-        cudaHostAlloc((void**)&(target->cpu_address), target->size, 0);
+        if (infinite_cpu_memory_) {
+          target->cpu_address = fake_cpu_address_; 
+        }
+        else {
+          cudaHostAlloc((void**)&(target->cpu_address), target->size, 0);
+        }
       }
       CHECK(target->cpu_address != nullptr);
     }
@@ -449,7 +462,9 @@ void ODSwap::DelAddr(handle_t handle_id) {
   }
   if (info->cpu_address != nullptr) {
     //delete info->cpu_address;
-    cudaFreeHost(info->cpu_address);
+    if (!infinite_cpu_memory_) {
+      cudaFreeHost(info->cpu_address);
+    }
   }
   delete info;
   swap_info_.erase(handle_id);
