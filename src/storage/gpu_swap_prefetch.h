@@ -1,7 +1,12 @@
 #ifndef GPU_SWAP_PREFETCH_H
 #define GPU_SWAP_PREFETCH_H
 
+#include <mutex>
+#include <queue>
+#include <semaphore.h>
 #include <thread>
+#include <unordered_set>
+#include <vector>
 
 #if MXNET_USE_CUDA
 #include <cuda_runtime.h>
@@ -17,26 +22,21 @@ public:
   static std::shared_ptr<Prefetch> _GetSharedRef();
   void StartPrefetching();
   void StopPrefetching();
-  void SignalStartComputing();
-  void SignalStopComputing();
-  bool IsPrefetching() {return start_prefetching_;}
+  void PushHandlesToPrefetch(const std::unordered_set<handle_t>& handles);
+  void SignalContinue();
 
 private:
   Prefetch();
-  void Prefetching(int device);
-  void (Prefetch::*DoPrefetch)(int);
-  // Prefetch algorithm declarations
-  void HistoryBasedPrefetch(int device);
-  void PrefetchWhileComputing(int device);
+  void Prefetching();
 
-  bool computing_;
-  std::vector<size_t> lookahead_pos_;
-  std::vector<std::thread> prefetcher_;
-  std::shared_ptr<MemoryHistory> history_;
-  bool start_prefetching_;
-  bool stop_prefetching_;
-  std::string prefetch_algorithm_;
-  size_t steps_ahead_;
+  std::thread prefetcher_;
+  std::size_t cur_node_idx_;
+  std::size_t cur_idx_in_node_;
+  std::vector<std::vector<handle_t>> prefetch_sequence_;
+  sem_t prefetch_sem_;
+  bool prefetching_;
+  size_t num_loop_;
+
 }; // class prefetch
 
 } // namespace mxnet

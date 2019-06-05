@@ -1,143 +1,10 @@
 #include <dmlc/logging.h>
-#include <dmlc/parameter.h>
 #include "../common/cuda_utils.h"
 #include "./gpu_odswap.h"
 
-//#define FEGIN_DEBUG
+#define FEGIN_DEBUG
 
 namespace mxnet{
-
-SwapInfoGroups::SwapInfoGroups() { }
-
-SwapInfoGroups::~SwapInfoGroups() { }
-
-std::shared_ptr<SwapInfoGroups> SwapInfoGroups::_GetSharedRef() {
-  static std::shared_ptr<SwapInfoGroups> inst(new SwapInfoGroups());
-  return inst;
-}
-
-SwapInfoGroups* SwapInfoGroups::Get() {
-  static SwapInfoGroups *sig = _GetSharedRef().get();
-  return sig;
-}
-
-void SwapInfoGroups::NewInfo(void* addr, SwapInfo* info) {
-  // We don't check the duplication here. It's caller's resposibility to make
-  // sure this API is called when a new SwapInfo is created.
-  auto it = in_memory_.find(addr);
-  if (it == in_memory_.end()) {
-    std::shared_ptr<SIGroup> group(new SIGroup());
-    in_memory_[addr] = group;
-    all_[info] = group;
-  } else {
-    std::cout << "Existed " << std::endl;
-    it->second->push_back(info);
-    all_[info] = it->second;
-  }
-}
-
-std::shared_ptr<SIGroup> SwapInfoGroups::SwapOut(void* addr) {
-  auto ptr = in_memory_.at(addr);
-  in_memory_.erase(addr);
-  for (auto& info : *ptr) {
-    info->swapped_in = false;
-    info->dptr = nullptr;
-  }
-  return ptr;
-}
-
-std::shared_ptr<SIGroup> SwapInfoGroups::SwapIn(void* addr, SwapInfo* info) {
-  auto ptr = all_.at(info);
-  for (auto& info : *ptr) {
-    info->swapped_in = true;
-    info->dptr = addr;
-  }
-  in_memory_[addr] = ptr;
-  return ptr;
-}
-
-ThreadAccessInfo::ThreadAccessInfo() {
-  running_threshold_ = dmlc::GetEnv("MXNET_SWAP_ACCESS_THRESHOLD",
-                                    kAccessThreshold);
-}
-
-ThreadAccessInfo::~ThreadAccessInfo() {}
-
-std::shared_ptr<ThreadAccessInfo> ThreadAccessInfo::_GetSharedRef() {
-  static std::shared_ptr<ThreadAccessInfo> inst(new ThreadAccessInfo());
-  return inst;
-}
-
-ThreadAccessInfo* ThreadAccessInfo::Get() {
-  static ThreadAccessInfo *tai = _GetSharedRef().get();
-  return tai;
-}
-
-std::set<handle_t>& ThreadAccessInfo::CheckAndCreate(handle_t hid, bool access,
-                                                     bool& running) {
-  std::thread::id tid = std::this_thread::get_id();
-  auto pair = all_threads_.emplace(tid, std::set<handle_t>{});
-  if (pair.second) {
-    is_running[tid] = false;
-  }
-  std::set<handle_t>& handles = pair.first->second;
-  if (access) {
-    running = is_running[tid];
-    handles.insert(hid);
-    auto hpair = hid_to_threads_.emplace(hid,
-                                         std::unordered_set<std::thread::id>{});
-    hpair.first->second.insert(tid);
-  } else {
-    is_running[tid] = running;
-    for (auto it = handles.begin(); it != handles.end(); ) {
-      std::unordered_set<std::thread::id>& hid_to_threads = hid_to_threads_[*it];
-      hid_to_threads.erase(tid);
-#ifdef FEGIN_DEBUG
-      sa_log << "Hid=" << *it << ",size=" << hid_to_threads.size() << ",";
-      if (hid_to_threads.begin() != hid_to_threads.end()) {
-        std::cout << *(hid_to_threads.begin()) << std::endl;
-      } else {
-        std::cout << std::endl;
-      }
-#endif
-      if (hid_to_threads.size() > 0) {
-        it = handles.erase(it);
-      } else {
-        it++;
-      }
-    }
-  }
-#ifdef FEGIN_DEBUG
-  sa_log << "TID:" << tid << ",size=" << handles.size();
-  for (auto id : handles) {
-    std::cout << "," << id;
-  }
-  std::cout << std::endl;
-#endif
-  return handles;
-}
-
-handle_t ThreadAccessInfo::Access(handle_t hid) {
-  bool running = true;
-  std::set<handle_t>& handles = CheckAndCreate(hid, true, running);
-  if (!running && handles.size() > kAccessThreshold) {
-    handle_t ready_id = *(handles.begin());
-    handles.erase(handles.begin());
-    hid_to_threads_[ready_id].erase(std::this_thread::get_id());
-    if (hid_to_threads_[ready_id].size() == 0) {
-      return ready_id;
-    }
-  }
-  return kInvalidID;
-}
-
-void ThreadAccessInfo::Remove(handle_t hid) {
-  std::unordered_set<std::thread::id>& hid_to_threads = hid_to_threads_[hid];
-  for (auto tid : hid_to_threads) {
-    all_threads_[tid].erase(hid);
-  }
-  hid_to_threads.clear();
-}
 
 std::shared_ptr<ODSwap> ODSwap::_GetSharedRef() {
   static std::shared_ptr<ODSwap> inst(new ODSwap());
@@ -153,11 +20,12 @@ ODSwap::ODSwap() {
   std::cout << "Initialize ODSwap" << std::endl;
   swap_lock_ = PTHREAD_RWLOCK_INITIALIZER;
   swap_async_ = dmlc::GetEnv("MXNET_SWAP_ASYNC", true);
+  sem_init(&swap_sem_, 0, 1);
   std::cout << "SWAP_ASYNC=" << swap_async_ << std::endl;
   infinite_memory_ = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
   infinite_cpu_memory_ = dmlc::GetEnv("MXNET_INFINITE_CPU_MEMORY", false);
   if (infinite_cpu_memory_) {
-    const size_t fake_cpu_size = 50L*1024*1024*1024;
+    const size_t fake_cpu_size = 20L*1024*1024*1024;
     cudaHostAlloc((void**)&(fake_cpu_address_), fake_cpu_size, 0);
     CHECK(fake_cpu_address_ != nullptr)
       << "Fake cpu memory allocation failed" << std::endl;
@@ -165,14 +33,11 @@ ODSwap::ODSwap() {
               << fake_cpu_size << "B" << std::endl;
   }
   for (int i = 0; i < NUMBER_OF_GPU; ++i) {
-    locks_[i] = PTHREAD_RWLOCK_INITIALIZER;
     // TODO(fegin): This and other cuda related code should be protected
     //              by MXNET_USE_CUDA.
     cudaStreamCreate(&streams_out_[i]);
     cudaStreamCreate(&streams_in_[i]);
   }
-  swapinfo_groups_ = SwapInfoGroups::_GetSharedRef();
-  thread_info_ = ThreadAccessInfo::_GetSharedRef();
   memory_history_ = MemoryHistory::_GetSharedRef();
   memory_manager_ = GetMemoryManagerRef();
   std::cout << "Initialize ODSwap done" << std::endl;
@@ -189,35 +54,20 @@ void ODSwap::SwapOutLocked(unsigned required_memory, int device_id, bool async) 
   pthread_rwlock_unlock(&swap_lock_);
 }
 
-std::set<handle_t>& ThreadAccessInfo::GetProtectedHandles() {
-  std::thread::id tid = std::this_thread::get_id();
-  auto pair = all_threads_.emplace(tid, std::set<handle_t>{});
-  std::set<handle_t>& handles = pair.first->second;
-  return handles;
-}
-
 // Caller holds swap_lock_
-void ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
+bool ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
+  sa_log << "Swapout: required memory = " << required_memory << std::endl;
   while (!memory_manager_->TryAllocate(device_id, required_memory)) {
     SwapParams param = {0, required_memory, &divided_handles_[device_id]};
 #ifdef FEGIN_DEBUG
     sa_log << "Swapout calling Decide victim. Swappable size = "
            << swappable_handles_[device_id].size() << std::endl;
 #endif
+    // Error messages
     if(swappable_handles_[device_id].size() <= 0) {
+      return false;
+      /*
       std::cout << "Handle exhausted!" << std::endl;
-
-      std::cout << "Handles kept by PrePostAccess:" << std::endl;
-      size_t kept_total = 0;
-      auto handles = thread_info_->GetProtectedHandles();
-      for (auto& handle: handles) {
-        CHECK(swap_info_.find(handle) != swap_info_.end());
-        auto& info = swap_info_.at(handle);
-        kept_total += info->size;
-        std::cout << handle << " size: " << info->size << " is_in: "
-               << info->swapped_in << std::endl;
-      }
-      std::cout << "Total Size of kept handles: " << kept_total << std::endl;
 
       std::cout << "Handles that are swapped in:" << std::endl;
       size_t swap_total = 0;
@@ -251,9 +101,12 @@ void ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
       size_t total, avail;
       memory_manager_->MemGetInfo(0, &total, &avail);
       std::cout << "Total: " << total << " Avail: " << avail << std::endl;
+      */
     }
+    /*
     CHECK(swappable_handles_[device_id].size() > 0)
       << "Set of swappable handles is exhausted" << std::endl;
+    */
     handle_t victim =
       memory_history_->DecideVictim(swappable_handles_[device_id], device_id,
                                     &param);
@@ -278,18 +131,17 @@ void ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
       }
       CHECK(target->cpu_address != nullptr);
     }
-    CHECK(target->swapped_in);
+    CHECK(target->swapped_in) << "Target " << target->handle_id
+        << " is not swapped_in!" << std::endl;
     CHECK(!target->is_swapping.test_and_set(std::memory_order_acquire));
     CHECK(target->dptr != nullptr);
     target->swapped_in = false;
-    //swapinfo_groups_->SwapOut(target->dptr);
     swappable_handles_[device_id].erase(victim);
     divided_handles_[device_id][target->size].erase(victim);
 #ifdef FEGIN_DEBUG
     sa_log << "SwapOut: Swapping out, remove(1) swappable handle_id = "
            << victim << std::endl;
 #endif
-    thread_info_->Remove(victim);
     pthread_rwlock_unlock(&swap_lock_);
     if (!infinite_memory_) {
 #if 1
@@ -311,11 +163,13 @@ void ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
     sa_log << "SwapOut: Finish swapping out handle: " << victim << std::endl; 
 #endif
   }
+  return true;
 }
 
 // Caller holds swap_lock_
-void ODSwap::SwapIn(SwapInfo *info, bool async) {
+bool ODSwap::SwapIn(SwapInfo *info, bool async) {
   while (info->is_swapping.test_and_set(std::memory_order_acquire)) {
+    sa_log << "id " << info->handle_id << " is swapping" << std::endl;
     // TODO(fegin): usleep may not be efficient and may cause unstable
     //              execution. This is not important for now but can be
     //              something to imporve in the future. However, this
@@ -332,7 +186,10 @@ void ODSwap::SwapIn(SwapInfo *info, bool async) {
     sa_log << "SwapIn "<< info->handle_id << " " << info->size << " "
            << info->swap_count << std::endl;
 #endif
-    SwapOut(info->size, info->device_id, async);
+    if (!SwapOut(info->size, info->device_id, async)) {
+      info->is_swapping.clear(std::memory_order_release);
+      return false;
+    }
     CHECK(memory_manager_->Malloc(info->dptr, info->size, info->device_id) ==
           cudaSuccess);
     pthread_rwlock_unlock(&swap_lock_);
@@ -352,19 +209,22 @@ void ODSwap::SwapIn(SwapInfo *info, bool async) {
       }
 #endif
       // delete info->cpu_address;
+      // info->cpu_address = nullptr;
     }
-    // info->cpu_address = nullptr;
+    sa_log << "Swapin: memcpy for handle " << info->handle_id 
+           << " is over" << std::endl;
     pthread_rwlock_wrlock(&swap_lock_);
     info->swapped_in = true;
-    //swapinfo_groups_->SwapIn(info->dptr, info);
-    swappable_handles_[info->device_id].insert(info->handle_id);
-    divided_handles_[info->device_id][info->size].insert(info->handle_id);
+    // With new design, swappable handle is updated only at start/end/access
+    //swappable_handles_[info->device_id].insert(info->handle_id);
+    //divided_handles_[info->device_id][info->size].insert(info->handle_id);
 #ifdef FEGIN_DEBUG
     sa_log << "Insert(1) swappable handle_id = "
            << info->handle_id << std::endl;
 #endif
   }
   info->is_swapping.clear(std::memory_order_release);
+  return true;
 }
 
 void ODSwap::SetAddr(handle_t handle_id, void* dptr, size_t size,
@@ -382,25 +242,14 @@ void ODSwap::SetAddr(handle_t handle_id, void* dptr, size_t size,
   pthread_rwlock_wrlock(&swap_lock_);
   auto iter = swap_info_.find(handle_id);
   if (is_pre) {
-    CHECK(iter == swap_info_.end());
+    CHECK(iter == swap_info_.end())
+      << "Same info is set twice in preparation stage" << std::endl;
     SwapInfo* info = new SwapInfo{handle_id, true, device_id,
-      dptr, nullptr, size, 0, ATOMIC_FLAG_INIT};
+      dptr, nullptr, size, 0, ATOMIC_FLAG_INIT, false};
     swap_info_[handle_id] = info;
-    //swapinfo_groups_->NewInfo(dptr, info);
   } else {
     CHECK(iter != swap_info_.end());
     iter->second->dptr = dptr;
-    handle_t ready_id = thread_info_->Access(handle_id);
-    if (ready_id != thread_info_->kInvalidID) {
-      auto ready_iter = swap_info_.find(ready_id);
-      int device_id = ready_iter->second->device_id;
-      swappable_handles_[device_id].insert(ready_id);
-      divided_handles_[device_id][ready_iter->second->size].insert(ready_id);
-#ifdef FEGIN_DEBUG
-      sa_log << "Insert(2) swappable handle_id = " << ready_id
-             << std::endl;
-#endif
-    }
   }
   pthread_rwlock_unlock(&swap_lock_);
   #ifdef FEGIN_DEBUG
@@ -418,7 +267,6 @@ void ODSwap::FreeAddr(handle_t handle_id) {
     if (swappable_handles_[info->device_id].find(handle_id)
         != swappable_handles_[info->device_id].end()) {
       swappable_handles_[info->device_id].erase(handle_id);
-      thread_info_->Remove(handle_id);
     }
     if (divided_handles_[info->device_id][info->size].find(handle_id)
         != divided_handles_[info->device_id][info->size].end()) {
@@ -449,7 +297,6 @@ void ODSwap::DelAddr(handle_t handle_id) {
     if (swappable_handles_[info->device_id].find(handle_id)
         != swappable_handles_[info->device_id].end()) {
       swappable_handles_[info->device_id].erase(handle_id);
-      thread_info_->Remove(handle_id);
 #ifdef FEGIN_DEBUG
       sa_log << "Remove(2) swappable handle_id = " << handle_id
              << std::endl;
@@ -471,17 +318,17 @@ void ODSwap::DelAddr(handle_t handle_id) {
   pthread_rwlock_unlock(&swap_lock_);
 }
 
-void* ODSwap::GetAddr(handle_t handle_id, bool prefetch) {
+// type: 0 normal, 1 allocate, 2 prefetch
+void* ODSwap::GetAddr(handle_t handle_id, int type, bool& success) {
 #ifdef FEGIN_DEBUG
-  sa_log << "GetAddr: "<< handle_id << std::endl;
-  sa_log << "Memory Info:" << std::endl;
+  sa_log << "GetAddr[" << type << "]: "<< handle_id << std::endl;
   size_t total, avail;
   memory_manager_->MemGetInfo(0, &total, &avail);
-  sa_log << "Total: " << total << " Avail: " << avail << std::endl;
+  sa_log << "Memory Info: Total: " << total << " Avail: " << avail << std::endl;
 #endif
   pthread_rwlock_wrlock(&swap_lock_);
   auto info = swap_info_.at(handle_id);
-  if (info->device_id != -1 && !prefetch) {
+  if (info->device_id != -1 && type == 0) {
     memory_history_->DevHistory(info->device_id).num_get_addr++;
     memory_history_->PutRecord(handle_id, info->device_id,
                                MemoryHistory::GET_ADDR, info->size);
@@ -489,63 +336,80 @@ void* ODSwap::GetAddr(handle_t handle_id, bool prefetch) {
 #ifdef FEGIN_DEBUG
   sa_log << "GetAddr info size = " << info->size << std::endl;
 #endif
-  if (!info->swapped_in) {
+  if (!info->swapped_in && type > 0) {
+    /*
     if (!prefetch) {
       ++(memory_history_->DevHistory(info->device_id).cache_miss);
     }
-    SwapIn(info, swap_async_);
+    */
+    success = SwapIn(info, swap_async_);
+    if (!success) {
+      pthread_rwlock_unlock(&swap_lock_);
+      return nullptr;
+    }
+  } else if (!info->swapped_in) {
+    sa_log << "Handle " << handle_id << " is not prefetched." << std::endl;
+    info->is_waiting = true;
+    pthread_rwlock_unlock(&swap_lock_);
+    while (!info->swapped_in) {
+      sem_wait(&swap_sem_);
+    };
+    pthread_rwlock_wrlock(&swap_lock_);
+    info->is_waiting = false;
+  } else {
+    success = true;
   }
-  CHECK(info->swapped_in) << "Info is not swapped in after SwapIn" << std::endl;
+  CHECK(info->swapped_in) << "Info " 
+     << info->handle_id << " is not swapped in after SwapIn" << std::endl;
+  // Lock handle that is prefetched
+  if (type == 2) {
+    auto pair = locked_handles_.emplace(handle_id, 1);
+    if (!pair.second) {
+      pair.first->second++;
+    }
+    sa_log << "GetAddr add counter unswappable handle_id = " << handle_id
+           << " counter: " << pair.first->second << std::endl;
+  }
+  // Remove from swappable handles
   swappable_handles_[info->device_id].erase(handle_id);
   divided_handles_[info->device_id][info->size].erase(handle_id);
 #ifdef FEGIN_DEBUG
   sa_log << "Remove(3) swappable handle_id = " << handle_id << std::endl;
 #endif
-
-  if (!prefetch) {
-    // Don't let the pretch thread interfere the access information.
-    handle_t ready_id = thread_info_->Access(handle_id);
-    if (ready_id != thread_info_->kInvalidID) {
-      auto ready_iter = swap_info_.find(ready_id);
-      int device_id = ready_iter->second->device_id;
-      swappable_handles_[device_id].insert(ready_id);
-      divided_handles_[device_id][ready_iter->second->size].insert(ready_id);
-#ifdef FEGIN_DEBUG
-      sa_log << "Insert(3) swappable handle_id = " << ready_id
-             << std::endl;
-#endif
-    }
-  }
   pthread_rwlock_unlock(&swap_lock_);
+  if (info->is_waiting) {
+    sem_post(&swap_sem_);
+  }
   return info->dptr;
 }
 
-void ODSwap::PrePostAccess(bool is_pre) {
-  // FIXME(fegin): If multiple thread access the same record,
-  // how are we going to handle this?
-#ifdef FEGIN_DEBUG
-  if (is_pre) {
-    sa_log << "PreAccess " << std::endl;
-  } else {
-    sa_log << "PostAccess " << std::endl;
-  }
-#endif
+void ODSwap::StartComputing(const std::unordered_set<handle_t>& handles) {
   pthread_rwlock_wrlock(&swap_lock_);
-  std::set<handle_t>& handles =
-    thread_info_->CheckAndCreate(0, false, is_pre);
-  for (auto id : handles) {
-    auto it = swap_info_.find(id);
-    swappable_handles_[0].insert(id);
-    divided_handles_[it->second->device_id][it->second->size].insert(id);
-#ifdef FEGIN_DEBUG
-    if (is_pre) {
-      sa_log << "Insert(Pre) swappable handle_id = " << id << std::endl;
-    } else {
-      sa_log << "Insert(Post) swappable handle_id = " << id << std::endl;
+  for (auto handle: handles) {
+    auto pair = locked_handles_.emplace(handle, 1);
+    if (!pair.second) {
+      pair.first->second++;
     }
-#endif
+    sa_log << "StartComputing add counter unswappable handle_id = " << handle
+           << " counter: " << pair.first->second << std::endl;
   }
-  handles.clear();
+  pthread_rwlock_unlock(&swap_lock_);
+}
+
+void ODSwap::StopComputing(const std::unordered_set<handle_t>& handles) {
+  pthread_rwlock_wrlock(&swap_lock_);
+  for (auto& handle: handles) {
+    CHECK(locked_handles_.find(handle) != locked_handles_.end());
+    locked_handles_[handle]--;
+    sa_log << "Reduce 1 from counter for handle_id = " <<  handle 
+           << " counter: " << locked_handles_[handle] << std::endl;
+    if (locked_handles_[handle] <= 0) {
+      sa_log << "Insert swappable handle_id = " <<  handle << std::endl;
+      auto it = swap_info_.find(handle);
+      swappable_handles_[it->second->device_id].insert(handle);
+      divided_handles_[it->second->device_id][it->second->size].insert(handle);
+    }
+  }
   pthread_rwlock_unlock(&swap_lock_);
 }
 

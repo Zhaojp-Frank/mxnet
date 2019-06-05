@@ -4,6 +4,7 @@
 #include <set>
 
 #include <dmlc/logging.h>
+#include <mxnet/sa_util.h>
 #include "./gpu_swap_buddy.h"
 #include "./gpu_swap_util.h"
 

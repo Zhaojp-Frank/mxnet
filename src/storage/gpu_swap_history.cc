@@ -10,7 +10,6 @@
 #include <dmlc/parameter.h>
 #include <dmlc/logging.h>
 #include "./gpu_swap_history.h"
-#include "./gpu_swap_prefetch.h"
 #include "./gpu_swap_memmgr.h"
 #include "./gpu_swap_util.h"
 
@@ -295,12 +294,6 @@ void MemoryHistory::StartIteration() {
     dev_history_[device].swap_out_total = 0;
     dev_history_[device].num_get_addr = 0;
   }
-
-  // We can't start the prefetching too early, otherwise, the prefetch_count
-  // may be incorrect.
-  if (iteration_idx_ > kBeginRecordAt + 1) {
-    Prefetch::Get()->StartPrefetching();
-  }
 }
 
 void MemoryHistory::StopIteration() {
@@ -311,9 +304,6 @@ void MemoryHistory::StopIteration() {
   pre_recording_ = false;
   is_recording_ = false;
   iteration_started_ = false;
-  if (Prefetch::Get()->IsPrefetching()) {
-    Prefetch::Get()->StopPrefetching();
-  }
   ++iteration_idx_;
   //for (int device = 0; device < NUMBER_OF_GPU; device++) {
     //auto& history = dev_history_[device];

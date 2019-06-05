@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <vector>
 #include <map>
+#include <mxnet/sa_util.h>
 #include <dmlc/parameter.h>
 #include <dmlc/logging.h>
 #include "./gpu_odswap.h"
@@ -13,35 +14,10 @@
 namespace mxnet {
 
 Prefetch::Prefetch() {
-  start_prefetching_ = false;
-  stop_prefetching_ = false;
-  computing_ = false;
-  prefetch_algorithm_ = dmlc::GetEnv("MXNET_PREFETCH_ALGORITHM",
-                                      std::string("NaiveHistory"));
-  steps_ahead_ = dmlc::GetEnv("MXNET_PREFETCH_STEP_AHEAD", 100);
-  bool infinite_memory = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
-  if (infinite_memory) {
-      prefetch_algorithm_ = "NoPrefetch";
-  }
-  history_ = MemoryHistory::_GetSharedRef();
-  lookahead_pos_.resize(NUMBER_OF_GPU);
-  prefetcher_.resize(NUMBER_OF_GPU);
-  for (int i = 0; i < NUMBER_OF_GPU; i++) {
-    lookahead_pos_[i] = 0;
-  }
-  std::cout << "Prefetch Algorithm: " << prefetch_algorithm_ << std::endl;
-  std::cout << "Prefetch Steps Ahead: " << steps_ahead_ << std::endl;
-  if (prefetch_algorithm_ == "NaiveHistory") {
-    DoPrefetch = &Prefetch::HistoryBasedPrefetch;
-  } else if (prefetch_algorithm_ == "ComputePrefetch") {
-    DoPrefetch = &Prefetch::PrefetchWhileComputing;
-  } else if (prefetch_algorithm_ == "NoPrefetch") {
-    DoPrefetch = nullptr;
-  } else {
-    std::cout << "Unknown Prefetch Algorithm: " << prefetch_algorithm_
-      << std::endl;
-    CHECK(0);
-  }
+  num_loop_ = dmlc::GetEnv("MXNET_NUM_LOOP", 10); 
+  cur_node_idx_ = cur_idx_in_node_ = 0;
+  prefetching_ = false;
+  sem_init(&prefetch_sem_, 0, 1);
 }
 
 Prefetch::~Prefetch() {}
@@ -56,103 +32,57 @@ std::shared_ptr<Prefetch> Prefetch::_GetSharedRef() {
   return inst;
 }
 
-
-void Prefetch::SignalStartComputing() {
-  computing_ = true;
-}
-
-
-void Prefetch::SignalStopComputing() {
-  computing_ = false;
-}
-
-
 void Prefetch::StartPrefetching() {
-  start_prefetching_ = false;
-  stop_prefetching_ = false;
-  if (DoPrefetch == nullptr) {
-    return;
-  }
-  for (int device = 0; device < NUMBER_OF_GPU; device++) {
-    prefetcher_[device] = std::thread(&Prefetch::Prefetching, this, device);
-  }
-  //while (!Prefetch::Get()->IsPrefetching()) {
-    //usleep(1);
-  //}
+  sa_log << "Prefetch: Start Prefetching" << std::endl;
+  prefetching_ = true;
+  prefetcher_ = std::thread(&Prefetch::Prefetching, this);
+  sa_log << "Prefetch: Start Prefetching, thread created" << std::endl;
 }
-
 
 void Prefetch::StopPrefetching() {
-  stop_prefetching_ = true;
-  for (int device = 0; device < NUMBER_OF_GPU; device++) {
-    prefetcher_[device].join();
-    lookahead_pos_[device] = 0;
-  }
-  // ODSwap::Get()->PrintHandles();
+  /* Prefetch stops in the last iteration */
 }
 
-
-void Prefetch::Prefetching(int device) {
-  while (!stop_prefetching_) {
-    (this->*DoPrefetch)(device);
-    start_prefetching_ = true;
-  }
-}
-
-
-void Prefetch::PrefetchWhileComputing(int device) {
-  //TODO(karl): Use condition variable to replace the inefficient busy waiting
-
-  /*
-  std::unique_lock<std::mutex> lk(prefetch_lock_[device]);
-  while (!computing_) {
-    prefetch_cond_[device].wait(lk);
-  }
-  while (!computing_)
-    usleep(1);
-  */
-  auto& history = history_->DevHistory(device);
-  if (lookahead_pos_[device] < history.curr_idx) {
-    lookahead_pos_[device] = history.curr_idx;
-  }
-  while (lookahead_pos_[device] + 1 < history.ordered_history->size() &&
-         lookahead_pos_[device] >= history.curr_idx &&
-         lookahead_pos_[device] - history.curr_idx < steps_ahead_ &&
-         computing_) {
-    MemoryHistory::MemRecord r =
-        (*history.ordered_history)[++lookahead_pos_[device]];
-    if (r.operation_id == MemoryHistory::GET_ADDR) {
-      ++history.prefetch_count;
-      ODSwap::Get()->GetAddr(r.handle_id, true);
+void Prefetch::Prefetching() {
+  bool success;
+  while (true) {
+    sa_log << "Prefetch: prefetching " 
+           << prefetch_sequence_[cur_node_idx_][cur_idx_in_node_] << std::endl;
+    ODSwap::Get()->GetAddr(prefetch_sequence_[cur_node_idx_][cur_idx_in_node_],
+        2, success);
+    sa_log << "Prefetch: " << (success?"success":"failure") << std::endl;
+    if (!success) {
+      sem_wait(&prefetch_sem_);
     } else {
-      std::cout << "[Warning] Prefetch: non-read operation found" << std::endl;
-    }
+      cur_idx_in_node_++;
+      if (cur_idx_in_node_ == prefetch_sequence_[cur_node_idx_].size()) {
+        sa_log << "Prefetch: End of node with index " << cur_node_idx_ << std::endl;
+        cur_idx_in_node_ = 0;
+        cur_node_idx_++;
+        if (cur_node_idx_ == prefetch_sequence_.size()) {
+          sa_log << "Prefetch: End of iteration" << std::endl;
+          if (MemoryHistory::Get()->GetIterationIdx() == num_loop_) {
+            sa_log << "Prefetch: Reach last node in last iteration" << std::endl;
+            break;   
+          }
+          cur_node_idx_ = 0;
+        }
+      }
+    } // if (!success)
+  } // While true
+}
+
+void Prefetch::PushHandlesToPrefetch(const std::unordered_set<handle_t>& handles) {
+  prefetch_sequence_.push_back(std::vector<handle_t>{});  
+  auto& cur_subseq = prefetch_sequence_[prefetch_sequence_.size()-1];
+  for (auto handle: handles) {
+    cur_subseq.push_back(handle);
   }
 }
 
-// TODO(sotskin): karll: Add algorithm discription
-void Prefetch::HistoryBasedPrefetch(int device) {
-  //pthread_rwlock_rdlock(&swap_lock_);
-  //bool has_begun = false;
-  auto& history = history_->DevHistory(device);
-  if (lookahead_pos_[device] < history.curr_idx) {
-    lookahead_pos_[device] = history.curr_idx;
-  }
-  while (lookahead_pos_[device] + 1 < history.ordered_history->size() &&
-         lookahead_pos_[device] >= history.curr_idx &&
-         lookahead_pos_[device] - history.curr_idx < steps_ahead_) {
-    MemoryHistory::MemRecord r =
-        (*history.ordered_history)[++lookahead_pos_[device]];
-    if (r.operation_id == MemoryHistory::GET_ADDR) {
-      ++history.prefetch_count;
-      ODSwap::Get()->GetAddr(r.handle_id, true);
-    } else {
-      std::cout << "non-read operation found" << std::endl;
-    }
-  }
-  usleep(1);
-  //pthread_rwlock_unlock(&swap_lock_);
+void Prefetch::SignalContinue() {
+  sa_log << "Prefetch: SignalContinue" << std::endl;
+  sem_post(&prefetch_sem_);
 }
-
 
 } // namespace mxnet

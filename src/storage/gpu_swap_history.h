@@ -19,7 +19,7 @@ using namespace std::chrono;
 
 namespace mxnet {
 
-using handle_t = unsigned long long;
+using handle_t = unsigned long;
 using timestamp_t = unsigned long long;
 using timestep_t = unsigned long long;
 
