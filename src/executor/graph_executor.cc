@@ -1317,11 +1317,17 @@ void GraphExecutor::ExportEntryHandle() {
   const auto& idx = graph_.indexed_graph();
   std::vector<std::vector<size_t>> output_handles;
   bool export_graph = dmlc::GetEnv("MXNET_SWAP_EXPORT_GRAPH", 0);
+  size_t size = 0;
+  std::set<storage::handle_t> checked_hids;
   for (storage::node_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
     for (uint32_t index = 0; index < inode.source->num_outputs(); ++index) {
       uint32_t eid = idx.entry_id(nid, index);
       storage::handle_t hid = data_entry_[eid].storage_handle().ID();
+      if (checked_hids.count(hid) == 0) {
+        size += data_entry_[eid].storage_handle().size;
+        checked_hids.insert(hid);
+      }
       std::vector<size_t> output_handle;
       if (export_graph) {
         output_handle.push_back(nid);
@@ -1331,6 +1337,8 @@ void GraphExecutor::ExportEntryHandle() {
       }
     }
   }
+  std::cout << "All memory usage : " << size / 1024.0 / 1024.0 / 1024.0
+            << std::endl;
   if (export_graph) {
     graph_.attrs["output_handles"] =
       std::make_shared<dmlc::any>(std::move(output_handles));
