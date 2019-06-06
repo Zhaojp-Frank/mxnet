@@ -133,10 +133,8 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     if (iteration_idx == 1) {
       node_history_.push_back(make_pair(nid, name));
     }
-    if (iteration_idx == 2) {
-      odswap_->StartComputing(node_handles_[cur_node_]);
-    }
     if (iteration_idx >= 2) {
+      odswap_->StartComputing(node_handles_[cur_node_]);
       sa_log << "current nid index = " << cur_nid_idx_
              << " which history node is " << node_history_[cur_nid_idx_].first
              << ": " << node_history_[cur_nid_idx_].second << std::endl;
@@ -208,7 +206,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
         odswap_->SetAddr(id, new_ptr, ptr_size, 0, false);
       } else {
         bool tmp;
-        void* new_ptr = odswap_->GetAddr(id, 1, tmp);
+        void* new_ptr = odswap_->GetAddr(id, 0, tmp);
         dptr_mapping_[id] = new_ptr;  
       }
     } else { // Iteration 3, normal getaddr.

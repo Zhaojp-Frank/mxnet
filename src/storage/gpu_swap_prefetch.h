@@ -35,6 +35,7 @@ private:
   std::vector<std::vector<handle_t>> prefetch_sequence_;
   sem_t prefetch_sem_;
   bool prefetching_;
+  bool prefetch_enabled_;
   size_t num_loop_;
 
 }; // class prefetch

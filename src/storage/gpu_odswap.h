@@ -6,7 +6,6 @@
 #include <memory>
 #include <pthread.h>
 #include <thread>
-#include <semaphore.h>
 #include <stack>
 #include <string>
 #include <unistd.h>
@@ -43,7 +42,7 @@ public:
   void SetAddr(handle_t handle_id, void* dptr, size_t size, int device_id, bool is_pre);
   void DelAddr(handle_t handle_id);
   void FreeAddr(handle_t handle_id);
-  void* GetAddr(handle_t handle_id, int type, bool& success);
+  void* GetAddr(handle_t handle_id, bool is_prefetch, bool& success);
   void StartComputing(const std::unordered_set<handle_t>& handles);
   void StopComputing(const std::unordered_set<handle_t>& handles);
 #if 0
@@ -63,7 +62,6 @@ private:
   std::shared_ptr<MemoryHistory> memory_history_;
   std::shared_ptr<MemoryManager> memory_manager_;
   pthread_rwlock_t swap_lock_;
-  sem_t swap_sem_;
   bool swap_async_;
   bool infinite_memory_;
   bool infinite_cpu_memory_;

@@ -14,6 +14,7 @@
 namespace mxnet {
 
 Prefetch::Prefetch() {
+  prefetch_enabled_ = dmlc::GetEnv("MXNET_ENABLE_PREFETCH", false);
   num_loop_ = dmlc::GetEnv("MXNET_NUM_LOOP", 10); 
   cur_node_idx_ = cur_idx_in_node_ = 0;
   prefetching_ = false;
@@ -33,6 +34,9 @@ std::shared_ptr<Prefetch> Prefetch::_GetSharedRef() {
 }
 
 void Prefetch::StartPrefetching() {
+  if (!prefetch_enabled_) {
+    return;
+  }
   sa_log << "Prefetch: Start Prefetching" << std::endl;
   prefetching_ = true;
   prefetcher_ = std::thread(&Prefetch::Prefetching, this);
@@ -49,7 +53,7 @@ void Prefetch::Prefetching() {
     sa_log << "Prefetch: prefetching " 
            << prefetch_sequence_[cur_node_idx_][cur_idx_in_node_] << std::endl;
     ODSwap::Get()->GetAddr(prefetch_sequence_[cur_node_idx_][cur_idx_in_node_],
-        2, success);
+        true, success);
     sa_log << "Prefetch: " << (success?"success":"failure") << std::endl;
     if (!success) {
       sem_wait(&prefetch_sem_);
@@ -73,6 +77,9 @@ void Prefetch::Prefetching() {
 }
 
 void Prefetch::PushHandlesToPrefetch(const std::unordered_set<handle_t>& handles) {
+  if (!prefetch_enabled_) {
+    return;
+  }
   prefetch_sequence_.push_back(std::vector<handle_t>{});  
   auto& cur_subseq = prefetch_sequence_[prefetch_sequence_.size()-1];
   for (auto handle: handles) {
@@ -81,6 +88,9 @@ void Prefetch::PushHandlesToPrefetch(const std::unordered_set<handle_t>& handles
 }
 
 void Prefetch::SignalContinue() {
+  if (!prefetch_enabled_) {
+    return;
+  }
   sa_log << "Prefetch: SignalContinue" << std::endl;
   sem_post(&prefetch_sem_);
 }
