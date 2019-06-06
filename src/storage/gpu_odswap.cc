@@ -2,7 +2,7 @@
 #include "../common/cuda_utils.h"
 #include "./gpu_odswap.h"
 
-#define FEGIN_DEBUG
+//#define FEGIN_DEBUG
 
 namespace mxnet{
 
@@ -344,6 +344,21 @@ void* ODSwap::GetAddr(handle_t handle_id, int type, bool& success) {
     */
     success = SwapIn(info, swap_async_);
     if (!success) {
+      if (info->is_waiting) {
+        sa_log << "Swappable handles are exhausted!" << std::endl;
+        for (auto pair: locked_handles_) {
+          if (pair.second > 0) {
+            sa_log << pair.first << " " << pair.second << std::endl;
+          } else if (pair.second <= 0
+          && swappable_handles_[0].find(pair.first) 
+          == swappable_handles_[0].end()
+          && swap_info_[pair.first]->swapped_in) {
+            sa_log << pair.first << " " << pair.second 
+                   << "(Error)" << std::endl;
+          }
+        }
+        CHECK(0);
+      }
       pthread_rwlock_unlock(&swap_lock_);
       return nullptr;
     }
@@ -367,15 +382,24 @@ void* ODSwap::GetAddr(handle_t handle_id, int type, bool& success) {
     if (!pair.second) {
       pair.first->second++;
     }
+    if (pair.first->second > 0) {
+      // Remove from swappable handles
+      swappable_handles_[info->device_id].erase(handle_id);
+      divided_handles_[info->device_id][info->size].erase(handle_id);
+#ifdef FEGIN_DEBUG
+      sa_log << "Remove(4) swappable handle_id = " << handle_id << std::endl;
+#endif
+    }
     sa_log << "GetAddr add counter unswappable handle_id = " << handle_id
            << " counter: " << pair.first->second << std::endl;
-  }
-  // Remove from swappable handles
-  swappable_handles_[info->device_id].erase(handle_id);
-  divided_handles_[info->device_id][info->size].erase(handle_id);
+  } else {
+    // Remove from swappable handles
+    swappable_handles_[info->device_id].erase(handle_id);
+    divided_handles_[info->device_id][info->size].erase(handle_id);
 #ifdef FEGIN_DEBUG
-  sa_log << "Remove(3) swappable handle_id = " << handle_id << std::endl;
+    sa_log << "Remove(4) swappable handle_id = " << handle_id << std::endl;
 #endif
+  }
   pthread_rwlock_unlock(&swap_lock_);
   if (info->is_waiting) {
     sem_post(&swap_sem_);
