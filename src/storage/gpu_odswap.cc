@@ -157,7 +157,7 @@ ODSwap::ODSwap() {
   infinite_memory_ = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
   infinite_cpu_memory_ = dmlc::GetEnv("MXNET_INFINITE_CPU_MEMORY", false);
   if (infinite_cpu_memory_) {
-    const size_t fake_cpu_size = 50L*1024*1024*1024;
+    const size_t fake_cpu_size = 20L*1024*1024*1024;
     cudaHostAlloc((void**)&(fake_cpu_address_), fake_cpu_size, 0);
     CHECK(fake_cpu_address_ != nullptr)
       << "Fake cpu memory allocation failed" << std::endl;
