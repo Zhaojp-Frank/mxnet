@@ -120,10 +120,6 @@ handle_t MemoryHistory::LRU(std::unordered_set<handle_t> handles,
 handle_t MemoryHistory::NaiveHistory(
   std::unordered_set<handle_t> handles, int device, void* arg) {
   auto& history = dev_history_[device];
-#ifdef FEGIN_DEBUG
-  sa_log << "DoDecide: NaiveHistory, handles numbers = " 
-            << history.handle_history.size() << std::endl;
-#endif
   SwapParams* params = (SwapParams*)arg;
   size_t latest_step = 0;
   handle_t latest_id = 0;

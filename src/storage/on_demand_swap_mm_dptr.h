@@ -144,20 +144,18 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   void NotifyDone (node_t nid) override {
     size_t iteration_idx = memory_history_->GetIterationIdx();
     if (iteration_idx == 1) {
-      sa_log << "NotifyDone: Push handles of " << nid << " to prefetch sequence"
-             << std::endl;
-      prefetch_->PushHandlesToPrefetch(node_handles_[cur_node_]);
+      prefetch_->PushHandlesToPrefetch(node_handles_order_[cur_node_]);
     }
     if (iteration_idx >= 2) {
       CHECK(cur_nid_idx_ < node_history_.size());
-      sa_log << "mmdptr: inserting swappable handles for " << cur_node_.first 
+      sa_log << "Insert swappable handles for " << cur_node_.first 
              << ": " << cur_node_.second << " with size " 
              << node_handles_[cur_node_].size() << std::endl;
       odswap_->StopComputing(node_handles_[cur_node_]);
       if (iteration_idx >= 3) {
         prefetch_->SignalContinue();
       } else if (cur_nid_idx_ == node_history_.size()-2) {
-        sa_log << "Iteration 2: Start Prefetching" << std::endl;
+        sa_log << "Iteration 2: call StartPrefetching()" << std::endl;
         prefetch_->StartPrefetching();
       }
     }
@@ -187,8 +185,12 @@ class OD_MM_Dptr : virtual public MM_Dptr {
        << id << " is not setdptred by mm_dptr!";
       CHECK(dptr_dev_id_[id] != -1) << id << " is Alloced for CPU!";
       size_t ptr_size = dptr_size_[ptr];
-      auto pair = node_handles_.emplace(cur_node_, std::unordered_set<handle_t>{});
-      pair.first->second.insert(id); 
+      auto set_pair = node_handles_.emplace(cur_node_, std::unordered_set<handle_t>{});
+      auto insert_pair = set_pair.first->second.insert(id); 
+      if (insert_pair.second == true) {
+        auto vec_pair = node_handles_order_.emplace(cur_node_, std::vector<handle_t>{});
+        vec_pair.first->second.push_back(id);
+      }
       memory_history_->PutRecord(id, 0, MemoryHistory::GET_ADDR, ptr_size);
       return fake_memory_;
     }
@@ -259,7 +261,10 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   std::unordered_map<handle_t, size_t> dptr_dev_id_;
   // Infos for node history
   std::vector<std::pair<node_t, std::string>> node_history_;
-  std::map<std::pair<node_t, std::string>, std::unordered_set<handle_t>> node_handles_;
+  std::map<std::pair<node_t, std::string>,
+           std::unordered_set<handle_t>> node_handles_;
+  std::map<std::pair<node_t, std::string>,
+           std::vector<handle_t>> node_handles_order_;
   std::pair<node_t, std::string> cur_node_;
   size_t cur_nid_idx_;
   void* temp_memory_;

@@ -76,13 +76,17 @@ void Prefetch::Prefetching() {
   } // While true
 }
 
-void Prefetch::PushHandlesToPrefetch(const std::unordered_set<handle_t>& handles) {
+void Prefetch::PushHandlesToPrefetch(const std::vector<handle_t>& handles) {
   if (!prefetch_enabled_) {
     return;
   }
   prefetch_sequence_.push_back(std::vector<handle_t>{});  
+  sa_log << "Prefetch: push handle for node " << prefetch_sequence_.size() 
+         << std::endl;
   auto& cur_subseq = prefetch_sequence_[prefetch_sequence_.size()-1];
   for (auto handle: handles) {
+    sa_log << "Prefetch: Add handle " << handle << " to prefetch sequence"
+           << std::endl;
     cur_subseq.push_back(handle);
   }
 }

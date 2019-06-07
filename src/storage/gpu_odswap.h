@@ -6,6 +6,7 @@
 #include <memory>
 #include <pthread.h>
 #include <thread>
+#include <semaphore.h>
 #include <stack>
 #include <string>
 #include <unistd.h>
@@ -61,6 +62,7 @@ private:
   std::map<size_t, std::unordered_set<handle_t> > divided_handles_[NUMBER_OF_GPU];
   std::shared_ptr<MemoryHistory> memory_history_;
   std::shared_ptr<MemoryManager> memory_manager_;
+  sem_t swap_sem_;
   pthread_rwlock_t swap_lock_;
   bool swap_async_;
   bool infinite_memory_;

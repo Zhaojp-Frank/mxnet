@@ -22,7 +22,7 @@ public:
   static std::shared_ptr<Prefetch> _GetSharedRef();
   void StartPrefetching();
   void StopPrefetching();
-  void PushHandlesToPrefetch(const std::unordered_set<handle_t>& handles);
+  void PushHandlesToPrefetch(const std::vector<handle_t>& handles);
   void SignalContinue();
 
 private:
