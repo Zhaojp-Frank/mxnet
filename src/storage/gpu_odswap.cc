@@ -340,6 +340,12 @@ void* ODSwap::GetAddr(handle_t handle_id, bool is_prefetch, bool& success) {
   }
   CHECK(info->swapped_in) << "Info " 
      << info->handle_id << " is not swapped in after SwapIn" << std::endl;
+  if (is_prefetch && locked_handles_.find(handle_id) != locked_handles_.end()
+       && locked_handles_[handle_id] == 0) {
+    swappable_handles_[info->device_id].insert(handle_id);
+    divided_handles_[info->device_id][info->size].insert(handle_id);
+    sa_log << "Prefetched handle " << handle_id << " is made swappable" << std::endl;  
+  }
   /*
   // Remove from swappable handles
   swappable_handles_[info->device_id].erase(handle_id);

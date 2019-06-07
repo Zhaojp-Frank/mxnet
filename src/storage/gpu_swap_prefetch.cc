@@ -15,6 +15,7 @@ namespace mxnet {
 
 Prefetch::Prefetch() {
   prefetch_enabled_ = dmlc::GetEnv("MXNET_ENABLE_PREFETCH", false);
+  std::cout << "Prefetch enabled: " << (prefetch_enabled_?1:0) << std::endl;
   num_loop_ = dmlc::GetEnv("MXNET_NUM_LOOP", 10); 
   cur_node_idx_ = cur_idx_in_node_ = 0;
   prefetching_ = false;
