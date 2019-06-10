@@ -40,6 +40,8 @@ void Prefetch::StartPrefetching() {
   }
   sa_log << "Prefetch: Start Prefetching" << std::endl;
   prefetching_ = true;
+  cur_idx_in_node_ = 0;
+  cur_node_idx_ = 0;
   prefetcher_ = std::thread(&Prefetch::Prefetching, this);
   sa_log << "Prefetch: Start Prefetching, thread created" << std::endl;
 }
@@ -48,18 +50,21 @@ void Prefetch::StopPrefetching() {
   if (!prefetch_enabled_) {
     return;
   }
+  prefetching_ = false;
+  prefetcher_.join();
   /* Prefetch stops in the last iteration */
 }
 
 void Prefetch::Prefetching() {
   bool success;
-  while (true) {
+  while (prefetching_) {
     sa_log << "Prefetch: prefetching " 
            << prefetch_sequence_[cur_node_idx_][cur_idx_in_node_] << std::endl;
     ODSwap::Get()->GetAddr(prefetch_sequence_[cur_node_idx_][cur_idx_in_node_],
         true, success);
     sa_log << "Prefetch: " << (success?"success":"failure") << std::endl;
     if (!success) {
+      std::cout << "Prefetch failed " << std::endl;
       sem_wait(&prefetch_sem_);
     } else {
       cur_idx_in_node_++;
@@ -69,11 +74,7 @@ void Prefetch::Prefetching() {
         cur_node_idx_++;
         if (cur_node_idx_ == prefetch_sequence_.size()) {
           sa_log << "Prefetch: End of iteration" << std::endl;
-          if (MemoryHistory::Get()->GetIterationIdx() == num_loop_) {
-            sa_log << "Prefetch: Reach last node in last iteration" << std::endl;
-            break;   
-          }
-          cur_node_idx_ = 0;
+          break;
         }
       }
     } // if (!success)

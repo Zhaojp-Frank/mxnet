@@ -108,6 +108,10 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     sa_log << "Start iteration" << std::endl;
     cur_nid_idx_ = 0;
     memory_history_->StartIteration();
+    size_t iteration_idx = memory_history_->GetIterationIdx();
+    if (iteration_idx >= 3) {
+        prefetch_->StartPrefetching();
+    }
   }
 
   void StopIteration () override {
@@ -117,6 +121,9 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       sa_log << "Fake Memory is freed" << std::endl;
       memory_manager_->Free(fake_memory_, 0);
       sa_log << "Recorded node history size = " << node_history_.size() << std::endl;
+    }
+    if (iteration_idx >= 3) {
+        prefetch_->StopPrefetching();
     }
     memory_history_->StopIteration();
   }
@@ -154,10 +161,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       odswap_->StopComputing(node_handles_[cur_node_]);
       if (iteration_idx >= 3) {
         prefetch_->SignalContinue();
-      } else if (cur_nid_idx_ == node_history_.size()-2) {
-        sa_log << "Iteration 2: call StartPrefetching()" << std::endl;
-        prefetch_->StartPrefetching();
-      }
+      } 
     }
     cur_nid_idx_++;
   }
