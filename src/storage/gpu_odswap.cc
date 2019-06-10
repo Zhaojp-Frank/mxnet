@@ -310,11 +310,9 @@ void* ODSwap::GetAddr(handle_t handle_id, bool is_prefetch, bool& success) {
   }
   sa_log << "GetAddr info size = " << info->size << std::endl;
   if (!info->swapped_in) { // prefetch
-    /*
-    if (!prefetch) {
+    if (!is_prefetch) {
       ++(memory_history_->DevHistory(info->device_id).cache_miss);
     }
-    */
     success = SwapIn(info, swap_async_);
     if (!success) {
       if (is_prefetch) { // prefetch
