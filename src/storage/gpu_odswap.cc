@@ -496,8 +496,11 @@ void* ODSwap::GetAddr(handle_t handle_id, bool prefetch) {
     SwapIn(info, swap_async_);
   }
   CHECK(info->swapped_in) << "Info is not swapped in after SwapIn" << std::endl;
-  swappable_handles_[info->device_id].erase(handle_id);
-  divided_handles_[info->device_id][info->size].erase(handle_id);
+  if (!prefetch) {
+    // Allow just prefetched handle to be swapped again
+    swappable_handles_[info->device_id].erase(handle_id);
+    divided_handles_[info->device_id][info->size].erase(handle_id);
+  }
 #ifdef FEGIN_DEBUG
   sa_log << "Remove(3) swappable handle_id = " << handle_id << std::endl;
 #endif
