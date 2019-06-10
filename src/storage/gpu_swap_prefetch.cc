@@ -45,6 +45,9 @@ void Prefetch::StartPrefetching() {
 }
 
 void Prefetch::StopPrefetching() {
+  if (!prefetch_enabled_) {
+    return;
+  }
   /* Prefetch stops in the last iteration */
 }
 
