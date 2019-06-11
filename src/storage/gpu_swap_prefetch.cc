@@ -39,7 +39,7 @@ std::shared_ptr<Prefetch> Prefetch::_GetSharedRef() {
 
 void Prefetch::StartPrefetching() {
   start = std::chrono::high_resolution_clock::now();
-  if (!prefetch_enabled_ || history_->GetIterationIdx() != 2) {
+  if (!prefetch_enabled_ || history_->GetIterationIdx() != 3) {
     return;
   }
   sa_log << "Prefetch: Start Prefetching" << std::endl;
