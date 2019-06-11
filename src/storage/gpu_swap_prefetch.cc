@@ -56,7 +56,7 @@ void Prefetch::StopPrefetching() {
   prefetching_ = false;
   prefetcher_.join();
   std::chrono::duration<double> diff = end-start;
-  std::cout << "Prefetch stops at: " << diff.count() << " s\n";
+  sa_log << "Prefetch stops at: " << diff.count() << " s\n";
 }
 
 void Prefetch::Prefetching() {
@@ -74,6 +74,9 @@ void Prefetch::Prefetching() {
       cur_idx_in_node_++;
       if (cur_idx_in_node_ == prefetch_sequence_[cur_node_idx_].size()) {
         sa_log << "Prefetch: End of node with index " << cur_node_idx_ << std::endl;
+        cur = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = cur-start;
+        sa_log << "Prefetch: time now: " <<  diff.count() << "s \n";
         cur_idx_in_node_ = 0;
         cur_node_idx_++;
         if (cur_node_idx_ == prefetch_sequence_.size()) {

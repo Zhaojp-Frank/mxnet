@@ -40,6 +40,7 @@ private:
 
   std::chrono::time_point<std::chrono::high_resolution_clock> start;
   std::chrono::time_point<std::chrono::high_resolution_clock> end;
+  std::chrono::time_point<std::chrono::high_resolution_clock> cur;
 }; // class prefetch
 
 } // namespace mxnet
