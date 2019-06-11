@@ -292,6 +292,10 @@ void MemoryHistory::StartIteration() {
   }
 }
 
+size_t MemoryHistory::GetCacheMiss() {
+  return dev_history_[0].cache_miss;
+}
+
 void MemoryHistory::StopIteration() {
   if(dmlc::GetEnv("MXNET_GPU_MEM_POOL_TYPE", std::string("Naive"))
      != "SwapOnDemand") {

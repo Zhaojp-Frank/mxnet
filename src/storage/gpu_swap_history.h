@@ -83,6 +83,7 @@ public:
   void StartIteration();
   void StopIteration();
   void Statistics();
+  size_t GetCacheMiss();
   handle_t DecideVictim(std::unordered_set<handle_t> handles, int device,
                            void* arg);
 

@@ -155,7 +155,9 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     std::chrono::duration<double> node_diff = cur_end_ - cur_start_;
     std::chrono::duration<double> diff = cur_end_ - start_;
     sa_log << "End of nid " << nid << " node time: " << node_diff.count() 
-           << " since start: " << diff.count() << std::endl;
+           << " since start: " << diff.count()
+           << " Cache miss until now: " << memory_history_->GetCacheMiss()
+           <<  std::endl;
     size_t iteration_idx = memory_history_->GetIterationIdx();
     if (iteration_idx == 1) {
       prefetch_->PushHandlesToPrefetch(node_handles_order_[cur_node_]);
