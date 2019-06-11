@@ -106,6 +106,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
 
   void StartIteration () override {
     sa_log << "Start iteration" << std::endl;
+    start_ = std::chrono::high_resolution_clock::now();
     cur_nid_idx_ = 0;
     memory_history_->StartIteration();
     size_t iteration_idx = memory_history_->GetIterationIdx();
@@ -135,6 +136,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
                       size_t hdl_size, bool is_var, bool is_swap) override { }
 
   void NotifyBegin (node_t nid, const std::string& name) override {
+    cur_start_ = std::chrono::high_resolution_clock::now();
     size_t iteration_idx = memory_history_->GetIterationIdx();
     cur_node_ = make_pair(nid, name);
     if (iteration_idx == 1) {
@@ -149,6 +151,11 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   }
 
   void NotifyDone (node_t nid) override {
+    cur_end_ = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> node_diff = cur_end_ - cur_start_;
+    std::chrono::duration<double> diff = cur_end_ - start_;
+    sa_log << "End of nid " << nid << " node time: " << node_diff.count() 
+           << " since start: " << diff.count() << std::endl;
     size_t iteration_idx = memory_history_->GetIterationIdx();
     if (iteration_idx == 1) {
       prefetch_->PushHandlesToPrefetch(node_handles_order_[cur_node_]);
@@ -279,7 +286,12 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   size_t temp_size_;
   const float kGPUTempRatio = 3;
   int device_id_; // Only support dev_id = 0 currently.
+
+  std::chrono::time_point<std::chrono::high_resolution_clock> start_;
+  std::chrono::time_point<std::chrono::high_resolution_clock> cur_start_;
+  std::chrono::time_point<std::chrono::high_resolution_clock> cur_end_;
 };
+
 
 }  // namespace storage
 }  // namespace mxnet
