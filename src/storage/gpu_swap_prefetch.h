@@ -33,6 +33,7 @@ private:
   std::size_t cur_node_idx_;
   std::size_t cur_idx_in_node_;
   std::vector<std::vector<handle_t>> prefetch_sequence_;
+  std::shared_ptr<MemoryHistory> history_;
   sem_t prefetch_sem_;
   bool prefetching_;
   bool prefetch_enabled_;

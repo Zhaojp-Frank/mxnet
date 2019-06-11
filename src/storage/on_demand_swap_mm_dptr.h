@@ -161,7 +161,10 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       odswap_->StopComputing(node_handles_[cur_node_]);
       if (iteration_idx >= 3) {
         prefetch_->SignalContinue();
-      } 
+      } else if (cur_nid_idx_ == node_history_.size()-2) {
+        sa_log << "Iteration 2: Start Prefetching" << std::endl;
+        prefetch_->StartPrefetching();
+      }
     }
     cur_nid_idx_++;
   }

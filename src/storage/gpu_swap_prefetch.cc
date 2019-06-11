@@ -22,6 +22,7 @@ Prefetch::Prefetch() {
   cur_node_idx_ = cur_idx_in_node_ = 0;
   prefetching_ = false;
   sem_init(&prefetch_sem_, 0, 1);
+  history_ = MemoryHistory::_GetSharedRef();
 }
 
 Prefetch::~Prefetch() {}
@@ -37,26 +38,24 @@ std::shared_ptr<Prefetch> Prefetch::_GetSharedRef() {
 }
 
 void Prefetch::StartPrefetching() {
-  if (!prefetch_enabled_) {
+  start = std::chrono::high_resolution_clock::now();
+  if (!prefetch_enabled_ || history_->GetIterationIdx() != 2) {
     return;
   }
   sa_log << "Prefetch: Start Prefetching" << std::endl;
   prefetching_ = true;
   cur_idx_in_node_ = 0;
   cur_node_idx_ = 0;
-  start = std::chrono::high_resolution_clock::now();
   prefetcher_ = std::thread(&Prefetch::Prefetching, this);
   sa_log << "Prefetch: Start Prefetching, thread created" << std::endl;
 }
 
 void Prefetch::StopPrefetching() {
-  if (!prefetch_enabled_) {
+  if (!prefetch_enabled_ || history_->GetIterationIdx() < num_loop_) {
     return;
   }
   prefetching_ = false;
   prefetcher_.join();
-  std::chrono::duration<double> diff = end-start;
-  sa_log << "Prefetch stops at: " << diff.count() << " s\n";
 }
 
 void Prefetch::Prefetching() {
@@ -81,12 +80,16 @@ void Prefetch::Prefetching() {
         cur_node_idx_++;
         if (cur_node_idx_ == prefetch_sequence_.size()) {
           sa_log << "Prefetch: End of iteration" << std::endl;
-          break;
+          end = std::chrono::high_resolution_clock::now();
+          std::chrono::duration<double> diff = end-start;
+          sa_log << "Prefetch stops at: " << diff.count() << " s\n";
+          cur_node_idx_ = 0;
+          cur_idx_in_node_ = 0;
+          //break;
         }
       }
     } // if (!success)
   } // While true
-  end = std::chrono::high_resolution_clock::now();
 }
 
 void Prefetch::PushHandlesToPrefetch(const std::vector<handle_t>& handles) {
