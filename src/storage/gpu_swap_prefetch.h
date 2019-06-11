@@ -38,6 +38,8 @@ private:
   bool prefetch_enabled_;
   size_t num_loop_;
 
+  std::chrono::time_point<std::chrono::high_resolution_clock> start;
+  std::chrono::time_point<std::chrono::high_resolution_clock> end;
 }; // class prefetch
 
 } // namespace mxnet

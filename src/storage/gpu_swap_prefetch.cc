@@ -10,6 +10,8 @@
 #include "./gpu_swap_history.h"
 #include "./gpu_swap_prefetch.h"
 
+#include <chrono>
+
 
 namespace mxnet {
 
@@ -42,6 +44,7 @@ void Prefetch::StartPrefetching() {
   prefetching_ = true;
   cur_idx_in_node_ = 0;
   cur_node_idx_ = 0;
+  start = std::chrono::high_resolution_clock::now();
   prefetcher_ = std::thread(&Prefetch::Prefetching, this);
   sa_log << "Prefetch: Start Prefetching, thread created" << std::endl;
 }
@@ -52,7 +55,8 @@ void Prefetch::StopPrefetching() {
   }
   prefetching_ = false;
   prefetcher_.join();
-  /* Prefetch stops in the last iteration */
+  std::chrono::duration<double> diff = end-start;
+  std::cout << "Prefetch stops at: " << diff.count() << " s\n";
 }
 
 void Prefetch::Prefetching() {
@@ -79,6 +83,7 @@ void Prefetch::Prefetching() {
       }
     } // if (!success)
   } // While true
+  end = std::chrono::high_resolution_clock::now();
 }
 
 void Prefetch::PushHandlesToPrefetch(const std::vector<handle_t>& handles) {
