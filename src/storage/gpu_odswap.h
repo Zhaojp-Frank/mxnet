@@ -45,8 +45,8 @@ public:
   void FreeAddr(handle_t handle_id);
   void* GetAddr(handle_t handle_id, bool is_prefetch, bool& success);
   void LockHandles(const std::unordered_set<handle_t>& handles, const size_t node_idx);
-  void LockHanldes(const std::vector<handle_t>& handles, const size_t node_idx);
-  void UnlockHandles(const std::unordered_set<handle_t>& handles);
+  void LockHandles(const std::vector<handle_t>& handles, const size_t node_idx);
+  void UnlockHandles(const std::unordered_set<handle_t>& handles, const size_t node_idx);
 #if 0
   void LockSwap();
   void UnlockSwap();

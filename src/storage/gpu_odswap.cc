@@ -320,13 +320,12 @@ void* ODSwap::GetAddr(handle_t handle_id, bool is_prefetch, bool& success) {
         return nullptr;
       } else { // not prefetch --> Fatal
         for (auto pair: locked_handles_) {
-          if (pair.second > 0) {
-            sa_log << pair.first << " " << pair.second << std::endl;
-          } else if (pair.second <= 0
-          && swappable_handles_[0].find(pair.first) 
-          == swappable_handles_[0].end()
+          if (pair.second.size() > 0) {
+            sa_log << pair.first << " " << pair.second.size() << std::endl;
+          } else if (pair.second.size() == 0
+          && swappable_handles_[0].find(pair.first) == swappable_handles_[0].end()
           && swap_info_[pair.first]->swapped_in) {
-            sa_log << pair.first << " " << pair.second 
+            sa_log << pair.first << " " << pair.second.size()
                    << "(Error)" << std::endl;
           }
         }
@@ -339,7 +338,7 @@ void* ODSwap::GetAddr(handle_t handle_id, bool is_prefetch, bool& success) {
   CHECK(info->swapped_in) << "Info " 
      << info->handle_id << " is not swapped in after SwapIn" << std::endl;
   if (is_prefetch && locked_handles_.find(handle_id) != locked_handles_.end()
-       && locked_handles_[handle_id] == 0) {
+       && locked_handles_[handle_id].size() == 0) {
     swappable_handles_[info->device_id].insert(handle_id);
     divided_handles_[info->device_id][info->size].insert(handle_id);
     sa_log << "Prefetched handle " << handle_id << " is made swappable" << std::endl;  
@@ -393,11 +392,11 @@ void ODSwap::UnlockHandles(const std::unordered_set<handle_t>& handles,
   pthread_rwlock_wrlock(&swap_lock_);
   for (auto& handle: handles) {
     CHECK(locked_handles_.find(handle) != locked_handles_.end());
-    locked_handles_[handle]--;
-    sa_log << " Remove [" << node_idx << "]lock for handle_id = " << handle 
-           << " lock_size: " << locked_handles_[handle].size() << std::endl;
     CHECK (locked_handles_[handle].find(node_idx) != locked_handles_[handle].end())
       << handle << " is not locked by " << node_idx << std::endl;
+    sa_log << " Remove [" << node_idx << "]lock for handle_id = " << handle 
+           << " lock_size: " << locked_handles_[handle].size() << std::endl;
+    locked_handles_[handle].erase(node_idx);
     if (locked_handles_[handle].size() == 0) {
       sa_log << "Insert swappable handle_id = " <<  handle << std::endl;
       auto it = swap_info_.find(handle);

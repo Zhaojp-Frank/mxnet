@@ -110,7 +110,8 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     cur_node_idx_ = 0;
     memory_history_->StartIteration();
     if (iteration_idx_ == 3) {
-        prefetch_->StartPrefetching(make_pair(std::ref(iteration_idx_), std::ref(cur_node_idx_));
+        prefetch_->StartPrefetching(make_pair(std::ref(iteration_idx_), 
+                                              std::ref(cur_node_idx_)));
     }
   }
 

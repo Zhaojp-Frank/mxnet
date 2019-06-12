@@ -18,7 +18,6 @@ namespace mxnet {
 Prefetch::Prefetch() {
   prefetch_enabled_ = dmlc::GetEnv("MXNET_ENABLE_PREFETCH", false);
   std::cout << "Prefetch enabled: " << (prefetch_enabled_?1:0) << std::endl;
-  num_loop_ = dmlc::GetEnv("MXNET_NUM_LOOP", 10); 
   prefetching_ = false;
   sem_init(&prefetch_sem_, 0, 1);
 }
@@ -35,15 +34,14 @@ std::shared_ptr<Prefetch> Prefetch::_GetSharedRef() {
   return inst;
 }
 
-void Prefetch::StartPrefetching(pair<size_t&, size_t&> exe_cur_node) {
+void Prefetch::StartPrefetching(std::pair<size_t&, size_t&> exe_cur_node) {
   start = std::chrono::high_resolution_clock::now();
   if (!prefetch_enabled_) {
     return;
   }
   sa_log << "Prefetch: Start Prefetching" << std::endl;
   prefetching_ = true;
-  cur_node_idx_ = cur_idx_in_node = 0;
-  prefetcher_ = std::thread(&Prefetch::Prefetching, exe_cur_node);
+  prefetcher_ = std::thread(&Prefetch::Prefetching, this, exe_cur_node);
   sa_log << "Prefetch: Start Prefetching, thread created" << std::endl;
 }
 
@@ -55,33 +53,33 @@ void Prefetch::StopPrefetching() {
   prefetcher_.join();
 }
 
-void Prefetch::Prefetching(pair<size_t&, size_t&> exe_cur_node) {
+void Prefetch::Prefetching(std::pair<size_t&, size_t&> exe_cur_node) {
   bool success;
-  pair<size_t, size_t> pre_cur_node = exe_cur_node;
+  std::pair<size_t, size_t> pre_cur_node = exe_cur_node;
   size_t cur_idx_in_node = 0;
   while (prefetching_) {
     sa_log << "Prefetch: prefetching " 
-           << prefetch_sequence_[pre_cur_node_idx_][cur_idx_in_node_] << std::endl;
-    ODSwap::Get()->GetAddr(prefetch_sequence_[pre_cur_node_idx_][cur_idx_in_node_],
+           << prefetch_sequence_[pre_cur_node.second][cur_idx_in_node] << std::endl;
+    ODSwap::Get()->GetAddr(prefetch_sequence_[pre_cur_node.second][cur_idx_in_node],
         true, success);
     sa_log << "Prefetch: " << (success?"success":"failure") << std::endl;
     if (!success) {
       std::cout << "Prefetch failed " << std::endl;
       sem_wait(&prefetch_sem_);
     } else {
-      cur_idx_in_node_++;
-      if (cur_idx_in_node_ == prefetch_sequence_[pre_cur_node.second].size()) {
+      cur_idx_in_node++;
+      if (cur_idx_in_node == prefetch_sequence_[pre_cur_node.second].size()) {
         sa_log << "Prefetch: End of node with index " << pre_cur_node.second << std::endl;
         cur = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = cur-start;
         sa_log << "Prefetch: time now: " <<  diff.count() << " s" << std::endl;
-        cur_idx_in_node_ = 0;
+        cur_idx_in_node = 0;
         pre_cur_node.second ++;
         
       }
     } // if (!success)
     // Make sure prefetch is now slower than getaddr in terms of node.
-    if (pre_cur_node <= exe_cur_node) {
+    if (pre_cur_node <= std::make_pair(exe_cur_node.first, exe_cur_node.second)) {
       pre_cur_node = exe_cur_node;
       pre_cur_node.second++;
     }
@@ -92,16 +90,32 @@ void Prefetch::Prefetching(pair<size_t&, size_t&> exe_cur_node) {
       sa_log << "Prefetch stops at: " << diff.count() << " s" << std::endl;
       pre_cur_node.first ++;
       pre_cur_node.second = 0;
-      cur_idx_in_node_ = 0;
+      cur_idx_in_node = 0;
     }
-    if (cur_idx_in_node_ == 0) {
+    if (cur_idx_in_node == 0) {
       ODSwap::Get()->LockHandles(prefetch_sequence_[pre_cur_node.second],
           pre_cur_node.second);
     }
   } // While prefetching_
 }
 
-void Prefetch::SignalContinue(size_t exe_cur_node_idx) {
+void Prefetch::PushHandlesToPrefetch(const std::vector<handle_t>& handles) {
+  if (!prefetch_enabled_) {
+    return;
+  }
+  prefetch_sequence_.push_back(std::vector<handle_t>{});  
+  sa_log << "Prefetch: push handle for node " << prefetch_sequence_.size() 
+    << std::endl;
+  auto& cur_subseq = prefetch_sequence_[prefetch_sequence_.size()-1];
+  for (auto handle: handles) {
+    sa_log << "Prefetch: Add handle " << handle << " to prefetch sequence"
+      << std::endl;
+    cur_subseq.push_back(handle);
+  }
+}
+
+
+void Prefetch::SignalContinue() {
   if (!prefetch_enabled_) {
     return;
   }

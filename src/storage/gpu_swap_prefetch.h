@@ -12,7 +12,6 @@
 #include <cuda_runtime.h>
 #endif
 #include "./gpu_odswap.h"
-#include "./on_demand_swap_mm_dptr.h"
 
 namespace mxnet {
 
@@ -21,14 +20,14 @@ public:
   ~Prefetch();
   static Prefetch* Get();
   static std::shared_ptr<Prefetch> _GetSharedRef();
-  void StartPrefetching(pair<size_t&, size_t&> exe_cur_node);
+  void StartPrefetching(std::pair<size_t&, size_t&> exe_cur_node);
   void StopPrefetching();
-  void PushHandlesToPrefetch(pair<size_t&, size_t&> exe_cur_node);
+  void PushHandlesToPrefetch(const std::vector<handle_t>& handles);
   void SignalContinue();
 
 private:
   Prefetch();
-  void Prefetching();
+  void Prefetching(std::pair<size_t&, size_t&> exe_cur_node);
 
   std::thread prefetcher_;
   std::vector<std::vector<handle_t>> prefetch_sequence_;
