@@ -11,7 +11,8 @@
 #if MXNET_USE_CUDA
 #include <cuda_runtime.h>
 #endif
-#include "./gpu_swap_history.h"
+#include "./gpu_odswap.h"
+#include "./on_demand_swap_mm_dptr.h"
 
 namespace mxnet {
 
@@ -20,9 +21,9 @@ public:
   ~Prefetch();
   static Prefetch* Get();
   static std::shared_ptr<Prefetch> _GetSharedRef();
-  void StartPrefetching();
+  void StartPrefetching(pair<size_t&, size_t&> exe_cur_node);
   void StopPrefetching();
-  void PushHandlesToPrefetch(const std::vector<handle_t>& handles);
+  void PushHandlesToPrefetch(pair<size_t&, size_t&> exe_cur_node);
   void SignalContinue();
 
 private:
@@ -30,14 +31,10 @@ private:
   void Prefetching();
 
   std::thread prefetcher_;
-  std::size_t cur_node_idx_;
-  std::size_t cur_idx_in_node_;
   std::vector<std::vector<handle_t>> prefetch_sequence_;
-  std::shared_ptr<MemoryHistory> history_;
   sem_t prefetch_sem_;
   bool prefetching_;
   bool prefetch_enabled_;
-  size_t num_loop_;
 
   std::chrono::time_point<std::chrono::high_resolution_clock> start;
   std::chrono::time_point<std::chrono::high_resolution_clock> end;

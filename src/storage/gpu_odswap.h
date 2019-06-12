@@ -44,8 +44,9 @@ public:
   void DelAddr(handle_t handle_id);
   void FreeAddr(handle_t handle_id);
   void* GetAddr(handle_t handle_id, bool is_prefetch, bool& success);
-  void StartComputing(const std::unordered_set<handle_t>& handles);
-  void StopComputing(const std::unordered_set<handle_t>& handles);
+  void LockHandles(const std::unordered_set<handle_t>& handles, const size_t node_idx);
+  void LockHanldes(const std::vector<handle_t>& handles, const size_t node_idx);
+  void UnlockHandles(const std::unordered_set<handle_t>& handles);
 #if 0
   void LockSwap();
   void UnlockSwap();
@@ -58,7 +59,7 @@ private:
   // multiple GPUs.
   std::unordered_map<handle_t, SwapInfo*> swap_info_;
   std::unordered_set<handle_t> swappable_handles_[NUMBER_OF_GPU];
-  std::unordered_map<handle_t, int> locked_handles_;
+  std::unordered_map<handle_t, std::set<size_t>> locked_handles_;
   std::map<size_t, std::unordered_set<handle_t> > divided_handles_[NUMBER_OF_GPU];
   std::shared_ptr<MemoryHistory> memory_history_;
   std::shared_ptr<MemoryManager> memory_manager_;

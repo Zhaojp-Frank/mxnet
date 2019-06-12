@@ -74,7 +74,7 @@ public:
   bool IsPreRecording() {return pre_recording_;}
   bool IsRecording() {return is_recording_;}
   DeviceHistory& DevHistory(int device) {return dev_history_[device];}
-  size_t GetIterationIdx() {return iteration_idx_;}
+  size_t& GetIterationIdx() {return iteration_idx_;}
   void PreRecord(handle_t handle_id, record_t op, DeviceHistory& history);
   void PutRecord(handle_t handle_id, int device, record_t op, size_t size);
   void PrintRecord(int device);

@@ -30,7 +30,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     memory_history_ = MemoryHistory::_GetSharedRef();
     prefetch_ = Prefetch::_GetSharedRef();
     device_id_ = 0;
-    
+    iteration_idx_ = 0;
   }
 
   ~OD_MM_Dptr() {
@@ -43,13 +43,12 @@ class OD_MM_Dptr : virtual public MM_Dptr {
 
   void* Alloc(handle_t id, size_t size, void* ptr = nullptr) {
     sa_log << "Alloc " << id << " " << size << std::endl;
-    size_t iteration_idx = memory_history_->GetIterationIdx();
-    if(iteration_idx == 0) { 
+    if(iteration_idx_ == 0) { 
       ptr = (void*)id;
       dptr_size_[ptr] = size;
       unalloced_dptrs_.insert(ptr);
       SetDptr(id, ptr, device_id_);
-    } else if (iteration_idx == 1) {
+    } else if (iteration_idx_ == 1) {
       CHECK(size <= temp_size_) << "Temporary Memory too small. Has: "
         << temp_size_ << " Required: " << size << std::endl;
       ptr = temp_memory_;
@@ -102,31 +101,28 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   void StopBinding () override { 
     sa_log << "End Binding" << std::endl;
     memory_history_->EndPreparation();
+    iteration_idx_ ++;
   }
 
   void StartIteration () override {
     sa_log << "Start iteration" << std::endl;
     start_ = std::chrono::high_resolution_clock::now();
-    cur_nid_idx_ = 0;
+    cur_node_idx_ = 0;
     memory_history_->StartIteration();
-    size_t iteration_idx = memory_history_->GetIterationIdx();
-    if (iteration_idx >= 3) {
-        prefetch_->StartPrefetching();
+    if (iteration_idx_ == 3) {
+        prefetch_->StartPrefetching(make_pair(std::ref(iteration_idx_), std::ref(cur_node_idx_));
     }
   }
 
   void StopIteration () override {
     sa_log << "Stop iteration" << std::endl;
-    size_t iteration_idx = memory_history_->GetIterationIdx();
-    if (iteration_idx == 1) {
+    if (iteration_idx_ == 1) {
       sa_log << "Fake Memory is freed" << std::endl;
       memory_manager_->Free(fake_memory_, 0);
       sa_log << "Recorded node history size = " << node_history_.size() << std::endl;
     }
-    if (iteration_idx >= 3) {
-        prefetch_->StopPrefetching();
-    }
     memory_history_->StopIteration();
+    iteration_idx_ ++;
   }
 
   void Statistics () override { memory_history_->Statistics(); }
@@ -134,19 +130,18 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   void RegisterEntry (node_t nid, uint32_t idx, handle_t hid,
                       node_t old_nid, uint32_t old_idx, handle_t old_hid,
                       size_t hdl_size, bool is_var, bool is_swap) override { }
-
+  
   void NotifyBegin (node_t nid, const std::string& name) override {
     cur_start_ = std::chrono::high_resolution_clock::now();
-    size_t iteration_idx = memory_history_->GetIterationIdx();
     cur_node_ = make_pair(nid, name);
-    if (iteration_idx == 1) {
+    if (iteration_idx_ == 1) {
       node_history_.push_back(make_pair(nid, name));
     }
-    if (iteration_idx >= 2) {
-      odswap_->StartComputing(node_handles_[cur_node_]);
-      sa_log << "current nid index = " << cur_nid_idx_
-             << " which history node is " << node_history_[cur_nid_idx_].first
-             << ": " << node_history_[cur_nid_idx_].second << std::endl;
+    if (iteration_idx_ >= 2) {
+      odswap_->LockHandles(node_handles_[cur_node_], cur_node_idx_);
+      sa_log << "current node index = " << cur_node_idx_
+             << " which history node is " << node_history_[cur_node_idx_].first
+             << ": " << node_history_[cur_node_idx_].second << std::endl;
     }
   }
 
@@ -158,25 +153,20 @@ class OD_MM_Dptr : virtual public MM_Dptr {
            << " since start: " << diff.count()
            << " Cache miss until now: " << memory_history_->GetCacheMiss()
            <<  std::endl;
-    size_t iteration_idx = memory_history_->GetIterationIdx();
-    if (iteration_idx == 1) {
+    if (iteration_idx_ == 1) {
       prefetch_->PushHandlesToPrefetch(node_handles_order_[cur_node_]);
     }
-    if (iteration_idx >= 2) {
-      CHECK(cur_nid_idx_ < node_history_.size());
+    if (iteration_idx_ >= 2) {
+      CHECK(cur_node_idx_ < node_history_.size());
       sa_log << "Insert swappable handles for " << cur_node_.first 
              << ": " << cur_node_.second << " with size " 
              << node_handles_[cur_node_].size() << std::endl;
-      odswap_->StopComputing(node_handles_[cur_node_]);
-      if (iteration_idx >= 3) {
+      odswap_->UnlockHandles(node_handles_[cur_node_], cur_node_idx_);
+      if (iteration_idx_ >= 3) {
         prefetch_->SignalContinue();
       } 
-      /*else if (cur_nid_idx_ == node_history_.size()-2) {
-        sa_log << "Iteration 2: Start Prefetching" << std::endl;
-        prefetch_->StartPrefetching();
-      }*/
     }
-    cur_nid_idx_++;
+    cur_node_idx_++;
   }
 
   void Finish() override { }
@@ -193,11 +183,10 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       sa_log << "GetDptr: " << id << " is temporary" << std::endl;
       return temp_memory_;
     } 
-    size_t iteration_idx = memory_history_->GetIterationIdx();
     void* ptr = dptr_mapping_[id]; 
-    if (iteration_idx == 0) { // Preparation Stage, always fake
+    if (iteration_idx_ == 0) { // Preparation Stage, always fake
       return fake_memory_;
-    } else if (iteration_idx == 1) { // Iteration 1, record history of nodes and handles.
+    } else if (iteration_idx_ == 1) { // Iteration 1, record history of nodes and handles.
       CHECK(dptr_dev_id_.find(id) != dptr_dev_id_.end())
        << id << " is not setdptred by mm_dptr!";
       CHECK(dptr_dev_id_[id] != -1) << id << " is Alloced for CPU!";
@@ -212,7 +201,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       return fake_memory_;
     }
     // Iteration 2, do allocation for each handle. (No Prefetch)
-    else if (iteration_idx == 2) {
+    else if (iteration_idx_ == 2) {
       if (unalloced_dptrs_.find(ptr) != unalloced_dptrs_.end()) {
         CHECK(dptr_dev_id_.find(id) != dptr_dev_id_.end())
          << id << " is not setdptred by mm_dptr!";
@@ -283,7 +272,8 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   std::map<std::pair<node_t, std::string>,
            std::vector<handle_t>> node_handles_order_;
   std::pair<node_t, std::string> cur_node_;
-  size_t cur_nid_idx_;
+  size_t iteration_idx_;
+  size_t cur_node_idx_;
   void* temp_memory_;
   void* fake_memory_;
   size_t temp_size_;

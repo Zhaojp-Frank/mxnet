@@ -354,15 +354,16 @@ void* ODSwap::GetAddr(handle_t handle_id, bool is_prefetch, bool& success) {
   return info->dptr;
 }
 
-void ODSwap::StartComputing(const std::unordered_set<handle_t>& handles) {
+void ODSwap::LockHandles(const std::unordered_set<handle_t>& handles,
+                         const size_t node_idx) {
   pthread_rwlock_wrlock(&swap_lock_);
   for (auto handle: handles) {
-    auto pair = locked_handles_.emplace(handle, 1);
+    auto pair = locked_handles_.emplace(handle, std::set<size_t>{});
     if (!pair.second) {
-      pair.first->second++;
+      pair.first->second.insert(node_idx);
     }
-    sa_log << "StartComputing add counter unswappable handle_id = " << handle
-           << " counter: " << pair.first->second << std::endl;
+    sa_log << "StartComputing add [" << node_idx << "]lock to unswappable handle_id = "
+           << handle << std::endl;
     auto& info = swap_info_[handle];
     swappable_handles_[info->device_id].erase(handle);
     divided_handles_[info->device_id][info->size].erase(handle);
@@ -370,16 +371,34 @@ void ODSwap::StartComputing(const std::unordered_set<handle_t>& handles) {
   pthread_rwlock_unlock(&swap_lock_);
 }
 
-void ODSwap::StopComputing(const std::unordered_set<handle_t>& handles) {
+void ODSwap::LockHandles(const std::vector<handle_t>& handles,
+                         const size_t node_idx) {
+  pthread_rwlock_wrlock(&swap_lock_);
+  for (auto handle: handles) {
+    auto pair = locked_handles_.emplace(handle, std::set<size_t>{});
+    if (!pair.second) {
+      pair.first->second.insert(node_idx);
+    }
+    sa_log << "StartComputing add [" << node_idx << "]lock to unswappable handle_id = "
+           << handle << std::endl;
+    auto& info = swap_info_[handle];
+    swappable_handles_[info->device_id].erase(handle);
+    divided_handles_[info->device_id][info->size].erase(handle);
+  }
+  pthread_rwlock_unlock(&swap_lock_);
+}
+
+void ODSwap::UnlockHandles(const std::unordered_set<handle_t>& handles, 
+                           const size_t node_idx) {
   pthread_rwlock_wrlock(&swap_lock_);
   for (auto& handle: handles) {
     CHECK(locked_handles_.find(handle) != locked_handles_.end());
     locked_handles_[handle]--;
-    sa_log << "Reduce 1 from counter for handle_id = " <<  handle 
-           << " counter: " << locked_handles_[handle] << std::endl;
-    CHECK (locked_handles_[handle] >= 0) << "Locked handle " 
-      << handle << " has negative counter!" << std::endl;
-    if (locked_handles_[handle] == 0) {
+    sa_log << " Remove [" << node_idx << "]lock for handle_id = " << handle 
+           << " lock_size: " << locked_handles_[handle].size() << std::endl;
+    CHECK (locked_handles_[handle].find(node_idx) != locked_handles_[handle].end())
+      << handle << " is not locked by " << node_idx << std::endl;
+    if (locked_handles_[handle].size() == 0) {
       sa_log << "Insert swappable handle_id = " <<  handle << std::endl;
       auto it = swap_info_.find(handle);
       swappable_handles_[it->second->device_id].insert(handle);
