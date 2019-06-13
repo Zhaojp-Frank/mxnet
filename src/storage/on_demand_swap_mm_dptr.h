@@ -123,6 +123,13 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       sa_log << "Recorded node history size = " << node_history_.size() << std::endl;
     }
     memory_history_->StopIteration();
+    if (iteration_idx_ == 3) {
+        prefetch_->StopPrefetching(iteration_idx_);
+    }
+    // Sanity check
+    if (iteration_idx_ == (size_t)dmlc::GetEnv("MXNET_NUM_LOOP", 10)) {
+      odswap_->CheckUnlocked();
+    }
     iteration_idx_ ++;
   }
 

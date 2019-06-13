@@ -21,7 +21,7 @@ public:
   static Prefetch* Get();
   static std::shared_ptr<Prefetch> _GetSharedRef();
   void StartPrefetching(std::pair<size_t&, size_t&> exe_cur_node);
-  void StopPrefetching();
+  void StopPrefetching(size_t iteration_idx);
   void PushHandlesToPrefetch(const std::vector<handle_t>& handles);
   void SignalContinue();
 
@@ -34,6 +34,7 @@ private:
   sem_t prefetch_sem_;
   bool prefetching_;
   bool prefetch_enabled_;
+  size_t num_loop_;
 
   std::chrono::time_point<std::chrono::high_resolution_clock> start;
   std::chrono::time_point<std::chrono::high_resolution_clock> end;

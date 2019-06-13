@@ -357,11 +357,9 @@ void ODSwap::LockHandles(const std::unordered_set<handle_t>& handles,
                          const size_t node_idx) {
   pthread_rwlock_wrlock(&swap_lock_);
   for (auto handle: handles) {
-    auto pair = locked_handles_.emplace(handle, std::set<size_t>{});
-    if (!pair.second) {
-      pair.first->second.insert(node_idx);
-    }
-    sa_log << "StartComputing add [" << node_idx << "]lock to unswappable handle_id = "
+    auto pair = locked_handles_.emplace(handle, std::unordered_set<size_t>{});
+    pair.first->second.insert(node_idx);
+    sa_log << "LockHandles add [" << node_idx << "]lock to unswappable handle_id = "
            << handle << std::endl;
     auto& info = swap_info_[handle];
     swappable_handles_[info->device_id].erase(handle);
@@ -374,11 +372,9 @@ void ODSwap::LockHandles(const std::vector<handle_t>& handles,
                          const size_t node_idx) {
   pthread_rwlock_wrlock(&swap_lock_);
   for (auto handle: handles) {
-    auto pair = locked_handles_.emplace(handle, std::set<size_t>{});
-    if (!pair.second) {
-      pair.first->second.insert(node_idx);
-    }
-    sa_log << "StartComputing add [" << node_idx << "]lock to unswappable handle_id = "
+    auto pair = locked_handles_.emplace(handle, std::unordered_set<size_t>{});
+    pair.first->second.insert(node_idx);
+    sa_log << "LockHandles add [" << node_idx << "]lock to unswappable handle_id = "
            << handle << std::endl;
     auto& info = swap_info_[handle];
     swappable_handles_[info->device_id].erase(handle);
@@ -394,7 +390,7 @@ void ODSwap::UnlockHandles(const std::unordered_set<handle_t>& handles,
     CHECK(locked_handles_.find(handle) != locked_handles_.end());
     CHECK (locked_handles_[handle].find(node_idx) != locked_handles_[handle].end())
       << handle << " is not locked by " << node_idx << std::endl;
-    sa_log << " Remove [" << node_idx << "]lock for handle_id = " << handle 
+    sa_log << "Remove [" << node_idx << "]lock for handle_id = " << handle 
            << " lock_size: " << locked_handles_[handle].size() << std::endl;
     locked_handles_[handle].erase(node_idx);
     if (locked_handles_[handle].size() == 0) {
@@ -416,6 +412,21 @@ void ODSwap::PrintHandles() {
               << it.second->swap_count << " " << it.second->device_id
               << std::endl;
   }
+}
+
+void ODSwap::CheckUnlocked() {
+  bool success = true;
+  sa_log << "ODSwap: doing sanity check" << std::endl;
+  for (auto& pair: locked_handles_) {
+    if (pair.second.size() != 0) {
+      sa_log << "Handle: " << pair.first << "locked by: " << std::endl;
+      for (auto& tmp: pair.second) {
+        sa_log << " " << tmp << std::endl; 
+      }
+      success = false;
+    } 
+  } 
+  CHECK(success) << "Sanity check failed" << std::endl;
 }
 
 } // namespace mxnet
