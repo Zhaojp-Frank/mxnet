@@ -22,6 +22,7 @@ namespace mxnet {
 
 struct SwapInfo {
   handle_t handle_id;
+  bool is_weight;
   bool swapped_in;
   int device_id;
   void* dptr;
@@ -40,7 +41,8 @@ public:
   bool SwapOut(unsigned required_memory, int device_id, bool async);
   void SwapOutLocked(unsigned required_memory, int device_id, bool async);
   bool SwapIn(SwapInfo *info, bool async);
-  void SetAddr(handle_t handle_id, void* dptr, size_t size, int device_id, bool is_pre);
+  void SetAddr(handle_t handle_id, void* dptr, size_t size, 
+               int device_id, bool is_pre, bool is_weight);
   void DelAddr(handle_t handle_id);
   void FreeAddr(handle_t handle_id);
   void* GetAddr(handle_t handle_id, bool is_prefetch, bool& success);

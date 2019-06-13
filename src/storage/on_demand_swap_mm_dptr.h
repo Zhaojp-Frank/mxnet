@@ -31,6 +31,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     prefetch_ = Prefetch::_GetSharedRef();
     device_id_ = 0;
     iteration_idx_ = 0;
+    alloc_weight_ = 0;
   }
 
   ~OD_MM_Dptr() {
@@ -76,9 +77,13 @@ class OD_MM_Dptr : virtual public MM_Dptr {
 
   void Release (handle_t id, void* ptr) override {}
 
-  void StartAllocArgs () override { }
+  void StartAllocArgs () override {
+    alloc_weight_ = 1;
+  }
 
-  void StopAllocArgs () override { }
+  void StopAllocArgs () override {
+    alloc_weight_ = 0;
+  }
 
   void StartBinding () override { 
     sa_log << "Start Binding" << std::endl;
@@ -173,6 +178,15 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       if (iteration_idx_ >= 3) {
         prefetch_->SignalContinue();
       } 
+      /* FIXME(Sotskin): 
+       * Uncomment this and comment 118 to receive performance drop
+       * Investigate why this happens.
+      else if (cur_node_idx_ == node_history_.size()-2) {
+        sa_log << "Iteration 2: Start Prefetching" << std::endl;
+        prefetch_->StartPrefetching(make_pair(std::ref(iteration_idx_), 
+                                              std::ref(cur_node_idx_)));
+      }
+      */
     }
     cur_node_idx_++;
   }
@@ -219,7 +233,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
         void* new_ptr = Alloc_(ptr_size);
         dptr_mapping_[id] = new_ptr;
         sa_log << "GetDptr " << id << " Start setting dptr" << std::endl; 
-        odswap_->SetAddr(id, new_ptr, ptr_size, 0, false);
+        odswap_->SetAddr(id, new_ptr, ptr_size, 0, false, alloc_weight_);
       } else {
         bool tmp;
         void* new_ptr = odswap_->GetAddr(id, 0, tmp);
@@ -246,7 +260,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     dptr_dev_id_[id] = dev_id;
     dptr_mapping_[id] = ptr;
     // SetDptr is only called in preparation stage.
-    odswap_->SetAddr(id, ptr, ptr_size, dev_id, true);
+    odswap_->SetAddr(id, ptr, ptr_size, dev_id, true, alloc_weight_);
   }
 
  private:
@@ -280,6 +294,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   std::map<std::pair<node_t, std::string>,
            std::vector<handle_t>> node_handles_order_;
   std::pair<node_t, std::string> cur_node_;
+  bool alloc_weight_;
   size_t iteration_idx_;
   size_t cur_node_idx_;
   void* temp_memory_;

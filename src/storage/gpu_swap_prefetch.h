@@ -7,6 +7,7 @@
 #include <thread>
 #include <unordered_set>
 #include <vector>
+#include <chrono>
 
 #if MXNET_USE_CUDA
 #include <cuda_runtime.h>
@@ -36,9 +37,11 @@ private:
   bool prefetch_enabled_;
   size_t num_loop_;
 
+  /* 
   std::chrono::time_point<std::chrono::high_resolution_clock> start;
   std::chrono::time_point<std::chrono::high_resolution_clock> end;
   std::chrono::time_point<std::chrono::high_resolution_clock> cur;
+  */
 }; // class prefetch
 
 } // namespace mxnet

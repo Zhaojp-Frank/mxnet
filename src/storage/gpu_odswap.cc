@@ -225,7 +225,7 @@ bool ODSwap::SwapIn(SwapInfo *info, bool async) {
 }
 
 void ODSwap::SetAddr(handle_t handle_id, void* dptr, size_t size,
-                     int device_id, bool is_pre) {
+                     int device_id, bool is_pre, bool is_weight) {
   if (device_id != -1 && is_pre) {
     memory_history_->PutRecord(handle_id, device_id, MemoryHistory::SET_ADDR,
                                size);
@@ -239,7 +239,7 @@ void ODSwap::SetAddr(handle_t handle_id, void* dptr, size_t size,
   if (is_pre) {
     CHECK(iter == swap_info_.end())
       << "Same info is set twice in preparation stage" << std::endl;
-    SwapInfo* info = new SwapInfo{handle_id, true, device_id,
+    SwapInfo* info = new SwapInfo{handle_id, is_weight, true, device_id,
       dptr, nullptr, size, 0, ATOMIC_FLAG_INIT, false};
     swap_info_[handle_id] = info;
   } else {
@@ -396,6 +396,8 @@ void ODSwap::UnlockHandles(const std::unordered_set<handle_t>& handles,
     if (locked_handles_[handle].size() == 0) {
       sa_log << "Insert swappable handle_id = " <<  handle << std::endl;
       auto it = swap_info_.find(handle);
+      CHECK(it->second->swapped_in) << "Info " << handle 
+        << " is not swapped in" << std::endl;
       swappable_handles_[it->second->device_id].insert(handle);
       divided_handles_[it->second->device_id][it->second->size].insert(handle);
     }
