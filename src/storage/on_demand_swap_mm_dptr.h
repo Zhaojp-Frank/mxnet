@@ -208,7 +208,8 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     void* ptr = dptr_mapping_[id]; 
     if (iteration_idx_ == 0) { // Preparation Stage, always fake
       return fake_memory_;
-    } else if (iteration_idx_ == 1) { // Iteration 1, record history of nodes and handles.
+    } else if (iteration_idx_ == 1) {
+      // Iteration 1, record history of nodes and handles.
       CHECK(dptr_dev_id_.find(id) != dptr_dev_id_.end())
        << id << " is not setdptred by mm_dptr!";
       CHECK(dptr_dev_id_[id] != -1) << id << " is Alloced for CPU!";
@@ -221,9 +222,8 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       }
       memory_history_->PutRecord(id, 0, MemoryHistory::GET_ADDR, ptr_size);
       return fake_memory_;
-    }
-    // Iteration 2, do allocation for each handle. (No Prefetch)
-    else if (iteration_idx_ == 2) {
+    } else if (iteration_idx_ == 2) {
+      // Iteration 2, do allocation for each handle. (No Prefetch)
       if (unalloced_dptrs_.find(ptr) != unalloced_dptrs_.end()) {
         CHECK(dptr_dev_id_.find(id) != dptr_dev_id_.end())
          << id << " is not setdptred by mm_dptr!";

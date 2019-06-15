@@ -68,9 +68,7 @@ class ODSwapEngine final : public ThreadedEngine {
  protected:
   // priority variable stores node id of the node for this engine.
   void PushToExecute(OprBlock *opr_block, bool pusher_thread) override {
-    if (opr_block->priority == 0) {
-      task_queue_->Push(opr_block);
-    }
+    task_queue_->Push(opr_block);
   }
 
  private:
