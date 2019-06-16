@@ -133,8 +133,16 @@ bool ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
     divided_handles_[device_id][target->size].erase(victim);
     sa_log << "SwapOut: Swapping out, remove(1) swappable handle_id = "
            << victim << std::endl;
+    /* Need swap:
+     * weight && will not be get again
+     * not weight && will be used again
+     */
+    bool do_memcpy = (memory_history_->WillBeUsed(victim) != target->is_weight);
+    sa_log << "Swapout: " << victim << (do_memcpy?"":"no ") << "need to memcpy"
+           << std::endl;
     pthread_rwlock_unlock(&swap_lock_);
-    if (!infinite_memory_) {
+    if (!infinite_memory_ && do_memcpy) {
+    //if (!infinite_memory_) {
 #if 1
       if (async) {
         memory_manager_->MemcpyAsync(device_id, target->cpu_address,

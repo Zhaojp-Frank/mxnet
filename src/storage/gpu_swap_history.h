@@ -86,6 +86,7 @@ public:
   size_t GetCacheMiss();
   handle_t DecideVictim(std::unordered_set<handle_t> handles, int device,
                            void* arg);
+  bool WillBeUsed(const handle_t handle);
 
 private:
   MemoryHistory();

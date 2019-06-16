@@ -130,6 +130,7 @@ handle_t MemoryHistory::NaiveHistory(
                                history.handle_history->at(id).end(), r,
                                CompareByStep);
     if (it == history.handle_history->at(id).end()) {
+      // id is not used again in this iteration.
       return id;
     } else if (it->record_step - history.curr_idx < params->no_swap_steps) {
       continue;
@@ -139,6 +140,16 @@ handle_t MemoryHistory::NaiveHistory(
     }
   }
   return latest_id;
+}
+
+bool MemoryHistory::WillBeUsed(const handle_t handle) {
+  auto& history = dev_history_[0];
+  MemoryHistory::MemRecord r = {0, MemoryHistory::GET_ADDR, 0,
+                                history.curr_idx, 0};
+  auto it = std::upper_bound(history.handle_history->at(handle).begin(),
+                             history.handle_history->at(handle).end(), r,
+                             CompareByStep);
+  return it == history.handle_history->at(handle).end();
 }
 
 handle_t MemoryHistory::SizeHistory(
