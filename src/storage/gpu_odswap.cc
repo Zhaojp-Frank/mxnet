@@ -137,8 +137,9 @@ bool ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
      * weight && will not be get again
      * not weight && will be used again
      */
-    bool do_memcpy = (memory_history_->WillBeUsed(victim) != target->is_weight);
-    sa_log << "Swapout: " << victim << (do_memcpy?"":"no ") << "need to memcpy"
+    bool do_memcpy = (memory_history_->CheckLastUse(victim) 
+                      != target->is_weight);
+    sa_log << "Swapout: " << victim << (do_memcpy?" ":" no ") << "need to memcpy"
            << std::endl;
     pthread_rwlock_unlock(&swap_lock_);
     if (!infinite_memory_ && do_memcpy) {
@@ -168,7 +169,7 @@ bool ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
 }
 
 // Caller holds swap_lock_
-bool ODSwap::SwapIn(SwapInfo *info, bool async) {
+bool ODSwap::SwapIn(SwapInfo *info, bool async, bool prefetch_ahead) {
   while (info->is_swapping.test_and_set(std::memory_order_acquire)) {
     sa_log << "id " << info->handle_id << " is swapping" << std::endl;
     info->is_waiting = true; 
@@ -192,10 +193,14 @@ bool ODSwap::SwapIn(SwapInfo *info, bool async) {
     }
     CHECK(memory_manager_->Malloc(info->dptr, info->size, info->device_id) ==
           cudaSuccess);
+    bool do_memcpy = info->is_weight?true:
+                     memory_history_->CheckFirstUse(info->handle_id, prefetch_ahead);
+    sa_log << "SwapIn: " << info->handle_id << (do_memcpy?" ":" no ") 
+           << "need to memcpy" << std::endl;
     pthread_rwlock_unlock(&swap_lock_);
     memory_history_->DevHistory(info->device_id).num_swap_in++;
     memory_history_->DevHistory(info->device_id).swap_in_total += info->size;
-    if (!infinite_memory_) {
+    if (!infinite_memory_ && do_memcpy) {
 #if 1
       if (async) {
         memory_manager_->MemcpyAsync(info->device_id, info->dptr,
@@ -304,11 +309,17 @@ void ODSwap::DelAddr(handle_t handle_id) {
   pthread_rwlock_unlock(&swap_lock_);
 }
 
-void* ODSwap::GetAddr(handle_t handle_id, bool is_prefetch, bool& success) {
+// prefetch_ahead: Whether prefetch thread is prefetching handles from next
+// iteration of execution thread. Always false if not called by prefetch
+// thread.
+void* ODSwap::GetAddr(handle_t handle_id, bool is_prefetch, bool& success, 
+                      bool prefetch_ahead) {
   sa_log << "GetAddr[" << (is_prefetch?1:0) << "]: "<< handle_id << std::endl;
+  /*
   size_t total, avail;
   memory_manager_->MemGetInfo(0, &total, &avail);
   sa_log << "Memory Info: Total: " << total << " Avail: " << avail << std::endl;
+  */
   pthread_rwlock_wrlock(&swap_lock_);
   auto info = swap_info_.at(handle_id);
   if (info->device_id != -1 && !is_prefetch) {
@@ -321,7 +332,7 @@ void* ODSwap::GetAddr(handle_t handle_id, bool is_prefetch, bool& success) {
     if (!is_prefetch) {
       ++(memory_history_->DevHistory(info->device_id).cache_miss);
     }
-    success = SwapIn(info, swap_async_);
+    success = SwapIn(info, swap_async_, prefetch_ahead);
     if (!success) {
       if (is_prefetch) { // prefetch
         pthread_rwlock_unlock(&swap_lock_);
@@ -345,18 +356,14 @@ void* ODSwap::GetAddr(handle_t handle_id, bool is_prefetch, bool& success) {
   }
   CHECK(info->swapped_in) << "Info " 
      << info->handle_id << " is not swapped in after SwapIn" << std::endl;
+  // Add handle back to swappable handle if handle is not locked
+  // (underprefetch)
   if (is_prefetch && locked_handles_.find(handle_id) != locked_handles_.end()
        && locked_handles_[handle_id].size() == 0) {
     swappable_handles_[info->device_id].insert(handle_id);
     divided_handles_[info->device_id][info->size].insert(handle_id);
     sa_log << "Prefetched handle " << handle_id << " is made swappable" << std::endl;  
   }
-  /*
-  // Remove from swappable handles
-  swappable_handles_[info->device_id].erase(handle_id);
-  divided_handles_[info->device_id][info->size].erase(handle_id);
-  sa_log << "Remove(4) swappable handle_id = " << handle_id << std::endl;
-  */
   pthread_rwlock_unlock(&swap_lock_);
   return info->dptr;
 }

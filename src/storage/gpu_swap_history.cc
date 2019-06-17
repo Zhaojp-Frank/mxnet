@@ -142,7 +142,11 @@ handle_t MemoryHistory::NaiveHistory(
   return latest_id;
 }
 
-bool MemoryHistory::WillBeUsed(const handle_t handle) {
+// Return true if handle will not be used again in this iteration
+// Even if prefetch thread is prefetching next iteration, we should consider
+// the step in history to be the one for execution thread. For the accuracy of
+// Swapout.
+bool MemoryHistory::CheckLastUse(handle_t handle) {
   auto& history = dev_history_[0];
   MemoryHistory::MemRecord r = {0, MemoryHistory::GET_ADDR, 0,
                                 history.curr_idx, 0};
@@ -150,6 +154,20 @@ bool MemoryHistory::WillBeUsed(const handle_t handle) {
                              history.handle_history->at(handle).end(), r,
                              CompareByStep);
   return it == history.handle_history->at(handle).end();
+}
+
+// Return true if handle has yet to be used in this iteration
+// Or if handle is being used for the first time.
+// If prefetch thread is prefetching next iteration, threat current step in
+// history as 0. For the accuracy of Swapin.
+bool MemoryHistory::CheckFirstUse(handle_t handle, bool prefetch_ahead) {
+  auto& history = dev_history_[0];
+  MemoryHistory::MemRecord r = {0, MemoryHistory::GET_ADDR, 0,
+                                prefetch_ahead?0:history.curr_idx, 0};
+  auto it = std::lower_bound(history.handle_history->at(handle).begin(),
+                             history.handle_history->at(handle).end(), r,
+                             CompareByStep);
+  return it == history.handle_history->at(handle).begin();
 }
 
 handle_t MemoryHistory::SizeHistory(
