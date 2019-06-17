@@ -96,10 +96,10 @@ void Prefetch::Prefetching(std::pair<size_t&, size_t&> exe_cur_node) {
     sa_log << "Prefetch: prefetching " 
            << prefetch_sequence_[pre_cur_node.second][cur_idx_in_node] << std::endl;
     ODSwap::Get()->GetAddr(prefetch_sequence_[pre_cur_node.second][cur_idx_in_node],
-        true, success);
+        true, success, pre_cur_node.first > exe_cur_node.first);
     sa_log << "Prefetch: " << (success?"success":"failure") << std::endl;
     if (!success) {
-      std::cout << "Prefetch failed " << std::endl;
+      sa_log << "Prefetch failed " << std::endl;
       sem_wait(&prefetch_sem_);
     } else {
       cur_idx_in_node++;

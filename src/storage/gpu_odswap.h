@@ -40,12 +40,12 @@ public:
   static std::shared_ptr<ODSwap> _GetSharedRef();
   bool SwapOut(unsigned required_memory, int device_id, bool async);
   void SwapOutLocked(unsigned required_memory, int device_id, bool async);
-  bool SwapIn(SwapInfo *info, bool async);
+  bool SwapIn(SwapInfo *info, bool async, bool prefetch_ahead = 0);
   void SetAddr(handle_t handle_id, void* dptr, size_t size, 
                int device_id, bool is_pre, bool is_weight);
   void DelAddr(handle_t handle_id);
   void FreeAddr(handle_t handle_id);
-  void* GetAddr(handle_t handle_id, bool is_prefetch, bool& success);
+  void* GetAddr(handle_t handle_id, bool is_prefetch, bool& success, bool prefetch_ahead = 0);
   void LockHandles(const std::unordered_set<handle_t>& handles, const size_t node_idx);
   void LockHandles(const std::vector<handle_t>& handles, const size_t node_idx);
   void UnlockHandles(const std::unordered_set<handle_t>& handles, const size_t node_idx);

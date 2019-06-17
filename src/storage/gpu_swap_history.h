@@ -86,6 +86,8 @@ public:
   size_t GetCacheMiss();
   handle_t DecideVictim(std::unordered_set<handle_t> handles, int device,
                            void* arg);
+  bool CheckLastUse(handle_t handle);
+  bool CheckFirstUse(handle_t handle, bool prefetch_ahead);
 
 private:
   MemoryHistory();

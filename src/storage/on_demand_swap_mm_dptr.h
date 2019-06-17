@@ -210,6 +210,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       return fake_memory_;
     } else if (iteration_idx_ == 1) {
       // Iteration 1, record history of nodes and handles.
+      // Also fake memory, no swap happens
       CHECK(dptr_dev_id_.find(id) != dptr_dev_id_.end())
        << id << " is not setdptred by mm_dptr!";
       CHECK(dptr_dev_id_[id] != -1) << id << " is Alloced for CPU!";
@@ -224,6 +225,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       return fake_memory_;
     } else if (iteration_idx_ == 2) {
       // Iteration 2, do allocation for each handle. (No Prefetch)
+      // Swap happens.
       if (unalloced_dptrs_.find(ptr) != unalloced_dptrs_.end()) {
         CHECK(dptr_dev_id_.find(id) != dptr_dev_id_.end())
          << id << " is not setdptred by mm_dptr!";
