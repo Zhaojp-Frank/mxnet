@@ -138,7 +138,7 @@ bool ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
      * not weight && will be used again
      */
     bool do_memcpy = (memory_history_->CheckLastUse(victim) 
-                      != target->is_weight);
+                      == target->is_weight);
     sa_log << "Swapout: " << victim << (do_memcpy?" ":" no ") << "need to memcpy"
            << std::endl;
     pthread_rwlock_unlock(&swap_lock_);
@@ -193,8 +193,8 @@ bool ODSwap::SwapIn(SwapInfo *info, bool async, bool prefetch_ahead) {
     }
     CHECK(memory_manager_->Malloc(info->dptr, info->size, info->device_id) ==
           cudaSuccess);
-    bool do_memcpy = info->is_weight?true:
-                     memory_history_->CheckFirstUse(info->handle_id, prefetch_ahead);
+    bool do_memcpy = info->is_weight ||
+              !memory_history_->CheckFirstUse(info->handle_id, prefetch_ahead);
     sa_log << "SwapIn: " << info->handle_id << (do_memcpy?" ":" no ") 
            << "need to memcpy" << std::endl;
     pthread_rwlock_unlock(&swap_lock_);
