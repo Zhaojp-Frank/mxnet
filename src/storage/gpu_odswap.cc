@@ -21,9 +21,10 @@ ODSwap::ODSwap() {
   swap_async_ = dmlc::GetEnv("MXNET_SWAP_ASYNC", true);
   std::cout << "SWAP_ASYNC=" << swap_async_ << std::endl;
   infinite_memory_ = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
-  infinite_cpu_memory_ = dmlc::GetEnv("MXNET_INFINITE_CPU_MEMORY", false);
+  infinite_cpu_memory_ = dmlc::GetEnv("MXNET_ODSWAP_INFINITE_CPU_MEMORY", true);
   if (infinite_cpu_memory_) {
-    const size_t fake_cpu_size = 20L*1024*1024*1024;
+    const size_t fake_cpu_size = 1024L * 1024 * 1024 *
+      dmlc::GetEnv("MXNET_SWAP_HOST_SIZE", 8);
     cudaHostAlloc((void**)&(fake_cpu_address_), fake_cpu_size, 
                   cudaHostAllocPortable);
     CHECK(fake_cpu_address_ != nullptr)

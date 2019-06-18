@@ -119,8 +119,8 @@ BuddyMemoryManager::BuddyMemoryManager() {
     if (infinite_memory) {
         avail = static_cast<size_t>(avail * 0.8);
     } else {
-        float ratio = dmlc::GetEnv("MXNET_GPU_UTIL_RATIO", kGPUUtilRatio);
-        avail = static_cast<size_t>(avail * ratio);
+        avail = 1024L * 1024 * 1024 *
+                dmlc::GetEnv("MXNET_SWAP_MEMORY_SIZE", 14.0);
     }
     void* memory = nullptr;
     while (cudaMalloc((void**)&memory, avail) == cudaErrorMemoryAllocation) {
@@ -182,11 +182,8 @@ FakeMemoryManager::FakeMemoryManager() {
   std::cout << "Initializing Fake Memory Manager" << std::endl;
   ptrs_.resize(NUMBER_OF_GPU);
   for (size_t device = 0; device < NUMBER_OF_GPU; device++) {
-    size_t avail, total;
-    CUDA_CALL(cudaSetDevice(device));
-    CUDA_CALL(cudaMemGetInfo(&avail, &total));
-    float ratio = dmlc::GetEnv("MXNET_GPU_UTIL_RATIO", kGPUUtilRatio);
-    avail = static_cast<size_t>(avail * ratio);
+    size_t avail = 1024L * 1024 * 1024 *
+            dmlc::GetEnv("MXNET_SWAP_MEMORY_SIZE", 14.0);
     void* memory = nullptr;
     while (cudaMalloc((void**)&memory, avail) == cudaErrorMemoryAllocation) {
       avail -= kMB;

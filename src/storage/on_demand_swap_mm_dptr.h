@@ -18,13 +18,14 @@ namespace storage {
 class OD_MM_Dptr : virtual public MM_Dptr {
  public:
   OD_MM_Dptr() {
-    float temp_ratio = dmlc::GetEnv("MXNET_GPU_TEMP_RATIO", kGPUTempRatio);
-    temp_size_ = (size_t)(temp_ratio * 1024 * 1024 * 1024);
+    temp_size_ = 1024L * 1024 * 1024 * 
+                 dmlc::GetEnv("MXNET_SWAP_TEMP_SIZE", 0.5);
     cudaError_t e = cudaMalloc(&temp_memory_, temp_size_);
     if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
       LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
     }
-    std::cout << "OD_MM_Dptr: initialize fake memory of " << temp_size_ << std::endl;
+    infinite_gpu_memory_ = dmlc::GetEnv("MXNET_SWAP_INFINITE_MEMORY", false);
+    std::cout << "OD_MM_Dptr: initialize temporary memory of " << temp_size_ << std::endl;
     odswap_ = ODSwap::_GetSharedRef();
     memory_manager_ = GetMemoryManagerRef();
     memory_history_ = MemoryHistory::_GetSharedRef();
@@ -39,7 +40,9 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
       LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
     }
-    //memory_manager_->Free(fake_memory_, 0);
+    if (infinite_gpu_memory_) {
+      memory_manager_->Free(fake_memory_, 0);
+    }
   }
 
   void* Alloc(handle_t id, size_t size, void* ptr = nullptr) {
@@ -111,6 +114,9 @@ class OD_MM_Dptr : virtual public MM_Dptr {
 
   void StartIteration () override {
     sa_log << "Start iteration" << std::endl;
+    if (infinite_gpu_memory_) {
+      return;
+    }
     start_ = std::chrono::high_resolution_clock::now();
     cur_node_idx_ = 0;
     memory_history_->StartIteration();
@@ -122,6 +128,9 @@ class OD_MM_Dptr : virtual public MM_Dptr {
 
   void StopIteration () override {
     sa_log << "Stop iteration" << std::endl;
+    if (infinite_gpu_memory_) {
+      return;
+    }
     if (iteration_idx_ == 1) {
       sa_log << "Fake Memory is freed" << std::endl;
       memory_manager_->Free(fake_memory_, 0);
@@ -206,7 +215,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       return temp_memory_;
     } 
     void* ptr = dptr_mapping_[id]; 
-    if (iteration_idx_ == 0) { // Preparation Stage, always fake
+    if (iteration_idx_ == 0 || infinite_gpu_memory_) { // Preparation Stage, always fake
       return fake_memory_;
     } else if (iteration_idx_ == 1) {
       // Iteration 1, record history of nodes and handles.
@@ -297,12 +306,12 @@ class OD_MM_Dptr : virtual public MM_Dptr {
            std::vector<handle_t>> node_handles_order_;
   std::pair<node_t, std::string> cur_node_;
   bool alloc_weight_;
+  bool infinite_gpu_memory_;
   size_t iteration_idx_;
   size_t cur_node_idx_;
   void* temp_memory_;
   void* fake_memory_;
   size_t temp_size_;
-  const float kGPUTempRatio = 3;
   int device_id_; // Only support dev_id = 0 currently.
 
   std::chrono::time_point<std::chrono::high_resolution_clock> start_;
