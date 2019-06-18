@@ -69,6 +69,8 @@ struct SpaceAllocator {
     if (handle.size != 0) {
       Storage::Get()->DirectFree(handle);
     }
+    std::cout << "GetSpace Alloc, size: "
+              << size / 1024.0 / 1024.0 / 1024.0 << std::endl;
     handle = Storage::Get()->Alloc(size, ctx);
     //return handle.dptr;
     return handle.GetDptr();
