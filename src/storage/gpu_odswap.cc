@@ -423,13 +423,16 @@ void ODSwap::UnlockHandles(const std::unordered_set<handle_t>& handles,
 
 void ODSwap::PrintHandles() {
   std::cout << "Print Handles" << std::endl;
+  std::cout << "Number of handles = " << swap_info_.size() << std::endl;
   //std::map<size_t, std::unordered_set<handle_t> > _divided_handles_;
+  /*
   for (auto it : swap_info_) {
     //_divided_handles_[it.second->size].insert(it.first);
     std::cout << it.first << ": " << it.second->size << " "
               << it.second->swap_count << " " << it.second->device_id
               << std::endl;
   }
+  */
 }
 
 void ODSwap::CheckUnlocked() {

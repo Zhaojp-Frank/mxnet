@@ -1337,6 +1337,7 @@ void GraphExecutor::ExportEntryHandle() {
       }
     }
   }
+  std::cout << "Num nodes " << idx.num_nodes() << std::endl;
   std::cout << "All memory usage : " << size / 1024.0 / 1024.0 / 1024.0
             << std::endl;
   if (export_graph) {
