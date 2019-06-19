@@ -20,7 +20,7 @@ Prefetch::Prefetch() {
   std::cout << "Prefetch enabled: " << (prefetch_enabled_?1:0) << std::endl;
   prefetching_ = false;
   sem_init(&prefetch_sem_, 0, 1);
-  num_loop_ = dmlc::GetEnv("MXNET_NUM_LOOP", 10);
+  num_loop_ = dmlc::GetEnv("MXNET_NUM_LOOP", 12);
 }
 
 Prefetch::~Prefetch() {}
@@ -42,16 +42,16 @@ void Prefetch::StartPrefetching(std::pair<size_t&, size_t&> exe_cur_node) {
   /*
   start = std::chrono::high_resolution_clock::now();
   */
-  sa_log << "Prefetch: Start Prefetching" << std::endl;
+  std::cout << "Prefetch: Start Prefetching" << std::endl;
   prefetching_ = true;
   prefetcher_ = std::thread(&Prefetch::Prefetching, this, exe_cur_node);
-  sa_log << "Prefetch: Start Prefetching, thread created" << std::endl;
 }
 
 void Prefetch::StopPrefetching(size_t iteration_idx) {
   if (!prefetch_enabled_ || iteration_idx != num_loop_) {
     return;
   }
+  std::cout << "Prefetch thread is stopped" << std::endl;
   prefetching_ = false;
   prefetcher_.join();
 }
@@ -69,8 +69,11 @@ void Prefetch::Prefetching(std::pair<size_t&, size_t&> exe_cur_node) {
       pre_cur_node.second ++;
       cur_idx_in_node = 0;
     }
-    if (pre_cur_node.second == prefetch_sequence_.size()) {
+    if (pre_cur_node.second >= prefetch_sequence_.size()) {
       sa_log << "Prefetch: End of iteration" << std::endl;
+      if (pre_cur_node.second > prefetch_sequence_.size()) {
+        sa_log << "Prefetch: cur idx > total history (CHECK) " << std::endl;
+      }
       /*
       end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> diff = end-start;
@@ -87,12 +90,15 @@ void Prefetch::Prefetching(std::pair<size_t&, size_t&> exe_cur_node) {
     // Lock the node being prefetched
     if (cur_idx_in_node == 0) {
       sa_log << "Prefetch: Locking node idx = " << pre_cur_node.second << std::endl;
+      CHECK(pre_cur_node.second < prefetch_sequence_.size());
       ODSwap::Get()->LockHandles(prefetch_sequence_[pre_cur_node.second],
           pre_cur_node.second);
     }
     // Prefetching Handle
     sa_log << "Prefetch: prefetching (" << pre_cur_node.second << "," << cur_idx_in_node 
            << ")" << std::endl;
+    CHECK(pre_cur_node.second < prefetch_sequence_.size());
+    CHECK(cur_idx_in_node < prefetch_sequence_[pre_cur_node.second].size());
     sa_log << "Prefetch: prefetching " 
            << prefetch_sequence_[pre_cur_node.second][cur_idx_in_node] << std::endl;
     ODSwap::Get()->GetAddr(prefetch_sequence_[pre_cur_node.second][cur_idx_in_node],
