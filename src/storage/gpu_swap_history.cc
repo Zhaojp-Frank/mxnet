@@ -10,7 +10,6 @@
 #include <dmlc/parameter.h>
 #include <dmlc/logging.h>
 #include "./gpu_swap_history.h"
-#include "./gpu_swap_prefetch.h"
 #include "./gpu_swap_memmgr.h"
 #include "./gpu_swap_util.h"
 
@@ -37,8 +36,7 @@ MemoryHistory::MemoryHistory() {
   } else if (swap_algorithm_ == "SizeHistory") {
     DoDecide = &MemoryHistory::SizeHistory;
   } else {
-    std::cout << "Unknown Algorithm Name: " << swap_algorithm_ << std::endl;
-    CHECK(0);
+    CHECK(0) << "Unknown Algorithm Name: " << swap_algorithm_ << std::endl;
   }
 }
 
@@ -78,7 +76,7 @@ void MemoryHistory::PreRecord(handle_t handle_id, record_t op,
 
 void MemoryHistory::PutRecord(handle_t handle_id, int device,
                               record_t op, size_t size) {
-  if (!IterationStarted()) {
+  if (!IterationStarted() || iteration_idx_ == 0) {
     return;
   }
   auto& history = dev_history_[device];
@@ -109,14 +107,11 @@ handle_t MemoryHistory::LRU(std::unordered_set<handle_t> handles,
     history.lru_map[temp_id] = history.lru_list.end();
     history.lru_list.pop_back();
   }
-  if (history.lru_list.size() == 0) {
-    std::cout << "LRU: No Swappable Handle Found" << std::endl;
-    CHECK(0);
-  } else {
-    victim = history.lru_list.back();
-    history.lru_map[victim] = history.lru_list.end();
-    history.lru_list.pop_back();
-  }
+  CHECK (history.lru_list.size() != 0)
+    << "LRU: No Swappable Handle Found" << std::endl;
+  victim = history.lru_list.back();
+  history.lru_map[victim] = history.lru_list.end();
+  history.lru_list.pop_back();
   return victim;
 }
 
@@ -125,10 +120,6 @@ handle_t MemoryHistory::LRU(std::unordered_set<handle_t> handles,
 handle_t MemoryHistory::NaiveHistory(
   std::unordered_set<handle_t> handles, int device, void* arg) {
   auto& history = dev_history_[device];
-#ifdef FEGIN_DEBUG
-  std::cout << "DoDecide: NaiveHistory, handles numbers = " 
-            << history.handle_history.size() << std::endl;
-#endif
   SwapParams* params = (SwapParams*)arg;
   size_t latest_step = 0;
   handle_t latest_id = 0;
@@ -139,13 +130,6 @@ handle_t MemoryHistory::NaiveHistory(
                                history.handle_history->at(id).end(), r,
                                CompareByStep);
     if (it == history.handle_history->at(id).end()) {
-      /*
-      if (it != history.handle_history->at(id).begin() &&
-          history.curr_idx - history.handle_history->at(id).back().record_step < 10) {
-        // Victim just used, skip
-        continue;
-      }
-      */
       return id;
     } else if (it->record_step - history.curr_idx < params->no_swap_steps) {
       continue;
@@ -187,10 +171,8 @@ handle_t MemoryHistory::SizeHistory(
       if (candidates == divided_handles->begin()) {
         candidates = original_candidates;
         reverse_flag = false;
-        if (no_swap_step == 0) {
-          std::cout << "Cannot find victim (algorithm error)" << std::endl;
-          CHECK(0);
-        }
+        CHECK(no_swap_step != 0)
+         << "Cannot find victim (algorithm error)" << std::endl;
         no_swap_step /= 2;
       } else {
         candidates --;
@@ -203,11 +185,7 @@ handle_t MemoryHistory::SizeHistory(
 handle_t MemoryHistory::DecideVictim(std::unordered_set<handle_t> handles,
                                         int device, void* arg) {
   std::lock_guard<std::mutex> lock(mutex_[device]);
-  if (iteration_idx_ <= kBeginRecordAt) {
-    return MemoryHistory::LRU(handles, device, nullptr);
-  } else {
-    return (this->*DoDecide)(handles, device, arg);
-  }
+  return (this->*DoDecide)(handles, device, arg);
 }
 
 void MemoryHistory::PrintRecord(int device) {
@@ -245,19 +223,27 @@ void MemoryHistory::PrintRecord(int device) {
   fp.close();
 }
 
+void MemoryHistory::StartPreparation() {
+
+}
+
+void MemoryHistory::EndPreparation() {
+  iteration_idx_++; 
+}
+
 void MemoryHistory::StartIteration() {
+  /*
   if(dmlc::GetEnv("MXNET_GPU_MEM_POOL_TYPE", std::string("Naive"))
      != "SwapOnDemand") {
     return;
   }
+  */
   iteration_started_ = true;
   for (int i = 0; i < NUMBER_OF_GPU; i++) {
     dev_history_[i].curr_idx = 0;
   }
-  // LRU needs to record every iteration. As a result, it is mandatory to do LRU
-  // recording even at kBeginRecordAt iteration because the desired swapping
-  // algorithm will kick in from (kBeginRecordAt + 1) iteration.
-  if (iteration_idx_ <= kBeginRecordAt || swap_algorithm_ == "LRU") {
+  // LRU needs to record every iteration after preparation stage and iteration 1.
+  if (iteration_idx_ > kBeginRecordAt && swap_algorithm_ == "LRU") {
     pre_recording_ = true;
   }
   if ((adaptive_history_ && iteration_idx_ >= kBeginRecordAt) ||
@@ -304,12 +290,10 @@ void MemoryHistory::StartIteration() {
     dev_history_[device].swap_out_total = 0;
     dev_history_[device].num_get_addr = 0;
   }
+}
 
-  // We can't start the prefetching too early, otherwise, the prefetch_count
-  // may be incorrect.
-  if (iteration_idx_ > kBeginRecordAt) {
-    Prefetch::Get()->StartPrefetching();
-  }
+size_t MemoryHistory::GetCacheMiss() {
+  return dev_history_[0].cache_miss;
 }
 
 void MemoryHistory::StopIteration() {
@@ -320,9 +304,6 @@ void MemoryHistory::StopIteration() {
   pre_recording_ = false;
   is_recording_ = false;
   iteration_started_ = false;
-  if (Prefetch::Get()->IsPrefetching()) {
-    Prefetch::Get()->StopPrefetching();
-  }
   ++iteration_idx_;
   //for (int device = 0; device < NUMBER_OF_GPU; device++) {
     //auto& history = dev_history_[device];

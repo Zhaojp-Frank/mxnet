@@ -13,6 +13,12 @@ namespace storage {
 
 class Pooled_MM_Dptr : virtual public MM_Dptr {
  public:
+  Pooled_MM_Dptr () {
+    alloc_finalized_ = false;
+  }
+
+  bool AllocFinished () { return alloc_finalized_; }
+
   void* Alloc(handle_t id, size_t size, void* ptr) override {
     sa_log << "Alloc " << id << std::endl;
     dptr_mapping_[id] = ptr;
@@ -38,7 +44,7 @@ class Pooled_MM_Dptr : virtual public MM_Dptr {
 
   void StartBinding() override { }
 
-  void StopBinding() override { }
+  void StopBinding() override { alloc_finalized_ = true; }
 
   void StartIteration() override { }
 
@@ -74,7 +80,10 @@ class Pooled_MM_Dptr : virtual public MM_Dptr {
 
  private:
   std::unordered_map<handle_t, void*> dptr_mapping_;
+  bool alloc_finalized_;
 };
+
+Pooled_MM_Dptr* POOLED_MM_DPTR();
 
 }  // namespace storage
 }  // namespace mxnet

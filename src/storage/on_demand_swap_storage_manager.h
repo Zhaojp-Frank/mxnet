@@ -62,7 +62,6 @@ class GPUOnDemandSwapStorageManager final : public StorageManager {
    * \brief Default destructor.
    */
   ~GPUOnDemandSwapStorageManager() {
-    ReleaseAll();
   }
 
   void Alloc(Storage::Handle* handle) override;
@@ -104,6 +103,9 @@ class GPUOnDemandSwapStorageManager final : public StorageManager {
 void GPUOnDemandSwapStorageManager::Alloc(Storage::Handle* handle) {
   std::lock_guard<std::mutex> lock(Storage::Get()->GetMutex(Context::kGPU));
   size_t size = handle->size + NDEV;
+  MM_DPTR()->Alloc(handle->ID(), size, nullptr);
+}
+  /*
   auto&& reuse_it = memory_pool_.find(size);
   if (reuse_it == memory_pool_.end() || reuse_it->second.size() == 0) {
     size_t free, total;
@@ -132,36 +134,10 @@ void GPUOnDemandSwapStorageManager::Alloc(Storage::Handle* handle) {
     MM_DPTR()->SetDptr(handle->ID(), ret, device_id_);
   }
 }
-
+*/
 void GPUOnDemandSwapStorageManager::Free(Storage::Handle handle) {
   std::lock_guard<std::mutex> lock(Storage::Get()->GetMutex(Context::kGPU));
-  // If do reuse, no swapping has happened yet.
-  if (do_reuse_) {
-    size_t size = handle.size + NDEV;
-    auto&& reuse_pool = memory_pool_[size];
-    // (FIXME) reuse_pool.push_back(handle.GetDptr());
-    reuse_pool.push_back(MM_DPTR()->GetDptr(handle.ID()));
-    // The address will be set to a different handle later
-    // (FIXME) handle.FreeDptr();
-    MM_DPTR()->Free(handle.ID());
-    
-  } else {
-    DirectFreeNoLock(handle);
-  }
-}
-
-void GPUOnDemandSwapStorageManager::ReleaseAll() {
-  for (auto&& i : memory_pool_) {
-    for (auto&& j : i.second) {
-      cudaError_t e = memory_manager_->Free(j, device_id_);
-      if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
-        LOG(FATAL) << "cudaFree failed: " << cudaGetErrorString(e);
-      }
-      size_t size = i.first - NDEV;
-      used_memory_ -= size;
-    }
-  }
-  memory_pool_.clear();
+  MM_DPTR()->Free(handle.ID());
 }
 
 #endif  // MXNET_USE_CUDA

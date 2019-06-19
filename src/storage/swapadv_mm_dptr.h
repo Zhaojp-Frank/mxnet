@@ -99,7 +99,9 @@ class SA_MM_Dptr : virtual public MM_Dptr {
 
   void Swapin(node_t nid, uint32_t idx);
 
-  void Swapout(node_t nid, uint32_t idx);
+  void Swapout(node_t nid, uint32_t idx, bool is_noop);
+
+  void Remap();
 
   void Remap();
 

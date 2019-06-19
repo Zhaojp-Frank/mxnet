@@ -20,12 +20,11 @@
 /*!
  *  Copyright (c) 2015 by Contributors
  * \file swap_advisor_engine.cc
- * \brief Implementation of SwapAdvisorEngine
+ * \brief Implementation of ODSwapEngine
  *  It is build upon implementation of Naive Engine.
  */
 #include <dmlc/base.h>
 #include <dmlc/concurrency.h>
-#include <mxnet/sa_util.h>
 #include <atomic>
 #include <thread>
 #include "./threaded_engine.h"
@@ -36,13 +35,13 @@ namespace mxnet {
 namespace engine {
 
 // implement naive engine
-class SwapAdvisorEngine final : public ThreadedEngine {
+class ODSwapEngine final : public ThreadedEngine {
  public:
-  SwapAdvisorEngine() {
+  ODSwapEngine() {
     this->Start();
   }
   // virtual destructor
-  virtual ~SwapAdvisorEngine() {
+  virtual ~ODSwapEngine() {
     this->Stop();
   }
 
@@ -52,80 +51,24 @@ class SwapAdvisorEngine final : public ThreadedEngine {
       MSHADOW_CATCH_ERROR(mshadow::DeleteStream<gpu>(streams_[i]));
       streams_[i] = nullptr;
     }
-    for (size_t i = 0; i < swapin_streams_.size(); ++i) {
-      MSHADOW_CATCH_ERROR(mshadow::DeleteStream<gpu>(swapin_streams_[i]));
-      swapin_streams_[i] = nullptr;
-    }
-    for (size_t i = 0; i < swapout_streams_.size(); ++i) {
-      MSHADOW_CATCH_ERROR(mshadow::DeleteStream<gpu>(swapout_streams_[i]));
-      swapout_streams_[i] = nullptr;
-    }
 #endif // MXNET_USE_CUDA
     task_queue_->SignalForKill();
-    swapin_task_queue_->SignalForKill();
-    swapout_task_queue_->SignalForKill();
     task_queue_ = nullptr;
-    swapin_task_queue_ = nullptr;
-    swapout_task_queue_ = nullptr;
     thread_pool_ = nullptr;
-    swapin_thread_pool_ = nullptr;
-    swapout_thread_pool_ = nullptr;
   }
 
   void Start() override {
     task_queue_.reset(new dmlc::ConcurrentBlockingQueue<OprBlock*>());
-    swapin_task_queue_.reset(new dmlc::ConcurrentBlockingQueue<OprBlock*>());
-    swapout_task_queue_.reset(new dmlc::ConcurrentBlockingQueue<OprBlock*>());
     thread_pool_.reset(new ThreadPool(1,
                        [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
                         ThreadWorker(task_queue_, ready_event, 1);
-                       }, true));
-    swapin_thread_pool_.reset(new ThreadPool(1,
-                       [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
-                        ThreadWorker(swapin_task_queue_, ready_event, 2);
-                       }, true));
-    swapout_thread_pool_.reset(new ThreadPool(1,
-                       [this](std::shared_ptr<dmlc::ManualEvent> ready_event) {
-                        ThreadWorker(swapout_task_queue_, ready_event, 3);
                        }, true));
   }
 
  protected:
   // priority variable stores node id of the node for this engine.
   void PushToExecute(OprBlock *opr_block, bool pusher_thread) override {
-    const char* opr_name = opr_block->opr->opr_name;
-    if (strlen(opr_name) < 6 || opr_name[0] != 'S' || opr_name[1] != 'w' ||
-        opr_name[2] != 'a' || opr_name[3] != 'p') {
-      opr_block->priority = 0;
-    } else if (opr_name[4] == 'i' && opr_name[5] == 'n' &&
-               opr_name[6] == '\0') {
-      opr_block->priority = 1;
-    } else if (opr_name[4] == 'o' && opr_name[5] == 'u' &&
-               opr_name[6] == 't') {
-      opr_block->priority = 2;
-    } else if (opr_name[4] == '_' && opr_name[5] == 'e' &&
-               opr_name[6] == 'n' && opr_name[7] == 't') {
-      opr_block->priority = 1;
-    } else {
-      opr_block->priority = 0;
-    }
-    if (opr_block->opr->node_name != nullptr) {
-      sa_log << "Ready Opr = " << opr_block->opr->opr_name << ", "
-             << "name = " << opr_block->opr->node_name << ", isGPU: "
-             << (int)(opr_block->ctx.dev_mask() == gpu::kDevMask) << std::endl;
-    } else {
-      sa_log << "Ready Opr = " << opr_block->opr->opr_name << ", isGPU: "
-             << (int)(opr_block->ctx.dev_mask() == gpu::kDevMask) << std::endl;
-    }
-    if (opr_block->priority == 0) {
-      task_queue_->Push(opr_block);
-    } else if (opr_block->priority == 1) {
-      swapin_task_queue_->Push(opr_block);
-    } else if (opr_block->priority == 2) {
-      swapout_task_queue_->Push(opr_block);
-    } else {
-      CHECK(false) << "No right engine priority";
-    }
+    task_queue_->Push(opr_block);
   }
 
  private:
@@ -137,16 +80,7 @@ class SwapAdvisorEngine final : public ThreadedEngine {
       size_t dev_id = static_cast<size_t>(opr_block->ctx.dev_id);
       //MSHADOW_CATCH_ERROR(mshadow::SetDevice<gpu>(opr_block->ctx.dev_id));
       CUDA_CALL(cudaSetDevice(opr_block->ctx.dev_id));
-      mshadow::Stream<gpu>* cur_stream = nullptr;
-      if (opr_block->priority == 0) {
-        cur_stream = this->GetStream(streams_, dev_id);
-      } else if (opr_block->priority == 1) {
-        cur_stream = this->GetStream(swapin_streams_, dev_id);
-      } else if (opr_block->priority == 2) {
-        cur_stream = this->GetStream(swapout_streams_, dev_id);
-      } else {
-        CHECK(false) << "No right engine priority";
-      }
+      mshadow::Stream<gpu>* cur_stream = this->GetStream(streams_, dev_id);
       this->ExecuteOprBlock((RunContext){opr_block->ctx, cur_stream},
             opr_block);
 #else //MXNET_USE_CUDA
@@ -190,22 +124,14 @@ class SwapAdvisorEngine final : public ThreadedEngine {
   mshadow::Stream<cpu> cpu_stream_;
   // GPU streams
   std::vector<mshadow::Stream<gpu>*> streams_;
-  // Swapout Streams
-  std::vector<mshadow::Stream<gpu>*> swapout_streams_;
-  // Swapin Streams
-  std::vector<mshadow::Stream<gpu>*> swapin_streams_;
   // Task queues
   std::shared_ptr<dmlc::ConcurrentBlockingQueue<OprBlock*>> task_queue_;
-  std::shared_ptr<dmlc::ConcurrentBlockingQueue<OprBlock*>> swapout_task_queue_;
-  std::shared_ptr<dmlc::ConcurrentBlockingQueue<OprBlock*>> swapin_task_queue_;
   // Thread pools
   std::unique_ptr<ThreadPool> thread_pool_;
-  std::unique_ptr<ThreadPool> swapin_thread_pool_;
-  std::unique_ptr<ThreadPool> swapout_thread_pool_;
-};  // class SwapAdvisorEngine
+};  // class ODSwapEngine
 
-Engine *CreateSwapAdvisorEngine() {
-  return new SwapAdvisorEngine();
+Engine *CreateODSwapEngine() {
+  return new ODSwapEngine();
 }
 }  // namespace engine
 }  // namespace mxnet
