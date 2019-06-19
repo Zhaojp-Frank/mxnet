@@ -74,6 +74,8 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     auto it = dptr_mapping_.find(id);
     void* ptr = it->second;
     dptr_mapping_.erase(it);
+    dptr_size_.erase(ptr);
+    unalloced_dptrs_.erase(ptr);
     odswap_->DelAddr(id);
     return ptr;
   }

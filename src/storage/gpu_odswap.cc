@@ -290,6 +290,8 @@ void ODSwap::FreeAddr(handle_t handle_id) {
 void ODSwap::DelAddr(handle_t handle_id) {
   pthread_rwlock_wrlock(&swap_lock_);
   //std::cout << "DelAddr " << handle_id << std::endl;
+  CHECK(swap_info_.find(handle_id) != swap_info_.end()) 
+    << "DelAddr: unknown or deleted handle_id" << std::endl;
   auto info = swap_info_.at(handle_id);
   if (info->device_id != -1) {
     memory_history_->PutRecord(handle_id, info->device_id,
@@ -297,7 +299,10 @@ void ODSwap::DelAddr(handle_t handle_id) {
     sa_log << "Remove(2) swappable handle_id = " << handle_id
            << std::endl;
     swappable_handles_[info->device_id].erase(handle_id);
-    divided_handles_[info->device_id][info->size].erase(handle_id);
+    if (divided_handles_[info->device_id].find(info->size) != 
+        divided_handles_[info->device_id].end()) {
+      divided_handles_[info->device_id][info->size].erase(handle_id);
+    }
   }
   if (info->cpu_address != nullptr) {
     //delete info->cpu_address;
