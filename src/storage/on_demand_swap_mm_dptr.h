@@ -261,7 +261,11 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   }
 
   void SetDptr (handle_t id, void* ptr, uint32_t dev_id) override {
-    sa_log << "SetDptr " << id << " " << ptr << " " << dev_id  << std::endl;
+    sa_log << "SetDptr " << id << " " << ptr << " " << dev_id  
+           << " " << (int)(dev_id == -1) <<  std::endl;
+    if (dev_id == -1) {
+      return;
+    }
     CHECK(ptr != fake_memory_) << "Fake memory is reasigned, which is dangerous!";
     size_t ptr_size = 0;
     if(ptr != nullptr && dev_id != -1) {
