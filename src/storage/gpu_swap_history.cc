@@ -54,24 +54,25 @@ MemoryHistory* MemoryHistory::Get() {
 
 void MemoryHistory::PreRecord(handle_t handle_id, record_t op,
                               DeviceHistory& history) {
-  if (op == MemoryHistory::SET_ADDR) {
+  CHECK(op == MemoryHistory::GET_ADDR) << "PreRecord receive non-GET_ADDR op" << std::endl;
+  if (history.lru_map.find(handle_id) == history.lru_map.end()
+      || history.lru_map[handle_id] == history.lru_list.end()) {
+    // Least used handle is the start of lru list
     history.lru_list.push_front(handle_id);
     history.lru_map[handle_id] = history.lru_list.begin();
-  } else if (op == MemoryHistory::GET_ADDR) {
-    if (history.lru_map[handle_id] == history.lru_list.end()) {
-      history.lru_list.push_front(handle_id);
-      history.lru_map[handle_id] = history.lru_list.begin();
-    } else {
-      std::list<handle_t>::iterator hid = history.lru_map[handle_id];
-      history.lru_list.erase(hid);
-      history.lru_list.push_front(handle_id);
-      history.lru_map[handle_id] = history.lru_list.begin();
-    }
   } else {
+    std::list<handle_t>::iterator hid = history.lru_map[handle_id];
+    history.lru_list.erase(hid);
+    history.lru_list.push_front(handle_id);
+    history.lru_map[handle_id] = history.lru_list.begin();
+  }
+  /* DEL_ADDR
+  else {
     std::list<handle_t>::iterator hid = history.lru_map[handle_id];
     history.lru_list.erase(hid);
     history.lru_map.erase(handle_id);
   }
+  */
 }
 
 void MemoryHistory::PutRecord(handle_t handle_id, int device,
@@ -101,17 +102,24 @@ handle_t MemoryHistory::LRU(std::unordered_set<handle_t> handles,
                                int device, void* arg) {
   auto& history = dev_history_[device];
   handle_t victim = -1;
-  while (history.lru_list.size() != 0 &&
-    handles.find(history.lru_list.back()) == handles.end()) {
+  auto iter = history.lru_list.rbegin();
+  while (iter != history.lru_list.rend()) {
+    if (handles.find(*iter) == handles.end()) {
+      // Handle is swapped out. Remove from LRU list since it will be removed 
+      // when the handle is inserted next time anyway.
+      iter ++;
+    } else {
+      break;
+    }
+    /*
     handle_t temp_id = history.lru_list.back();
     history.lru_map[temp_id] = history.lru_list.end();
     history.lru_list.pop_back();
+    */
   }
-  CHECK (history.lru_list.size() != 0)
+  CHECK (iter != history.lru_list.rend())
     << "LRU: No Swappable Handle Found" << std::endl;
-  victim = history.lru_list.back();
-  history.lru_map[victim] = history.lru_list.end();
-  history.lru_list.pop_back();
+  victim = *iter;
   return victim;
 }
 
@@ -272,7 +280,7 @@ void MemoryHistory::StartIteration() {
     dev_history_[i].curr_idx = 0;
   }
   // LRU needs to record every iteration after preparation stage and iteration 1.
-  if (iteration_idx_ > kBeginRecordAt && swap_algorithm_ == "LRU") {
+  if (iteration_idx_ >= kBeginRecordAt && swap_algorithm_ == "LRU") {
     pre_recording_ = true;
   }
   if ((adaptive_history_ && iteration_idx_ >= kBeginRecordAt) ||

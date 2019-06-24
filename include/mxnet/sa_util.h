@@ -8,12 +8,13 @@
 #define sa_likely(x)      __builtin_expect(!!(x), 1)
 #define sa_unlikely(x)    __builtin_expect(!!(x), 0)
 
-//#define SWAPADV_DEBUG
+#define SWAPADV_DEBUG
 
 #ifdef SWAPADV_DEBUG
 #define SWAPADV_REPORT_PROGRESS 1
 #define sa_log \
-  SA_Log().GetStream()
+  std::cout
+  //SA_Log().GetStream()
 #else
 #define SWAPADV_REPORT_PROGRESS 0
 #define sa_log \
