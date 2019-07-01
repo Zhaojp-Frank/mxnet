@@ -1222,9 +1222,9 @@ void GraphExecutor::InitCachedOps() {
     const auto& inode = idx[nid];
     if (inode.source->is_variable()) continue;
     if (op_nodes_[nid].skip_exec_node) {
-        std::cout << "Skip node " << idx[nid].source->attrs.name << std::endl;
-        skipped.insert(nid);
-        continue;
+      //std::cout << "Skip node " << idx[nid].source->attrs.name << std::endl;
+      skipped.insert(nid);
+      continue;
     }
     op_nodes_[nid].finish_var = Engine::Get()->NewVariable();
     auto& exec = op_nodes_[nid].exec;
@@ -1367,9 +1367,13 @@ void GraphExecutor::SaveEntryMapping() {
   const nnvm::HandleSizes& hdl_sizes =
     graph_.GetAttr<nnvm::HandleSizes>("hdl_sizes");
   std::unordered_map<storage::handle_t, storage::handle_t>  new_to_old_hids;
+  size_t skipped_count = 0;
 
   for (storage::node_t nid = 0; nid < idx.num_nodes(); ++nid) {
-    if (op_nodes_[nid].skip_exec_node) continue;
+    if (op_nodes_[nid].skip_exec_node) {
+      skipped_count += 1;
+      continue;
+    }
     const auto node = idx[nid].source;
     auto old_nid_it = new_to_old_nids.find(nid);
 
@@ -1391,6 +1395,10 @@ void GraphExecutor::SaveEntryMapping() {
     for (uint32_t index = 0; index < node->num_outputs(); ++index) {
       uint32_t eid = idx.entry_id(nid, index);
       storage::handle_t hid = data_entry_[eid].storage_handle().ID();
+      if (old_hdl_usages.count(old_nid) == 0) {
+        std::cout << "old_hdl_usages does not have "
+                  << node->attrs.name << std::endl;
+      }
       handle_t old_hid = old_hdl_usages.at(old_nid)[index];
       auto old_hid_it = new_to_old_hids.find(hid);
       if (old_hid_it != new_to_old_hids.end()) {
@@ -1408,7 +1416,7 @@ void GraphExecutor::SaveEntryMapping() {
                                         false);
     }
   }
-  CHECK_EQ(old_to_new_nids.size(), 0);
+  CHECK_EQ(old_to_new_nids.size(), skipped_count);
   sa_log << "Length of new_to_old_hids:" << new_to_old_hids.size() << std::endl;
 }
 

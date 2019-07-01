@@ -113,9 +113,6 @@ inline void ThreadedVar::CompleteReadDependency(Dispatcher dispatcher) {
       }
     }
   }
-  //if (trigger != nullptr && trigger->opr->node_name) {
-    //std::cout << trigger->opr->node_name << ",READ_COMPLETE" << std::endl;
-  //}
   if (trigger != nullptr && trigger->decr_wait() == 0) {
     dispatcher(trigger);
   }
@@ -175,10 +172,6 @@ inline bool ThreadedVar::CompleteWriteDependency(Dispatcher dispatcher) {
   VersionedVarBlock::Delete(old_pending_write);
   // dispatch all the events
   while (cur_head != end_of_read_chain) {
-    //if (cur_head->trigger->opr->node_name) {
-      //std::cout << cur_head->trigger->opr->node_name
-                //<< ",WRITE_COMPLETE" << std::endl;
-    //}
     if (cur_head->trigger->decr_wait() == 0) {
       dispatcher(cur_head->trigger);
     }
@@ -187,12 +180,6 @@ inline bool ThreadedVar::CompleteWriteDependency(Dispatcher dispatcher) {
     assert(cur_head != nullptr);
     VersionedVarBlock::Delete(prev);
   }
-  //if (trigger_write != nullptr) {
-    //if (trigger_write->opr->node_name) {
-      //std::cout << trigger_write->opr->node_name
-                //<< ",WRITE_COMPLETE" << std::endl;
-    //}
-  //}
   if (trigger_write != nullptr && trigger_write->decr_wait() == 0) {
     dispatcher(trigger_write);
   }
@@ -293,7 +280,7 @@ void ThreadedEngine::DeleteOperator(OprHandle op) {
 }
 
 void ThreadedEngine::Push(OprHandle op, Context exec_ctx, int priority, bool profiling) {
-  BulkFlush();
+  //BulkFlush();
 
   ThreadedOpr* threaded_opr = ThreadedOpr::CastFromBase(op);
   OprBlock* opr_block = OprBlock::New();
@@ -319,60 +306,6 @@ void ThreadedEngine::Push(OprHandle op, Context exec_ctx, int priority, bool pro
   }
 }
 
-std::unordered_map<ThreadedOpr*, OprBlock*> opr_map;
-
-#if 0
-void ThreadedEngine::PushFin1(OprHandle op, Context exec_ctx, VarHandle fin, int priority, bool profiling) {
-  BulkFlush();
-
-  ThreadedOpr* threaded_opr = ThreadedOpr::CastFromBase(op);
-  OprBlock* opr_block = OprBlock::New();
-  opr_map[threaded_opr] = opr_block;
-  opr_block->opr = threaded_opr;
-
-  opr_block->wait.store(1);
-  opr_block->ctx = exec_ctx;
-  opr_block->priority = priority;
-  opr_block->profiling = profiling;
-  ThreadedVar* threaded_fin = ThreadedVar::CastFromBase(fin);
-  threaded_fin->AppendWriteDependency(opr_block);
-  std::cout << "PushFin1, " << threaded_opr->node_name << ", "
-            << opr_block->wait << std::endl;
-}
-
-void ThreadedEngine::PushFin2(OprHandle op, Context exec_ctx, VarHandle fin, int priority, bool profiling) {
-  BulkFlush();
-
-  ThreadedOpr* threaded_opr = ThreadedOpr::CastFromBase(op);
-  OprBlock* opr_block = opr_map.at(threaded_opr);
-  opr_block->wait.store(static_cast<int>(
-      threaded_opr->const_vars.size() +
-      threaded_opr->mutable_vars.size() - 1 + 1));
-  ++pending_;
-  // Add read dependencies.
-  std::cout << "PushFin2 " << threaded_opr->node_name << std::endl;
-  for (auto&& i : threaded_opr->const_vars) {
-    if (strcmp(threaded_opr->node_name, "stage1_unit1_sc") == 0) {
-      std::cout << "IRIS " << i << std::endl;
-    }
-    i->AppendReadDependency(opr_block);
-  }
-  // Add write dependencies.
-  ThreadedVar* threaded_fin = ThreadedVar::CastFromBase(fin);
-  for (auto&& i : threaded_opr->mutable_vars) {
-    if (i == threaded_fin) continue;
-    i->AppendWriteDependency(opr_block);
-  }
-  if (opr_block->decr_wait() == 0) {
-    this->PushToExecute(opr_block, true);
-  }
-  if (strcmp(threaded_opr->node_name, "stage1_unit1_sc") == 0) {
-    std::cout << "IRIS " << opr_block->wait << std::endl;
-  }
-}
-
-#endif
-
 void ThreadedEngine::PushAsync(AsyncFn fn, Context exec_ctx,
                                std::vector<VarHandle> const& const_vars,
                                std::vector<VarHandle> const& mutable_vars,
@@ -394,6 +327,7 @@ void ThreadedEngine::PushAsync(AsyncFn fn, Context exec_ctx,
         << device_count_;
   }
 #endif
+  BulkFlush();
   ThreadedOpr *opr = NewOperator(std::move(fn), const_vars, mutable_vars, prop, opr_name, wait);
   opr->temporary = true;
   const bool profiling = profiler_->IsProfiling(profiler::Profiler::kImperative);
