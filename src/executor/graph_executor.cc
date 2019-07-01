@@ -1217,10 +1217,15 @@ void GraphExecutor::InitCachedOps() {
   const nnvm::IdMapping& new_to_old_nids =
     graph_.GetAttr<nnvm::IdMapping>("new_to_old_nids");
 #endif
+  std::unordered_set<uint32_t> skipped;
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
     if (inode.source->is_variable()) continue;
-    if (op_nodes_[nid].skip_exec_node) continue;
+    if (op_nodes_[nid].skip_exec_node) {
+        std::cout << "Skip node " << idx[nid].source->attrs.name << std::endl;
+        skipped.insert(nid);
+        continue;
+    }
     op_nodes_[nid].finish_var = Engine::Get()->NewVariable();
     auto& exec = op_nodes_[nid].exec;
     bool is_async = op_nodes_[nid].exec->exec_type() == ExecType::kAsync;
@@ -1232,8 +1237,12 @@ void GraphExecutor::InitCachedOps() {
     for (auto & dep_node : inode.source->control_deps) {
       const storage::node_t dep_nid = idx.node_id(dep_node.get());
       CHECK_LT(dep_nid, nid);
-      sa_log << inode.source->attrs.name << " DEPENDS ON " << dep_nid
-             << std::endl;
+      sa_log << inode.source->attrs.name << "(" << nid << ")"
+             << " DEPENDS ON " << dep_nid << std::endl;
+      if (skipped.find(dep_nid) != skipped.end()) {
+          sa_log << "Skip the dependency" << std::endl;
+          continue;
+      }
       use_vars.push_back(op_nodes_[dep_nid].finish_var);
     }
 #if 0
@@ -1360,6 +1369,7 @@ void GraphExecutor::SaveEntryMapping() {
   std::unordered_map<storage::handle_t, storage::handle_t>  new_to_old_hids;
 
   for (storage::node_t nid = 0; nid < idx.num_nodes(); ++nid) {
+    if (op_nodes_[nid].skip_exec_node) continue;
     const auto node = idx[nid].source;
     auto old_nid_it = new_to_old_nids.find(nid);
 
@@ -1384,7 +1394,8 @@ void GraphExecutor::SaveEntryMapping() {
       handle_t old_hid = old_hdl_usages.at(old_nid)[index];
       auto old_hid_it = new_to_old_hids.find(hid);
       if (old_hid_it != new_to_old_hids.end()) {
-        CHECK_EQ(old_hid_it->second, old_hid);
+        CHECK_EQ(old_hid_it->second, old_hid)
+            << hid << " " << node->attrs.name;
       } else {
         new_to_old_hids[hid] = old_hid;
       }
