@@ -62,11 +62,11 @@ void Prefetch::Prefetching(std::pair<size_t&, size_t&> exe_cur_node) {
   size_t cur_idx_in_node = 0;
   while (prefetching_) {
     // Make sure prefetch is not slower than getaddr in terms of node.
-    if (pre_cur_node <= std::make_pair(exe_cur_node.first, exe_cur_node.second)) {
+    if (pre_cur_node < std::make_pair(exe_cur_node.first, exe_cur_node.second)) {
       sa_log << "Prefetch: slower than execution, fast forward to " 
              << exe_cur_node.first << " " << exe_cur_node.second << std::endl;
       pre_cur_node = exe_cur_node;
-      pre_cur_node.second ++;
+      //pre_cur_node.second ++;
       cur_idx_in_node = 0;
     }
     if (pre_cur_node.second >= prefetch_sequence_.size()) {

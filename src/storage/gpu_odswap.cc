@@ -344,9 +344,14 @@ void* ODSwap::GetAddr(handle_t handle_id, bool is_prefetch, bool& success,
         pthread_rwlock_unlock(&swap_lock_);
         return nullptr;
       } else { // not prefetch --> Fatal
+        sa_log << "Fatal error. Locked handles are: " << std::endl;
         for (auto pair: locked_handles_) {
           if (pair.second.size() > 0) {
             sa_log << pair.first << " " << pair.second.size() << std::endl;
+            for (auto node_idx: pair.second) {
+              sa_log << node_idx << std::endl;
+            }
+            sa_log << std::endl;
           } else if (pair.second.size() == 0
           && swappable_handles_[0].find(pair.first) == swappable_handles_[0].end()
           && swap_info_[pair.first]->swapped_in) {
