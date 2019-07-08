@@ -71,6 +71,7 @@ private:
   bool swap_async_;
   bool infinite_memory_;
   bool infinite_cpu_memory_;
+  bool infer_only_;
   char* fake_cpu_address_;  
   cudaStream_t streams_out_[NUMBER_OF_GPU];
   cudaStream_t streams_in_[NUMBER_OF_GPU];

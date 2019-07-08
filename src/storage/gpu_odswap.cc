@@ -19,6 +19,7 @@ ODSwap::ODSwap() {
   std::cout << "Initialize ODSwap" << std::endl;
   swap_lock_ = PTHREAD_RWLOCK_INITIALIZER;
   swap_async_ = dmlc::GetEnv("MXNET_SWAP_ASYNC", true);
+  infer_only_ = dmlc::GetEnv("MXNET_INFER_ONLY", false);
   std::cout << "SWAP_ASYNC=" << swap_async_ << std::endl;
   infinite_memory_ = dmlc::GetEnv("MXNET_INFINITE_MEMORY", false);
   infinite_cpu_memory_ = dmlc::GetEnv("MXNET_ODSWAP_INFINITE_CPU_MEMORY", true);
@@ -139,7 +140,8 @@ bool ODSwap::SwapOut(unsigned required_memory, int device_id, bool async) {
      * not weight && will be used again
      */
     bool do_memcpy = (memory_history_->CheckLastUse(victim) 
-                      == target->is_weight);
+                      == target->is_weight) 
+                     && !(infer_only_ && target->is_weight);
     sa_log << "Swapout: " << victim << (do_memcpy?" ":" no ") << "need to memcpy"
            << std::endl;
     pthread_rwlock_unlock(&swap_lock_);
