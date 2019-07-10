@@ -123,9 +123,11 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     cur_node_idx_ = 0;
     memory_history_->StartIteration();
     if (iteration_idx_ == 3) {
-        prefetch_->StartPrefetching(make_pair(std::ref(iteration_idx_), 
-                                              std::ref(cur_node_idx_)));
+        prefetch_->StartPrefetching(iteration_idx_, cur_node_idx_);
     }
+    if (iteration_idx_ > 3) {
+      prefetch_->SignalContinue(iteration_idx_, cur_node_idx_);
+    } 
   }
 
   void StopIteration () override {
@@ -185,9 +187,6 @@ class OD_MM_Dptr : virtual public MM_Dptr {
              << ": " << cur_node_.second << " with size " 
              << node_handles_[cur_node_].size() << std::endl;
       odswap_->UnlockHandles(node_handles_[cur_node_], cur_node_idx_);
-      if (iteration_idx_ >= 3) {
-        prefetch_->SignalContinue();
-      } 
       /* FIXME(Sotskin): 
        * Uncomment this and comment 118 to receive performance drop
        * Investigate why this happens.
@@ -199,6 +198,9 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       */
     }
     cur_node_idx_++;
+    if (iteration_idx_ >= 3 && cur_node_idx_ != node_history_.size()) {
+      prefetch_->SignalContinue(iteration_idx_, cur_node_idx_);
+    } 
   }
 
   void Finish() override { }

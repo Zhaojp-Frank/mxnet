@@ -21,21 +21,26 @@ public:
   ~Prefetch();
   static Prefetch* Get();
   static std::shared_ptr<Prefetch> _GetSharedRef();
-  void StartPrefetching(std::pair<size_t&, size_t&> exe_cur_node);
+  void StartPrefetching(size_t iteration_idx, size_t node_idx);
   void StopPrefetching(size_t iteration_idx);
   void PushHandlesToPrefetch(const std::vector<handle_t>& handles);
-  void SignalContinue();
+  void SignalContinue(size_t iteration_idx, size_t node_idx);
 
 private:
   Prefetch();
-  void Prefetching(std::pair<size_t&, size_t&> exe_cur_node);
-
+  void Prefetching();
+  
   std::thread prefetcher_;
   std::vector<std::vector<handle_t>> prefetch_sequence_;
+  std::mutex prefetch_mut_;
   sem_t prefetch_sem_;
   bool prefetching_;
   bool prefetch_enabled_;
   size_t num_loop_;
+  size_t prefetch_iteration_idx_;
+  size_t prefetch_node_idx_; 
+  size_t execution_iteration_idx_;
+  size_t execution_node_idx_;
 
   /* 
   std::chrono::time_point<std::chrono::high_resolution_clock> start;

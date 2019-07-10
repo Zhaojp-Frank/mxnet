@@ -35,16 +35,18 @@ std::shared_ptr<Prefetch> Prefetch::_GetSharedRef() {
   return inst;
 }
 
-void Prefetch::StartPrefetching(std::pair<size_t&, size_t&> exe_cur_node) {
+void Prefetch::StartPrefetching(size_t iteration_idx, size_t node_idx) {
   if (!prefetch_enabled_) {
     return;
   }
   /*
   start = std::chrono::high_resolution_clock::now();
   */
+  prefetch_iteration_idx_ = execution_iteration_idx_ = iteration_idx;
+  prefetch_node_idx_ = execution_node_idx_ = node_idx;
   std::cout << "Prefetch: Start Prefetching" << std::endl;
   prefetching_ = true;
-  prefetcher_ = std::thread(&Prefetch::Prefetching, this, exe_cur_node);
+  prefetcher_ = std::thread(&Prefetch::Prefetching, this);
 }
 
 void Prefetch::StopPrefetching(size_t iteration_idx) {
@@ -56,22 +58,25 @@ void Prefetch::StopPrefetching(size_t iteration_idx) {
   prefetcher_.join();
 }
 
-void Prefetch::Prefetching(std::pair<size_t&, size_t&> exe_cur_node) {
+void Prefetch::Prefetching() {
   bool success;
-  std::pair<size_t, size_t> pre_cur_node = exe_cur_node;
   size_t cur_idx_in_node = 0;
   while (prefetching_) {
     // Make sure prefetch is not slower than getaddr in terms of node.
-    if (pre_cur_node < std::make_pair(exe_cur_node.first, exe_cur_node.second)) {
+    prefetch_mut_.lock();
+    if (std::make_pair(prefetch_iteration_idx_, prefetch_node_idx_) 
+        < std::make_pair(execution_iteration_idx_, execution_node_idx_)) {
       sa_log << "Prefetch: slower than execution, fast forward to " 
-             << exe_cur_node.first << " " << exe_cur_node.second << std::endl;
-      pre_cur_node = exe_cur_node;
-      //pre_cur_node.second ++;
+             << execution_iteration_idx_ << " " << execution_node_idx_ << std::endl;
+      prefetch_iteration_idx_ = execution_iteration_idx_;
+      prefetch_node_idx_ = execution_node_idx_;
       cur_idx_in_node = 0;
     }
-    if (pre_cur_node.second >= prefetch_sequence_.size()) {
+    bool prefetch_ahead = prefetch_iteration_idx_ > execution_iteration_idx_;
+    prefetch_mut_.unlock();
+    if (prefetch_node_idx_ >= prefetch_sequence_.size()) {
       sa_log << "Prefetch: End of iteration" << std::endl;
-      if (pre_cur_node.second > prefetch_sequence_.size()) {
+      if (prefetch_node_idx_ > prefetch_sequence_.size()) {
         sa_log << "Prefetch: cur idx > total history (CHECK) " << std::endl;
       }
       /*
@@ -79,46 +84,45 @@ void Prefetch::Prefetching(std::pair<size_t&, size_t&> exe_cur_node) {
       std::chrono::duration<double> diff = end-start;
       sa_log << "Prefetch stops at: " << diff.count() << " s" << std::endl;
       */
-      pre_cur_node.first ++;
-      pre_cur_node.second = 0;
+      prefetch_iteration_idx_ ++;
+      prefetch_node_idx_ = 0;
       cur_idx_in_node = 0;
     }
-    if (pre_cur_node.first > num_loop_) {
+    if (prefetch_iteration_idx_ > num_loop_) {
       sa_log << "Prefetch: End of prefetch thread" << std::endl;
       break;
     }
     // Lock the node being prefetched
     if (cur_idx_in_node == 0) {
-      sa_log << "Prefetch: Locking node idx = " << pre_cur_node.second << std::endl;
-      CHECK(pre_cur_node.second < prefetch_sequence_.size());
-      ODSwap::Get()->LockHandles(prefetch_sequence_[pre_cur_node.second],
-          pre_cur_node.second);
+      sa_log << "Prefetch: Locking node idx = " << prefetch_node_idx_ << std::endl;
+      CHECK(prefetch_node_idx_ < prefetch_sequence_.size());
+      ODSwap::Get()->LockHandles(prefetch_sequence_[prefetch_node_idx_],
+          prefetch_node_idx_);
     }
     // Prefetching Handle
-    sa_log << "Prefetch: prefetching (" << pre_cur_node.second << "," << cur_idx_in_node 
+    sa_log << "Prefetch: prefetching (" << prefetch_node_idx_ << "," << cur_idx_in_node 
            << ")" << std::endl;
-    CHECK(pre_cur_node.second < prefetch_sequence_.size());
-    CHECK(cur_idx_in_node < prefetch_sequence_[pre_cur_node.second].size());
+    CHECK(prefetch_node_idx_ < prefetch_sequence_.size());
+    CHECK(cur_idx_in_node < prefetch_sequence_[prefetch_node_idx_].size());
     sa_log << "Prefetch: prefetching " 
-           << prefetch_sequence_[pre_cur_node.second][cur_idx_in_node] << std::endl;
-    ODSwap::Get()->GetAddr(prefetch_sequence_[pre_cur_node.second][cur_idx_in_node],
-        true, success, pre_cur_node.first > exe_cur_node.first);
+           << prefetch_sequence_[prefetch_node_idx_][cur_idx_in_node] << std::endl;
+    ODSwap::Get()->GetAddr(prefetch_sequence_[prefetch_node_idx_][cur_idx_in_node],
+        true, success, prefetch_ahead);
     sa_log << "Prefetch: " << (success?"success":"failure") << std::endl;
     if (!success) {
       sa_log << "Prefetch failed " << std::endl;
       sem_wait(&prefetch_sem_);
     } else {
       cur_idx_in_node++;
-      if (cur_idx_in_node == prefetch_sequence_[pre_cur_node.second].size()) {
-        sa_log << "Prefetch: End of node with index " << pre_cur_node.second << std::endl;
+      if (cur_idx_in_node == prefetch_sequence_[prefetch_node_idx_].size()) {
+        sa_log << "Prefetch: End of node with index " << prefetch_node_idx_ << std::endl;
         /*
         cur = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = cur-start;
         sa_log << "Prefetch: time now: " <<  diff.count() << " s" << std::endl;
         */
         cur_idx_in_node = 0;
-        pre_cur_node.second ++;
-        
+        prefetch_node_idx_ ++;
       }
     } // if (!success)
     
@@ -141,11 +145,15 @@ void Prefetch::PushHandlesToPrefetch(const std::vector<handle_t>& handles) {
 }
 
 
-void Prefetch::SignalContinue() {
+void Prefetch::SignalContinue(size_t iteration_idx, size_t node_idx) {
   if (!prefetch_enabled_) {
     return;
   }
+  prefetch_mut_.lock();
   sa_log << "Prefetch: SignalContinue" << std::endl;
+  execution_iteration_idx_ = iteration_idx;
+  execution_node_idx_ = node_idx;
+  prefetch_mut_.unlock();
   sem_post(&prefetch_sem_);
 }
 
