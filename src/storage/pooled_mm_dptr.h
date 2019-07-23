@@ -20,8 +20,7 @@ class Pooled_MM_Dptr : virtual public MM_Dptr {
   bool AllocFinished () { return alloc_finalized_; }
 
   void* Alloc(handle_t id, size_t size, void* ptr) override {
-    sa_log << "Alloc " << id << std::endl;
-    dptr_mapping_[id] = ptr;
+    sa_log << "Alloc " << id << std::endl; dptr_mapping_[id] = ptr;
     return ptr;
   }
 
@@ -51,6 +50,8 @@ class Pooled_MM_Dptr : virtual public MM_Dptr {
   void StopIteration() override { }
 
   void Statistics () override { }
+
+  void FakeContextSwitch() override { }
 
   void RegisterEntry(node_t nid, uint32_t idx, handle_t hid,
                      node_t old_nid, uint32_t old_idx, handle_t old_hid,

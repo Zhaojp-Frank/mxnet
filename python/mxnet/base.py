@@ -528,6 +528,9 @@ def swap_statistics():
 def swap_finish():
     check_call(_LIB.MXSwapFinish())
 
+def swap_fake_context_switch():
+    check_call(_LIB.MXSwapFakeContextSwitch())
+
 def add_fileline_to_docstring(module, incursive=True):
     """Append the definition position to each function contained in module.
 

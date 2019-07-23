@@ -32,6 +32,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     prefetch_ = Prefetch::_GetSharedRef();
     device_id_ = 0;
     iteration_idx_ = 0;
+    total_weight_ = 0;
     alloc_weight_ = 0;
   }
 
@@ -48,6 +49,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   void* Alloc(handle_t id, size_t size, void* ptr = nullptr) {
     sa_log << "Alloc " << id << " " << size << std::endl;
     if(iteration_idx_ == 0) { 
+      if (alloc_weight_) total_weight_ += size;
       ptr = (void*)id;
       dptr_size_[ptr] = size;
       unalloced_dptrs_.insert(ptr);
@@ -93,6 +95,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   void StartBinding () override { 
     sa_log << "Start Binding" << std::endl;
     fake_memory_ = nullptr;
+    /*
     size_t avail, total;
     const size_t delta = 1000000000;
     memory_manager_->MemGetInfo(0, &total, &avail);
@@ -100,17 +103,22 @@ class OD_MM_Dptr : virtual public MM_Dptr {
     while (!memory_manager_->TryAllocate(0, avail)) {
       avail -= delta;
     }
-    cudaError_t e  = memory_manager_->Malloc(fake_memory_, avail, 0);
+    */
+    size_t fake_size = 1024L * 1024 * 1024 * dmlc::GetEnv("MXNET_SWAP_FAKE_SIZE", 10);
+    cudaError_t e  = memory_manager_->Malloc(fake_memory_, fake_size, 0);
     if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
       LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
     }
-    sa_log << "Bind: Allocated fake memory of size: " << avail - delta << std::endl;
+    if (infinite_gpu_memory_)
+      cudaHostAlloc((void**)&(fake_cpu_), fake_size, 0);
+    sa_log << "Bind: Allocated fake memory of size: " << fake_size << std::endl;
     memory_history_->StartPreparation();
   }
 
   void StopBinding () override { 
     sa_log << "End Binding" << std::endl;
     memory_history_->EndPreparation();
+    std::cout << "Total weight size = " << total_weight_ << std::endl;
     iteration_idx_ ++;
   }
 
@@ -151,6 +159,17 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   }
 
   void Statistics () override { memory_history_->Statistics(); }
+
+  void FakeContextSwitch () override {
+    sa_log << "Start doing context switch" << std::endl;
+    CHECK(infinite_gpu_memory_) << "Fake context switch can only be called with "
+                                << "infinite gpu memory enabled" << std::endl;
+    cudaError_t e = memory_manager_->Memcpy(0, fake_memory_, fake_cpu_,
+        total_weight_, cudaMemcpyHostToDevice);
+    if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
+      LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
+    }
+  }
 
   void RegisterEntry (node_t nid, uint32_t idx, handle_t hid,
                       node_t old_nid, uint32_t old_idx, handle_t old_hid,
@@ -316,8 +335,10 @@ class OD_MM_Dptr : virtual public MM_Dptr {
   bool infinite_gpu_memory_;
   size_t iteration_idx_;
   size_t cur_node_idx_;
+  size_t total_weight_;
   void* temp_memory_;
   void* fake_memory_;
+  void* fake_cpu_;
   size_t temp_size_;
   int device_id_; // Only support dev_id = 0 currently.
 

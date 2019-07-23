@@ -147,6 +147,8 @@ class SA_MM_Dptr : virtual public MM_Dptr {
 
   void Statistics() override { }
 
+  void FakeContextSwitch() override { }
+
   void* GetDptr(handle_t id) override;
 
   void SetDptr(handle_t id, void* ptr, uint32_t dev_id) override ;

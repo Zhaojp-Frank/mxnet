@@ -48,8 +48,13 @@ class MM_Dptr {
 
   // StopIteration()
   virtual void  StopIteration() = 0;
+  
+  // Statistics()
+  virtual void Statistics() = 0;
 
-  virtual void Statistics () = 0;
+  // Do a fake context swtich by calling a cudamemcpy for size of weight
+  // tensors. 
+  virtual void FakeContextSwitch() = 0;
 
   // Register the mapping from an entry to a handle. The mapping is
   // many-(entry)-to-one(handle).

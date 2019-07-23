@@ -153,6 +153,12 @@ int MXSwapFinish() {
   API_END();
 }
 
+int MXSwapFakeContextSwitch() {
+  API_BEGIN();
+  storage::MM_DPTR()->FakeContextSwitch();
+  API_END();
+}
+
 int MXSetNumOMPThreads(int thread_num) {
   API_BEGIN();
   omp_set_num_threads(thread_num);
