@@ -236,7 +236,8 @@ MXNET_DLL int MXSwapStopBinding();
 MXNET_DLL int MXSwapStartIteration();
 MXNET_DLL int MXSwapStopIteration();
 MXNET_DLL int MXSwapStatistics();
-MXNET_DLL int MXSwapFakeContextSwtich();
+MXNET_DLL int MXSwapFinish();
+MXNET_DLL int MXSwapFakeContextSwitch();
 
 /*!
  * \brief Set up configuration of profiler for the process passed as profile_process in keys
