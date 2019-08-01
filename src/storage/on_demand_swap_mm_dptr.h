@@ -104,7 +104,7 @@ class OD_MM_Dptr : virtual public MM_Dptr {
       avail -= delta;
     }
     */
-    size_t fake_size = 1024L * 1024 * 1024 * dmlc::GetEnv("MXNET_SWAP_FAKE_SIZE", 10);
+    size_t fake_size = 1024L * 1024 * 1024 * dmlc::GetEnv("MXNET_SWAP_FAKE_SIZE", 10.0);
     cudaError_t e  = memory_manager_->Malloc(fake_memory_, fake_size, 0);
     if (e != cudaSuccess && e != cudaErrorCudartUnloading) {
       LOG(FATAL) << "cudaMalloc failed: " << cudaGetErrorString(e);
