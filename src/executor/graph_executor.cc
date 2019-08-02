@@ -64,6 +64,7 @@ GraphExecutor::~GraphExecutor() {
 }
 
 void GraphExecutor::Forward(bool is_train) {
+  //std::cout << "Forward " << num_forward_nodes_ << std::endl;
   RunOps(is_train, 0, num_forward_nodes_);
 }
 
@@ -728,6 +729,7 @@ void GraphExecutor::FinishInitGraph(nnvm::Symbol symbol,
     auto& idx = graph_.indexed_graph();
     for (size_t i = 0; i < num_forward_outputs_; ++i) {
       auto& e = idx.outputs()[i];
+      //std::cout << "Outputs: " << e.node_id << std::endl;
       output_arrays_.push_back(data_entry_[idx.entry_id(e)]);
     }
     sa_log << "After initializing output arrays" << std::endl;
@@ -1002,6 +1004,7 @@ Graph GraphExecutor::InitGraph(nnvm::Symbol symbol,
     num_forward_nodes_ = std::max(
         num_forward_nodes_, static_cast<size_t>(idx.outputs()[i].node_id + 1));
   }
+  //std::cout << "!!!!!!!!!!!! " << num_forward_nodes_ << std::endl;
   return g;
 }
 
@@ -1293,6 +1296,7 @@ void GraphExecutor::InitCachedOps() {
       if (is_async) {
         exec->op_ctx.async_on_complete = on_complete;
       }
+      //std::cout << "[RUNNING]: ID = " << nid << " " << name <<  std::endl;
       sa_log << "[RUNNING]: ID = " <<  nid << ", " << "NAME = " << name
              << std::endl;
       storage::MM_DPTR()->NotifyBegin(nid, name);
@@ -1368,6 +1372,8 @@ void GraphExecutor::SaveEntryMapping() {
     graph_.GetAttr<nnvm::HandleSizes>("hdl_sizes");
   std::unordered_map<storage::handle_t, storage::handle_t>  new_to_old_hids;
   size_t skipped_count = 0;
+  bool infer_only = dmlc::GetEnv("MXNET_INFER_ONLY", 0);
+  int last_infer_nid = -1;
 
   for (storage::node_t nid = 0; nid < idx.num_nodes(); ++nid) {
     if (op_nodes_[nid].skip_exec_node) {
@@ -1385,6 +1391,10 @@ void GraphExecutor::SaveEntryMapping() {
       size_t hdl_size = data_entry_.at(eid).storage_handle().size;
       storage::MM_DPTR()->RegisterEntry(nid, 0, hid, 0, 0, 0, hdl_size, false,
                                         true);
+      CHECK(!infer_only || last_infer_nid == -1);
+      if (infer_only) {
+        num_forward_nodes_ += 1;
+      }
       continue;
     }
 
@@ -1396,9 +1406,17 @@ void GraphExecutor::SaveEntryMapping() {
       uint32_t eid = idx.entry_id(nid, index);
       storage::handle_t hid = data_entry_[eid].storage_handle().ID();
       if (old_hdl_usages.count(old_nid) == 0) {
-        std::cout << "old_hdl_usages does not have "
-                  << node->attrs.name << std::endl;
+        if (!infer_only) {
+          std::cout << "old_hdl_usages does not have "
+                    << node->attrs.name << std::endl;
+        }
+        CHECK(infer_only);
+        if (last_infer_nid == -1) {
+          last_infer_nid = old_nid;
+        }
+        break;
       }
+      CHECK(last_infer_nid == -1);
       handle_t old_hid = old_hdl_usages.at(old_nid)[index];
       auto old_hid_it = new_to_old_hids.find(hid);
       if (old_hid_it != new_to_old_hids.end()) {
@@ -1610,6 +1628,7 @@ void GraphExecutor::RunOps(bool is_train, size_t topo_start, size_t topo_end) {
       // Pass node id if enabled for scheduling
       bool node_id = pass_node_id_? nid : 0;
       sa_log << "Push " << inode.source->attrs.name << std::endl;
+      //std::cout << "Push " << nid << " " << inode.source->attrs.name << std::endl;
       Engine::Get()->Push(opnode.cached_opr, opnode.ctx, node_id, profiling);
       //Engine::Get()->PushFin2(opnode.cached_opr, opnode.ctx, opnode.finish_var, node_id, profiling);
     } else {
