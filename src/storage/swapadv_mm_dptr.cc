@@ -118,7 +118,8 @@ void SA_MM_Dptr::ReadScheduleDepsRst() {
 
 void SA_MM_Dptr::ReadAllocationRst() {
   sa_log << "ReadAllocationRst" << std::endl;
-  std::ifstream ifs("memalloc.rst");
+  auto basedir = dmlc::GetEnv("MXNET_SWAP_BASEDIR", std::string("./"));
+  std::ifstream ifs(basedir + "memalloc.rst");
   std::string line;
 
   size_t next = 0, last = 0;
@@ -154,7 +155,8 @@ void SA_MM_Dptr::ReadAllocationRst() {
 
 void SA_MM_Dptr::ReadDeallocationRst() {
   sa_log << "ReadDeallocationRst" << std::endl;
-  std::ifstream ifs("deallocation.rst");
+  auto basedir = dmlc::GetEnv("MXNET_SWAP_BASEDIR", std::string("./"));
+  std::ifstream ifs(basedir + "deallocation.rst");
   std::string line;
 
   while (std::getline(ifs, line)) {
@@ -173,7 +175,8 @@ void SA_MM_Dptr::ReadDeallocationRst() {
 
 void SA_MM_Dptr::ReadInitialHandlesRst() {
   sa_log << "ReadInitialHandlesRst" << std::endl;
-  std::ifstream ifs("initial_handles.rst");
+  auto basedir = dmlc::GetEnv("MXNET_SWAP_BASEDIR", std::string("./"));
+  std::ifstream ifs(basedir + "initial_handles.rst");
   std::string line;
 
   size_t next = 0, last = 0;
